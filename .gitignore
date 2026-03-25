@@ -165,3 +165,6 @@ cython_debug/
 /.idea/misc.xml
 /.idea/codeStyles/Project.xml
 /.idea/dictionaries/project.xml
+/src/data/config.ini
+/src/data/credentials.json
+/src/data/token.json
