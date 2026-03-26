@@ -2,7 +2,7 @@
 Save account data from https://www.schwab529.com/ into Google Sheets.
 """
 
-import gspread
+import gspread  # ty:ignore[unresolved-import]
 
 
 class Saver:

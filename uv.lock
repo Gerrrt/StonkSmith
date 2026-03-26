@@ -575,7 +575,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "black", specifier = ">=26.3.1" },
     { name = "gspread", specifier = ">=6.2.1" },
-    { name = "parsel", specifier = ">=1.11.0" },
+    { name = "parsel", specifier = "==1.11.0" },
     { name = "pip", specifier = "==26.0.1" },
     { name = "pyrefly", specifier = ">=0.58.0" },
     { name = "pyright", specifier = ">=1.1.408" },

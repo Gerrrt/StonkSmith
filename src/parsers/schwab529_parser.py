@@ -2,7 +2,7 @@
 Parse data downloaded from https://www.schwab529plan.com
 """
 
-from parsel import Selector
+from parsel import Selector  # ty:ignore[unresolved-import]
 
 
 class Parser:
