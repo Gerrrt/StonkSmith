@@ -3,10 +3,12 @@ name = "stonksmith"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "basedpyright==1.38.4",
     "beautifulsoup4>=4.14.3",
     "black>=26.3.1",
     "gspread>=6.2.1",
     "parsel>=1.11.0",
+    "pip==26.0.1",
     "pyrefly>=0.58.0",
     "pyright>=1.1.408",
     "requests==2.33.0",
