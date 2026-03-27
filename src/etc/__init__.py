@@ -12,5 +12,13 @@ __status__ = "Development"
 from etc import paths
 from etc.cli import gen_cli_args
 from etc.console import stonksmith_console
+from etc.context import Context
+from etc.tool_setup import setup_tool
 
-__all__ = ["gen_cli_args", "stonksmith_console", "paths"]
+__all__ = [
+    "gen_cli_args",
+    "paths",
+    "stonksmith_console",
+    "setup_tool",
+    "Context",
+]
