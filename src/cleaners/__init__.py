@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 Cleaners package to rearrange or organize scraped data
 """
