@@ -9,6 +9,6 @@ __author__ = "Gerrrt"
 __email__ = "garrettallen2@gmail.com"
 __status__ = "Development"
 
-from src.cleaners.schwab529_cleaner import clean_up
+from cleaners.schwab529_cleaner import clean_up
 
 __all__ = ["clean_up"]
