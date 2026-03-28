@@ -25,32 +25,21 @@ class STONKSMITHAdapter(logging.LoggerAdapter):
     Adapter class to handle STONKSMITH logging output
     """
 
-    def __init__(
-        self,
-        extra=None,
-    ):
+    def __init__(self, extra=None):
         logging.basicConfig(
-            format="%(message)s",
-            datefmt="[%X]",
-            handlers={
-                RichHandler(
-                    console=stonksmith_console,
-                    rich_tracebacks=True,
-                ),
-            },
-        )
+                format="%(message)s",
+                datefmt="[%X]",
+                handlers={
+                    RichHandler(
+                            console=stonksmith_console,
+                            rich_tracebacks=True, ),
+                    }, )
         self.logger = logging.getLogger(
-            "stonksmith",
-        )
+                "stonksmith", )
         self.extra = extra
         self.output_file = None
 
-    def format(
-        self,
-        msg,
-        *args,
-        **kwargs,
-    ):
+    def format(self, msg, *args, **kwargs, ):
         """
         Format message for output if needed
         :param msg:
@@ -61,51 +50,52 @@ class STONKSMITHAdapter(logging.LoggerAdapter):
         if self.extra is None:
             return msg, kwargs
 
-        if "module_name" in self.extra.keys():
-            if len(self.extra["module_name"]) > 8:
-                self.extra["module_name"] = self.extra["module_name"][:8] + "..."
-
-        if len(self.extra) == 1 and ("module_name" in self.extra.keys()):
+        if len(
+                self.extra,
+                ) == 1 and ("module_name" in self.extra.keys()):
             return (
-                f"{
-                    colored(
+                f"{colored(
                         self.extra['module_name'],
                         'cyan',
                         attrs=['bold'],
-                    ):<64} {msg}",
+                        ):<64} {msg}",
                 kwargs,
-            )
+                )
 
-        if (
-            len(self.extra) == 2
-            and ("module_name" in self.extra.keys())
-            and ("host" in self.extra.keys())
-        ):
+        if (len(
+                self.extra,
+                ) == 2 and ("module_name" in self.extra.keys()) and (
+                "host" in self.extra.keys())):
             return (
-                f"{colored(self.extra['module_name'], 'cyan', attrs=['bold']):<24} {
-                    self.extra['host']:<39} {msg}",
+                f"{colored(
+                        self.extra['module_name'],
+                        'cyan',
+                        attrs=['bold'],
+                        ):<24} {self.extra['host']:<39} {msg}",
                 kwargs,
-            )
+                )
 
         if "module_name" in self.extra.keys():
             module_name = colored(
-                self.extra["module_name"],
-                "cyan",
-                attrs=["bold"],
-            )
+                    self.extra["module_name"],
+                    "cyan",
+                    attrs=["bold"],
+                    )
         else:
             module_name = colored(
-                self.extra["protocol"],
-                "blue",
-                attrs=["bold"],
-            )
+                    self.extra["protocol"],
+                    "blue",
+                    attrs=["bold"], )
 
         return (
             f"{module_name:<24} {self.extra['host']:<15} "
             f"{self.extra['port']:<6} "
-            f"{self.extra['hostname'] if self.extra['hostname'] else 'NONE':<16} {msg}",
+            f"{self.extra['hostname'] if (
+                self.extra['hostname']
+            ) else 'NONE':<16}"
+            f"{msg}",
             kwargs,
-        )
+            )
 
     def display(self, msg, *args, **kwargs):
         """
@@ -115,27 +105,28 @@ class STONKSMITHAdapter(logging.LoggerAdapter):
         :param kwargs:
         :return:
         """
-        try:
-            if "protocol" in self.extra.keys() and not called_from_cmd_args():
-                return
-        except AttributeError:
-            pass
-
         msg, kwargs = self.format(
-            f"{colored('[*]', 'blue', attrs=['bold'])} {msg}",
-            kwargs,
-        )
-        text = Text.from_ansi(msg)
-        stonksmith_console.print(text, *args, **kwargs)
-        self.log_console_to_file(text, *args, **kwargs)
+                f"{colored(
+                        '[*]',
+                        'blue',
+                        attrs=['bold'],
+                        )} {msg}",
+                kwargs, )
+        text = Text.from_ansi(
+                msg,
+                )
+        stonksmith_console.print(
+                text,
+                *args,
+                **kwargs,
+                )
+        self.log_console_to_file(
+                text,
+                *args,
+                **kwargs,
+                )
 
-    def success(
-        self,
-        msg,
-        color="green",
-        *args,
-        **kwargs,
-    ):
+    def success(self, msg, color="green", *args, **kwargs, ):
         """
         Print some sort of success to the user
         :param msg:
@@ -144,36 +135,25 @@ class STONKSMITHAdapter(logging.LoggerAdapter):
         :param kwargs:
         :return:
         """
-        try:
-            if "protocol" in self.extra.keys() and not called_from_cmd_args():
-                return
-        except AttributeError:
-            pass
-
         msg, kwargs = self.format(
-            f"{colored('[+]', color, attrs=['bold'])} {msg}",
-            kwargs,
-        )
+                f"{colored(
+                        '[+]',
+                        color,
+                        attrs=['bold'],
+                        )} {msg}",
+                kwargs, )
         text = Text.from_ansi(
-            msg,
-        )
+                msg, )
         stonksmith_console.print(
-            text,
-            *args,
-            **kwargs,
-        )
+                text,
+                *args,
+                **kwargs, )
         self.log_console_to_file(
-            text,
-            *args,
-            **kwargs,
-        )
+                text,
+                *args,
+                **kwargs, )
 
-    def highlight(
-        self,
-        msg,
-        *args,
-        **kwargs,
-    ):
+    def highlight(self, msg, *args, **kwargs, ):
         """
         Prints a yellow highlighted message to the user
         :param msg:
@@ -181,37 +161,25 @@ class STONKSMITHAdapter(logging.LoggerAdapter):
         :param kwargs:
         :return:
         """
-        try:
-            if "protocol" in self.extra.keys() and not called_from_cmd_args():
-                return
-        except AttributeError:
-            pass
-
         msg, kwargs = self.format(
-            f"{colored(msg, 'yellow', attrs=['bold'])}",
-            kwargs,
-        )
+                f"{colored(
+                        msg,
+                        'yellow',
+                        attrs=['bold'],
+                        )}",
+                kwargs, )
         text = Text.from_ansi(
-            msg,
-        )
+                msg, )
         stonksmith_console.print(
-            text,
-            *args,
-            **kwargs,
-        )
+                text,
+                *args,
+                **kwargs, )
         self.log_console_to_file(
-            text,
-            *args,
-            **kwargs,
-        )
+                text,
+                *args,
+                **kwargs, )
 
-    def fail(
-        self,
-        msg,
-        color="red",
-        *args,
-        **kwargs,
-    ):
+    def fail(self, msg, color="red", *args, **kwargs, ):
         """
         Prints a failure that may or may not be an error
         :param msg:
@@ -220,35 +188,25 @@ class STONKSMITHAdapter(logging.LoggerAdapter):
         :param kwargs:
         :return:
         """
-        try:
-            if "protocol" in self.extra.keys() and not called_from_cmd_args():
-                return
-        except AttributeError:
-            pass
         msg, kwargs = self.format(
-            f"{colored('[-]', color, attrs=['bold'])} {msg}",
-            kwargs,
-        )
+                f"{colored(
+                        '[-]',
+                        color,
+                        attrs=['bold'],
+                        )} {msg}",
+                kwargs, )
         text = Text.from_ansi(
-            msg,
-        )
+                msg, )
         stonksmith_console.print(
-            text,
-            *args,
-            **kwargs,
-        )
+                text,
+                *args,
+                **kwargs, )
         self.log_console_to_file(
-            text,
-            *args,
-            **kwargs,
-        )
+                text,
+                *args,
+                **kwargs, )
 
-    def log_console_to_file(
-        self,
-        text,
-        *args,
-        **kwargs,
-    ):
+    def log_console_to_file(self, text, *args, **kwargs, ):
         """
         If debug or info logging is not enabled, we can still display stuff
         logged to a file. Create a record and pass it to all handlers.
@@ -259,163 +217,124 @@ class STONKSMITHAdapter(logging.LoggerAdapter):
         """
         if self.logger.getEffectiveLevel() >= logging.INFO:
             if len(
-                self.logger.handlers,
-            ):
+                    self.logger.handlers):
                 try:
                     for handler in self.logger.handlers:
                         handler.handle(
-                            LogRecord(
-                                "stonksmith",
-                                20,
-                                "",
-                                kwargs,
-                                msg=text,
-                                args=args,
-                                exc_info=None,
-                            ),
-                        )
+                                LogRecord(
+                                        "stonksmith",
+                                        20,
+                                        "",
+                                        lineno=kwargs["lineno"],
+                                        msg=text,
+                                        args=args,
+                                        exc_info=None,
+                                        ),
+                                )
                 except Exception as e:
                     self.logger.fail(
-                        f"Issue while trying to custom print handler: {e}",
-                    )
+                            f"Issue while trying to custom print handler: {e}",
+                            )
         else:
             self.logger.info(
-                text,
-            )
+                    text, )
 
-    def add_file_log(
-        self,
-        log_file=None,
-    ):
+    def add_file_log(self, log_file=None, ):
         """
         Add a log file to stonksmith
         :param log_file:
         :return:
         """
         file_formatter = TermEscapeCodeFormatter(
-            "%(asctime)s - %(levelname)s - %(message)s",
+                "%(asctime)s - %(levelname)s - %(message)s", )
+        output_file = (
+            self.init_log_file() if log_file is None else log_file
         )
-        output_file = self.init_log_file() if log_file is None else log_file
         file_creation = False
 
-        if not os.path.isfile(
-            output_file,
-        ):
-            open(
-                output_file,
-                "x",
-            )
+        if not os.path.isfile(output_file):
+            open(output_file, "x")
             file_creation = True
 
         file_handler = RotatingFileHandler(
-            output_file,
-            maxBytes=100000,
-        )
+                output_file,
+                maxBytes=100000, )
 
         with file_handler._open() as f:
             if file_creation:
                 f.write(
-                    "[%s]> %s\n\n"
-                    % (
-                        datetime.now().strftime(
-                            "%d-%m-%Y %H:%M:%S",
-                        ),
-                        " ".join(
-                            sys.argv,
-                        ),
-                    ),
-                )
+                        "[%s]> %s\n\n" % (
+                            datetime.now().strftime(
+                                    "%d-%m-%Y %H:%M:%S", ),
+                            " ".join(
+                                    sys.argv, ),
+                            ), )
             else:
                 f.write(
-                    "\n[%s]> %s\n\n"
-                    % (
-                        datetime.now().strftime(
-                            "%d-%m-%Y %H:%M:%S",
-                        ),
-                        " ".join(
-                            sys.argv,
-                        ),
-                    ),
-                )
+                        "\n[%s]> %s\n\n" % (
+                            datetime.now().strftime(
+                                    "%d-%m-%Y %H:%M:%S", ),
+                            " ".join(
+                                    sys.argv, ),
+                            ), )
 
         file_handler.setFormatter(
-            file_formatter,
-        )
+                file_formatter, )
         self.logger.addHandler(
-            file_handler,
-        )
+                file_handler, )
         self.logger.debug(
-            f"Added file handler: {file_handler}",
-        )
+                f"Added file handler: {file_handler}", )
 
     @staticmethod
     def init_log_file():
-        newpath = (
-            os.path.expanduser(
-                "~/.stonksmith",
-            )
-            + "/logs/"
-            + datetime.now().strftime(
-                "%Y-%m-%d",
-            )
-        )
+        """
+        Method to initialize the log file
+        :return:
+        """
+        newpath = (os.path.expanduser(
+                "~/.stonksmith", ) + "/logs/" + datetime.now().strftime(
+                "%Y-%m-%d", ))
         if not os.path.exists(
-            newpath,
-        ):
+                newpath, ):
             os.makedirs(
-                newpath,
-            )
+                    newpath, )
         log_filename = os.path.join(
-            os.path.expanduser(
-                "~/.stonksmith",
-            ),
-            "logs",
-            datetime.now().strftime(
-                "%Y-%m-%d",
-            ),
-            f"log_{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.log",
-        )
+                os.path.expanduser(
+                        "~/.stonksmith", ),
+                "logs",
+                datetime.now().strftime(
+                        "%Y-%m-%d", ),
+                f"log_{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.log", )
         return log_filename
 
 
-class TermEscapeCodeFormatter(
-    logging.Formatter,
-):
+class TermEscapeCodeFormatter(logging.Formatter):
     """
     Strip the escape codes before sending logs to file
     """
 
-    def __init__(
-        self,
-        fmt=None,
-        datefmt=None,
-        style="%",
-        validate=True,
-    ):
+    def __init__(self, fmt=None, datefmt=None, style='%', validate=True, ):
         super().__init__(
-            fmt,
-            datefmt,
-            style,
-            validate,
-        )
+                fmt,
+                datefmt,
+                style,
+                validate, )
 
-    def format(
-        self,
-        record,
-    ):
+    def format(self, record, ):
+        """
+        Method to format the log record
+        :param record:
+        :return:
+        """
         escape_re = re.compile(
-            r"\x1b\[[0-9;]*m",
-        )
+                r"\x1b\[[0-9;]*m", )
         record.msg = re.sub(
-            escape_re,
-            "",
-            str(
-                record.msg,
-            ),
-        )
+                escape_re,
+                "",
+                str(
+                        record.msg, ), )
         return super().format(
-            record,
-        )
+                record, )
 
 
 stonksmith_logger = STONKSMITHAdapter()
