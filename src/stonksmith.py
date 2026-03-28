@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 
+"""
+stonksmith.py: Script
+"""
+
 import logging
 
 from etc import config_log, gen_cli_args, setup_tool, stonksmith_logger
 
 
 def main():
-    setup_tool(stonksmith_logger)
+    """
+    Main function
+    :return:
+    """
+    setup_tool()
     root_logger = logging.getLogger("root")
     args = gen_cli_args()
 

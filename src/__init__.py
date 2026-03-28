@@ -9,4 +9,6 @@ __email__ = "garrettallen2@gmail.com"
 __version__ = "0.1.0"
 __status__ = "Development"
 
-__all__ = []
+import stonksmith
+
+__all__ = ["stonksmith"]
