@@ -8,6 +8,12 @@ from termcolor import colored
 
 
 def highlight(text, color="yellow"):
+    """
+    Highlight text for logger module
+    :param text:
+    :param color:
+    :return:
+    """
     if color == "yellow":
         return f"{colored(text, 'yellow', attrs=['bold'])}"
     elif color == "red":
