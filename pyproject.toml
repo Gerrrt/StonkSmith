@@ -14,6 +14,8 @@ dependencies = [
     "requests==2.33.0",
     "rich>=14.3.3",
     "ruff>=0.15.7",
+    "sqlalchemy>=2.0.48",
     "termcolor>=3.3.0",
+    "terminaltables>=3.1.10",
     "ty>=0.0.25",
 ]

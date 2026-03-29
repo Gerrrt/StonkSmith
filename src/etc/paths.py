@@ -12,11 +12,17 @@ stonksmith_path = os.path.expanduser("~/.stonksmith")
 tmp_path = os.path.join("/tmp", "stonksmith_hosted")
 
 if os.name == "nt":
-    tmp_path = os.getenv("LOCALAPPDATA") + "\\Temp\\stonksmith_hosted"
+    tmp_path = os.getenv("LOCALAPPDATA"), "\\Temp\\stonksmith_hosted"
 if hasattr(sys, "getandroidapilevel"):
     tmp_path = os.path.join(
-        "/data", "data", "com.termux", "files", "usr", "tmp", "stonksmith_hosted"
-    )
+            "/data",
+            "data",
+            "com.termux",
+            "files",
+            "usr",
+            "tmp",
+            "stonksmith_hosted",
+        )
 
 ws_path = os.path.join(stonksmith_path, "workspaces")
 cert_path = os.path.join(stonksmith_path, "stonksmith.pem")

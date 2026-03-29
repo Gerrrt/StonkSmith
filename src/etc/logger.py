@@ -12,11 +12,10 @@ from datetime import datetime
 from logging import LogRecord
 from logging.handlers import RotatingFileHandler
 
+from etc.console import stonksmith_console
 from rich.logging import RichHandler
 from rich.text import Text
 from termcolor import colored
-
-from etc.console import stonksmith_console
 
 
 class STONKSMITHAdapter(logging.LoggerAdapter):
@@ -248,7 +247,7 @@ class STONKSMITHAdapter(logging.LoggerAdapter):
                 "%(asctime)s - %(levelname)s - %(message)s", )
         output_file = (
             self.init_log_file() if log_file is None else log_file
-        )
+            )
         file_creation = False
 
         if not os.path.isfile(output_file):

@@ -5,9 +5,18 @@ stonksmith.py: Script
 """
 
 import logging
-from os.path import exists
+from os.path import join
 
-from etc import config_log, gen_cli_args, setup_tool, stonksmith_logger
+from etc import (
+    config_log,
+    create_db_engine,
+    gen_cli_args,
+    setup_tool,
+    stonksmith_logger,
+    stonksmith_path,
+    stonksmith_workspace,
+)
+from loaders import ProtocolLoader
 
 
 def main():
@@ -54,15 +63,20 @@ def main():
     protocol_db_path = p_loader.get_protocols()[args.protocol]["dbpath"]
     stonksmith_logger.debug(f"Protocol DB Path: {protocol_db_path}")
 
-    protocol_object = getattr(p_loader.load_protocol(protocol_path),
-                              args.protocol)
+    protocol_object = getattr(
+            p_loader.load_protocol(protocol_path),
+            args.protocol,)
     stonksmith_logger.debug(f"Protocol Object: {protocol_object}")
-    protocol_db_object = getattr(p_loader.load_protocol(protocol_db_path),
-                                 "database")
+    protocol_db_object = getattr(
+            p_loader.load_protocol(protocol_db_path),
+            "database",)
     stonksmith_logger.debug(f"Protocol DB Object: {protocol_db_object}")
 
-    db_path = join(stonksmith_path, "workspaces", stonksmith_workspace,
-                   f"{args.protocol}.db")
+    db_path = join(
+            stonksmith_path,
+            "workspaces",
+            stonksmith_workspace,
+            f"{args.protocol}.db")
     stonksmith_logger.debug(f"DB Path: {db_path}")
 
     db_engine = create_db_engine(db_path)
