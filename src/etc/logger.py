@@ -17,7 +17,6 @@ from rich.text import Text
 from termcolor import colored
 
 from etc.console import stonksmith_console
-from helpers.extra import called_from_cmd_args
 
 
 class STONKSMITHAdapter(logging.LoggerAdapter):
@@ -313,12 +312,11 @@ class TermEscapeCodeFormatter(logging.Formatter):
     Strip the escape codes before sending logs to file
     """
 
-    def __init__(self, fmt=None, datefmt=None, style='%', validate=True, ):
+    def __init__(self, fmt=None, datefmt=None):
         super().__init__(
                 fmt,
                 datefmt,
-                style,
-                validate, )
+                )
 
     def format(self, record, ):
         """
