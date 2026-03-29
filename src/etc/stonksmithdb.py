@@ -3,6 +3,10 @@
 Create database engine for stonksmith
 """
 
+from os.path import exists
+
+from etc.paths import config_path
+
 
 def main():
     if not exists(config_path):
