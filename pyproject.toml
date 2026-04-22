@@ -1,7 +1,7 @@
 [project]
 name = "stonksmith"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Python-based tool that scrapes and aggregates investment account data into a centralized Google Sheets dashboard for real-time net worth tracking."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = []
