@@ -1,0 +1,11 @@
+add-bounds = "lower"
+allow-insecure-host = [  ]
+cache-dir = "~/.cache/uv"
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "setup.py" },
+    { file = "setup.cfg" },
+]
+# check-url = ''
+compile-bytecode = false
+concurrent-builds = 4

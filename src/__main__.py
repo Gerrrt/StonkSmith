@@ -1,6 +1,4 @@
-"""
-Stonksmith: A modular stock analysis and tracking tool.
-"""
+"""Stonksmith: A modular stock analysis and tracking tool."""
 
 import asyncio
 import sys
@@ -24,14 +22,12 @@ from loaders.moduleloader import ModuleLoader
 
 
 def main(args: Namespace) -> int:
-    """
-    Main function
+    """Main function
     :return:
     0: Success
     1: Failure
     """
-
-    # 1. Initialization
+    # 1. Tool Setup
     setup_tool(logger=stonksmith_logger)
 
     # 2. Configure logging
@@ -54,26 +50,26 @@ def main(args: Namespace) -> int:
     broker_info: dict[str, str] = brokers[broker_name]
 
     broker_module: ModuleType | None = broker_loader.load_broker(
-        broker_path=broker_info["path"]
+        broker_path=broker_info["path"],
     )
     if broker_module is None:
         stonksmith_logger.error(
-            msg=f"Failed to load broker module: {broker_info['path']}"
+            msg=f"Failed to load broker module: {broker_info['path']}",
         )
         return 1
 
     if "dbpath" not in broker_info:
         stonksmith_logger.error(
-            msg=f"Database module missing for broker '{broker_name}'."
+            msg=f"Database module missing for broker '{broker_name}'.",
         )
         return 1
 
     db_module: ModuleType | None = broker_loader.load_broker(
-        broker_path=broker_info["dbpath"]
+        broker_path=broker_info["dbpath"],
     )
     if db_module is None or not hasattr(db_module, "Database"):
         stonksmith_logger.error(
-            msg=f"Failed to load Database class from: {broker_info['dbpath']}"
+            msg=f"Failed to load Database class from: {broker_info['dbpath']}",
         )
         return 1
 
@@ -82,14 +78,21 @@ def main(args: Namespace) -> int:
 
     # 5. Database Setup
     db_path: Path = (
-        stonksmith_path / "workspaces" / stonksmith_workspace / f"{broker_name}.db"
+        stonksmith_path
+        / "workspaces"
+        / stonksmith_workspace
+        / f"{broker_name}.db"
     )
 
     db_engine: Engine = create_db_engine(db_path=db_path)
     db: BrokerDbProtocol = db_class(db_engine)
 
     # 6. Module Handling
-    loader: ModuleLoader = ModuleLoader(args=args, db=db, logger=stonksmith_logger)
+    loader: ModuleLoader = ModuleLoader(
+        args=args,
+        db=db,
+        logger=stonksmith_logger,
+    )
 
     if args.list_modules:
         loader.list_available()
@@ -111,7 +114,9 @@ def main(args: Namespace) -> int:
 
     # 8. Execution
     try:
-        asyncio.run(main=start_run(broker_obj=broker_instance, db=db, args=args))
+        asyncio.run(
+            main=start_run(broker_obj=broker_instance, db=db, args=args),
+        )
 
     except KeyboardInterrupt:
         stonksmith_logger.highlight(msg="Keyboard interrupt.")
