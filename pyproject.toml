@@ -1,5 +1,10 @@
 [project]
-    dependencies   =["ruff>=0.15.11", "ty>=0.0.32", "uv>=0.11.7"]
+    dependencies   =[
+    "ruff>=0.15.11",
+    "sqlalchemy>=2.0.49",
+    "ty>=0.0.32",
+    "uv>=0.11.7",
+]
     description    ="A Python-based tool that scrapes and aggregates investment account data into a centralized Google Sheets dashboard for real-time net worth tracking."
     name           ="stonksmith"
     readme         ="README.md"

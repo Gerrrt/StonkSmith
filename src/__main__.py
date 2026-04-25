@@ -1,31 +1,42 @@
+# Copyright (c) 2026 Gerrrt
+# Licensed under the MIT License
+
 """Stonksmith: A modular stock analysis and tracking tool."""
 
 import asyncio
 import sys
-from argparse import Namespace
-from pathlib import Path
-from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Engine
+from src.etc.cli import gen_cli_args
+from src.etc.config import stonksmith_workspace
+from src.etc.infrastructure import create_db_engine, set_logging_level
+from src.etc.logger import stonksmith_logger
+from src.etc.paths import stonksmith_path
+from src.etc.runner import start_run
+from src.etc.tool_setup import setup_tool
+from src.loaders.brokerloader import BrokerLoader
+from src.loaders.moduleloader import ModuleLoader
 
-from etc.cli import gen_cli_args
-from etc.config import stonksmith_workspace
-from etc.context import BrokerDbProtocol
-from etc.infrastructure import create_db_engine, set_logging_level
-from etc.logger import stonksmith_logger
-from etc.paths import stonksmith_path
-from etc.runner import start_run
-from etc.tool_setup import setup_tool
-from loaders.brokerloader import BrokerLoader
-from loaders.moduleloader import ModuleLoader
+if TYPE_CHECKING:
+    from argparse import Namespace
+    from pathlib import Path
+    from types import ModuleType
+
+    from sqlalchemy import Engine
+
+    from src.etc.context import BrokerDbProtocol
 
 
 def main(args: Namespace) -> int:
-    """Main function
-    :return:
-    0: Success
-    1: Failure
+    """
+    Execute the main entry point for Stonksmith.
+
+    Args:
+        args (Namespace): Parsed command-line arguments.
+
+    Returns:
+        int: Exit code (0 for success, non-zero for errors).
+
     """
     # 1. Tool Setup
     setup_tool(logger=stonksmith_logger)
@@ -35,7 +46,9 @@ def main(args: Namespace) -> int:
 
     # 3. Validation: Catch missing broker before continuing
     if not args.broker:
-        print("Error: Broker required.")
+        stonksmith_logger.error(
+            msg="No broker specified. Provide a broker with --broker <BROKER_NAME>",
+        )
         return 1
 
     # 4. Broker Data Setup
@@ -73,58 +86,41 @@ def main(args: Namespace) -> int:
         )
         return 1
 
-    broker_class = getattr(broker_module, args.broker.capitalize())
-    db_class = db_module.Database
+    broker_class: Any = getattr(broker_module, args.broker.capitalize())
+    db_class: Any = db_module.Database
 
     # 5. Database Setup
     db_path: Path = (
-        stonksmith_path
-        / "workspaces"
-        / stonksmith_workspace
-        / f"{broker_name}.db"
+        stonksmith_path / "workspaces" / stonksmith_workspace / f"{broker_name}.db"
     )
 
     db_engine: Engine = create_db_engine(db_path=db_path)
     db: BrokerDbProtocol = db_class(db_engine)
 
     # 6. Module Handling
-    loader: ModuleLoader = ModuleLoader(
-        args=args,
-        db=db,
-        logger=stonksmith_logger,
-    )
+    loader: ModuleLoader = ModuleLoader(args=args, db=db, logger=stonksmith_logger)
 
+    exit_code: int = 0
     if args.list_modules:
         loader.list_available()
-        return 0
-
-    if args.module and args.show_module_options:
+    elif args.module and args.show_module_options:
         loader.show_options()
-        return 0
-
-    # 7. Broker Object Preparation
-    broker_instance = broker_class()
-
-    if args.module is not None:
-        module: Any | None = loader.prepare()
-        broker_instance.module = [module] if module is not None else []
-
+    elif args.module is None:
+        exit_code = 1
     else:
-        return 1
+        # 7. Broker Object Preparation
+        broker_instance: Any = broker_class()
+        module: Any | None = loader.prepare()
+        broker_instance.module: list[Any] = [module] if module is not None else []
 
-    # 8. Execution
-    try:
-        asyncio.run(
-            main=start_run(broker_obj=broker_instance, db=db, args=args),
-        )
+        # 8. Execution
+        try:
+            asyncio.run(main=start_run(broker_obj=broker_instance, db=db, args=args))
+        except KeyboardInterrupt:
+            stonksmith_logger.highlight(msg="Keyboard interrupt.")
 
-    except KeyboardInterrupt:
-        stonksmith_logger.highlight(msg="Keyboard interrupt.")
-
-    finally:
-        db_engine.dispose()
-
-    return 0
+    db_engine.dispose()
+    return exit_code
 
 
 if __name__ == "__main__":

@@ -3,9 +3,5 @@
     "python.analysis.autoImportCompletions": true,
     "material-icon-theme.files.associations": {
         "ty.toml": "./../icons/ty"
-    },
-    "gitlens.codeLens.enabled": false,
-    "gitlens.codeLens.authors.enabled": false,
-    "gitlens.codeLens.recentChange.enabled": false,
-    "better-comments.highlightPlainText": false
+    }
 }
