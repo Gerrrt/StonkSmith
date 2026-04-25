@@ -1,8 +1,7 @@
 # Copyright (c) 2026 Gerrrt
 # Licensed under the MIT License
 
-"""
-StonkSmith is a Python package for parsing, saving, and navigating financial data..
+"""StonkSmith is a Python package for parsing, saving, and navigating financial data..
 
 Each module contains code for parsing, saving, and navigating its data.
 """

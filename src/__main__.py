@@ -5,6 +5,7 @@
 
 import asyncio
 import sys
+from argparse import Namespace
 from typing import TYPE_CHECKING, Any
 
 from src.etc.cli import gen_cli_args
@@ -18,7 +19,6 @@ from src.loaders.brokerloader import BrokerLoader
 from src.loaders.moduleloader import ModuleLoader
 
 if TYPE_CHECKING:
-    from argparse import Namespace
     from pathlib import Path
     from types import ModuleType
 
@@ -28,8 +28,7 @@ if TYPE_CHECKING:
 
 
 def main(args: Namespace) -> int:
-    """
-    Execute the main entry point for Stonksmith.
+    """Execute the main entry point for Stonksmith.
 
     Args:
         args (Namespace): Parsed command-line arguments.
