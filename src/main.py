@@ -8,15 +8,15 @@ import sys
 from argparse import Namespace
 from typing import TYPE_CHECKING, Any
 
-from src.etc.cli import gen_cli_args
-from src.etc.config import stonksmith_workspace
-from src.etc.infrastructure import create_db_engine, set_logging_level
-from src.etc.logger import stonksmith_logger
-from src.etc.paths import stonksmith_path
-from src.etc.runner import start_run
-from src.etc.tool_setup import setup_tool
-from src.loaders.brokerloader import BrokerLoader
-from src.loaders.moduleloader import ModuleLoader
+from etc.cli import gen_cli_args
+from etc.config import stonksmith_workspace
+from etc.infrastructure import create_db_engine, set_logging_level
+from etc.logger import stonksmith_logger
+from etc.paths import stonksmith_path
+from etc.runner import start_run
+from etc.tool_setup import setup_tool
+from loaders.brokerloader import BrokerLoader
+from loaders.moduleloader import ModuleLoader
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy import Engine
 
-    from src.etc.context import BrokerDbProtocol
+    from etc.context import BrokerDbProtocol
 
 
 def main(args: Namespace) -> int:

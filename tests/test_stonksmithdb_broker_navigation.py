@@ -8,8 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
 class StonkSmithDBNavigationTests(unittest.TestCase):
-    """
-    Regression tests for StonkSmithDBMenu.do_broker.
+    """Regression tests for StonkSmithDBMenu.do_broker.
 
     Ensures that the already-initialized Database instance is passed
     directly to DatabaseNavigator, rather than being re-invoked as a
@@ -18,12 +17,13 @@ class StonkSmithDBNavigationTests(unittest.TestCase):
 
     @patch("etc.stonksmithdb.create_db_engine")
     def test_do_broker_passes_db_instance_to_navigator(
-        self, mock_create_engine: MagicMock
+        self,
+        mock_create_engine: MagicMock,
     ) -> None:
         from etc.stonksmithdb import StonkSmithDBMenu
 
         mock_engine = MagicMock()
-        mock_create_engine.return_value = mock_engine
+        mock_create_engine.return_value: MagicMock = mock_engine
 
         # The pre-initialized DB instance that should be handed to the navigator.
         db_instance = MagicMock()
@@ -52,7 +52,7 @@ class StonkSmithDBNavigationTests(unittest.TestCase):
             broker_name: {
                 "nvpath": "fake/nav",
                 "dbpath": "fake/db",
-            }
+            },
         }
         # Wire broker_loader.load_broker to return nav_mod then db_mod.
         menu.broker_loader = MagicMock()
@@ -67,7 +67,9 @@ class StonkSmithDBNavigationTests(unittest.TestCase):
             menu.do_broker(broker=broker_name)
 
         self.assertEqual(
-            len(captured), 1, "Navigator should have been instantiated once"
+            len(captured),
+            1,
+            "Navigator should have been instantiated once",
         )
         self.assertIs(
             captured[0],

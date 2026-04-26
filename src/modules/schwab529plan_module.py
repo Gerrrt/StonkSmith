@@ -1,4 +1,7 @@
-"""Module to login and scrape data from https://www.schwab529plan.com"""
+# Copyright (c) 2026 Gerrrt
+# Licensed under the MIT License
+
+"""Module to login and scrape data from https://www.schwab529plan.com."""
 
 import datetime
 from typing import Any, ClassVar
@@ -14,47 +17,40 @@ from helpers.schwab529plan import clean_up
 
 
 class Schwab529Module:
-    """
-    Module to log in and scrape data from https://www.schwab529plan.com
-    """
+    """Module to log in and scrape data from https://www.schwab529plan.com."""
 
     name: str = "schwab529plan"
     description: str = "Log in and scrape account data"
     supported_brokers: ClassVar[list[str]] = ["schwab529plan"]
 
     def __init__(self) -> None:
+        """Initialize the class attributes."""
         self.export_format: str | None = "print"
         self.login_url = "https://www.schwab529plan.com/swatpl/aggregator/sessionCreate/collectAggrCredentials.cs"
         self.dashboard_url = "https://www.schwab529plan.com/swatpl/aggregator/overview/viewAggrOverview.cs"
 
-    def options(self, _: Any, module_options: dict[str, Any] | None = None) -> None:
-        """
-        Module options get parsed here.
-        Additionally, put the modules usage here as well
-        :param _:
-        :param module_options:
-        :type module_options: dict
-        :return:
-        :rtype: None
-        """
+    def options(self, _: str, module_options: dict[str, Any] | None = None) -> None:
+        """Set up module options, such as export format.
 
+        Args:
+            _: str: Placeholder for potential future use (e.g., context or config).
+            module_options (dict[str, Any] | None): Optional dictionary of
+            module-specific options.
+
+        """
         options: dict[str, Any] = module_options or {}
-        self.export_format = options.get("EXPORT", "print")
+        self.export_format: Any = options.get("EXPORT", "print")
 
     def on_login(self, context: Context, connection: Connection) -> None:
-        """
-        Entry point called by Connection.call_modules()
-        Scrape -> Parse -> Clean -> Save (DB) -> Sync (Google)
-        :param context:
-        :type context: Context
-        :param connection:
-        :type connection: Connection
-        :param connection:
-        :type connection:
-        :return:
-        :rtype:
-        """
+        """Perform the login and scraping process for Schwab529Plan.
 
+        Args:
+            context (Context): The execution context, providing access to logging,
+            database, and other shared resources.
+            connection (Connection): The connection object containing session and
+            authentication details for the broker.
+
+        """
         context.log.highlight(msg=f"Starting Schwab529 sync for: {connection.username}")
 
         # 1. Scrape: Use session from broker
@@ -70,12 +66,15 @@ class Schwab529Module:
                     msg=(
                         "Authenticated session not established: received login page "
                         f"instead of dashboard (url={response.url})."
-                    )
+                    ),
                 )
                 return
 
         except RequestException as e:
-            context.log.exception(msg=f"Connection error during scrape: {e}")
+            context.log.exception(
+                msg="Exception during Schwab529plan account scrape",
+                extra={"error": str(e)},
+            )
             return
 
         # 2. Parse
@@ -95,22 +94,23 @@ class Schwab529Module:
 
         # 3. Clean
 
-        beneficiaries = clean_up(data=raw_beneficiaries)
-        balances = clean_up(data=raw_balances)
-        investments = clean_up(data=raw_investments)
-        transactions = clean_up(data=raw_transactions)
+        beneficiaries: Any = clean_up(data=raw_beneficiaries)
+        balances: Any = clean_up(data=raw_balances)
+        investments: Any = clean_up(data=raw_investments)
+        transactions: Any = clean_up(data=raw_transactions)
 
         # 4. Save to local database
 
         context.log.highlight(msg="Updating local broker database...")
         timestamp: str = datetime.datetime.now(tz=datetime.UTC).strftime(
-            format="%Y-%m-%d %H:%M:%S"
+            format="%Y-%m-%d %H:%M:%S",
         )
 
         db: BrokerDbProtocol = context.db
         if not callable(getattr(db, "save_account_data", None)):
             context.log.fail(
-                msg="DB contract violation: context.db does not implement save_account_data. Skipping DB save."
+                msg="DB contract violation: context.db does not implement "
+                "save_account_data. Skipping DB save.",
             )
         else:
             for item in balances:
@@ -141,8 +141,15 @@ class Schwab529Module:
 
     @staticmethod
     def _looks_like_login_page(response: Response) -> bool:
-        """Detect whether the fetched page is the Schwab529 login form."""
+        """Check if the response looks like a login page rather than a dashboard.
 
+        Args:
+            response (Response): The HTTP response to check.
+
+        Returns:
+            bool: True if the response appears to be a login page, False otherwise.
+
+        """
         response_url: str = str(object=response.url).lower()
         if "collectaggrcredentials.cs" in response_url:
             return True
