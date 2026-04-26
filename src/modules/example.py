@@ -1,6 +1,7 @@
-"""
-Module Template
-"""
+# Copyright (c) 2026 Gerrrt
+# Licensed under the MIT License
+
+"""Module Template"""
 
 from typing import Any, ClassVar
 
@@ -9,9 +10,7 @@ from etc.context import Context
 
 
 class StonkSmithModule:
-    """
-    Class Template
-    """
+    """Class Template"""
 
     name: str = "Example"
     description: str = "Scrape/Clean/etc from an account"
