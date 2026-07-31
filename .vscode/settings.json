@@ -1,7 +1,0 @@
-{
-    "markdown.validate.enabled": true,
-    "python.analysis.autoImportCompletions": true,
-    "material-icon-theme.files.associations": {
-        "ty.toml": "./../icons/ty"
-    }
-}
