@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 from brokers.fidelity.saver import Saver
 from etc.connection import Connection
 from etc.context import BrokerDbProtocol, Context
+from helpers.sheets import SheetsUnavailable
 
 # Fidelity renders the portfolio summary with their "PVD" design system. These
 # selectors are the scrape surface and are the first thing to check when a run
@@ -136,7 +137,11 @@ class FidelityModule:
             Saver().save_accounts(data=list(accounts))
             context.log.success(msg="Google Sheets updated successfully!")
 
+        except SheetsUnavailable as e:
+            context.log.fail(msg=f"Google Sheets sync skipped: {e}")
+
         except Exception as e:
+            # Broad on purpose: the balances are already in the broker database.
             context.log.fail(msg=f"Google Sheets sync failed: {e}")
 
         context.log.success(msg="Fidelity sync complete.")
