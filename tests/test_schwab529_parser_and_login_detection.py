@@ -1,10 +1,7 @@
-import sys
 import unittest
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Any
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 _BROKER_FILE = (
     Path(__file__).resolve().parents[1] / "src" / "brokers" / "schwab529plan.py"

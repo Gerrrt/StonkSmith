@@ -148,8 +148,10 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
                     msg=f"DEBUG: Could not load args for {broker_name}: {e}"
                 )
 
-        if len(sys.argv) == 1:
-            parser.print_help()
-            raise SystemExit(0)
+    # Outside the loop: a bare invocation must print help even when no broker
+    # registered a subparser.
+    if len(sys.argv) == 1:
+        parser.print_help()
+        raise SystemExit(0)
 
     return parser.parse_args()

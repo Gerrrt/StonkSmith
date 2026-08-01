@@ -78,9 +78,7 @@ class Parser:
                     "Fund": investment.xpath(query=".//tbody/tr/td[2]/text()").get(),
                     "Units": investment.xpath(query=".//tbody/tr/td[3]/text()").get(),
                     "Price": investment.xpath(query=".//tbody/tr/td[4]/text()").get(),
-                    "Current Value": investment.xpath(
-                        query=".//tbody/tr/td[5]/text()"
-                    ).get(),
+                    "Value": investment.xpath(query=".//tbody/tr/td[5]/text()").get(),
                     "Total Assets": investment.xpath(
                         query=".//tfoot/tr[1]/td/text()"
                     ).get(),

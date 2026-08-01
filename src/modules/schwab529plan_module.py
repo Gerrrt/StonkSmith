@@ -29,15 +29,19 @@ class Schwab529Module:
         self.login_url = "https://www.schwab529plan.com/swatpl/aggregator/sessionCreate/collectAggrCredentials.cs"
         self.dashboard_url = "https://www.schwab529plan.com/swatpl/aggregator/overview/viewAggrOverview.cs"
 
-    def options(self, _: str, module_options: dict[str, Any] | None = None) -> None:
+    def options(
+        self, context: Context | None, module_options: dict[str, Any] | None = None
+    ) -> None:
         """Set up module options, such as export format.
 
         Args:
-            _: str: Placeholder for potential future use (e.g., context or config).
+            context (Context | None): Execution context supplied by ModuleLoader.
+            Unused today, but part of the module contract.
             module_options (dict[str, Any] | None): Optional dictionary of
             module-specific options.
 
         """
+        del context
         options: dict[str, Any] = module_options or {}
         self.export_format: Any = options.get("EXPORT", "print")
 

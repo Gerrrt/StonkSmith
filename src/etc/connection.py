@@ -24,6 +24,14 @@ class Connection:
     """
 
     def __init__(self) -> None:
+        # broker/name are overridden by every subclass, but they are defined here
+        # so the base class and etc.runner (which reads broker_obj.name) never
+        # depend on a subclass remembering to set them.
+        self.broker: str = "Unknown"
+        self.name: str = "Unknown"
+        # CLI flag names this broker allows call_cmd_args() to dispatch to
+        # same-named methods. Empty by default: opt in explicitly.
+        self.cmd_actions: tuple[str, ...] = ()
         self.module: list[Any] = []
         self.args: Namespace | None = None
         self.db: BrokerDbProtocol | None = None
@@ -56,7 +64,22 @@ class Connection:
             self.logger.exception(msg=f"Exception on {host or 'local'}: {e}")
 
         finally:
+            try:
+                self.teardown()
+
+            except Exception as e:
+                self.logger.exception(msg=f"Teardown failed for {self.broker!r}: {e}")
+
             self.session.close()
+
+    def teardown(self) -> None:
+        """
+        Release broker-owned resources at the end of a run.
+
+        Subclasses that own external resources (browsers, drivers, sockets)
+        must override this. ``__call__`` always invokes it, including on the
+        error path.
+        """
 
     @staticmethod
     def broker_args(
@@ -118,14 +141,27 @@ class Connection:
 
     def call_cmd_args(self) -> None:
         """
-        Call command arguments
+        Invoke broker actions named by CLI flags.
+
+        Only names a broker explicitly advertises in ``cmd_actions`` are
+        dispatched. Previously this called getattr(self, k) for *any* truthy
+        argument, so a future flag named e.g. --login or --parse-credentials
+        would silently invoke the same-named method.
         :return:
         :rtype:
         """
 
+        allowed: frozenset[str] = frozenset(getattr(self, "cmd_actions", ()))
+
+        if not allowed:
+            return
+
         for k, v in vars(self.args).items():
+            if not v or k not in allowed:
+                continue
+
             method = getattr(self, k, None)
-            if v and callable(method):
+            if callable(method):
                 self.logger.highlight(msg=f"Calling {k}()")
                 method()
 
@@ -180,7 +216,8 @@ class Connection:
                 if show_module_markers:
                     module_logger.highlight(
                         msg=(
-                            f"[+] Completed module {getattr(module, 'name', 'unknown')} "
+                            "[+] Completed module "
+                            f"{getattr(module, 'name', 'unknown')} "
                             f"for {self.username or 'unknown user'}"
                         )
                     )
@@ -370,7 +407,10 @@ class Connection:
             u, o, s, t, *extra = self.query_db_creds()
             if extra:
                 self.logger.highlight(
-                    msg=f"query_db_creds returned {4 + len(extra)} collections; using first 4"
+                    msg=(
+                        f"query_db_creds returned {4 + len(extra)} "
+                        "collections; using first 4"
+                    )
                 )
             u_list.extend(u)
             o_list.extend(o)
@@ -381,7 +421,10 @@ class Connection:
             u, o, s, t, *extra = self.parse_credentials()
             if extra:
                 self.logger.highlight(
-                    msg=f"parse_credentials returned {4 + len(extra)} collections; using first 4"
+                    msg=(
+                        f"parse_credentials returned {4 + len(extra)} "
+                        "collections; using first 4"
+                    )
                 )
             u_list.extend(u)
             o_list.extend(o)
@@ -391,7 +434,18 @@ class Connection:
         if not u_list:
             return False
 
-        for u, o, s, t in zip(u_list, o_list, s_list, t_list):
+        # Credentials are paired positionally. zip() truncates to the shortest
+        # list, so an uneven -u/-p pairing used to drop attempts silently.
+        if len(u_list) != len(s_list):
+            self.logger.fail(
+                msg=(
+                    f"Credential count mismatch: {len(u_list)} username(s) but "
+                    f"{len(s_list)} secret(s). Only the first "
+                    f"{min(len(u_list), len(s_list))} pair(s) will be tried."
+                )
+            )
+
+        for u, o, s, t in zip(u_list, o_list, s_list, t_list, strict=False):
             if self.try_credentials(username=u, owned=o, secret=s, cred_type=t):
                 self.username = u
                 self.password = s

@@ -1,10 +1,7 @@
-import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
 class StonkSmithDBNavigationTests(unittest.TestCase):
@@ -74,7 +71,8 @@ class StonkSmithDBNavigationTests(unittest.TestCase):
         self.assertIs(
             captured[0],
             db_instance,
-            "Navigator must receive the DB instance directly, not a callable re-invocation",
+            "Navigator must receive the DB instance directly, "
+            "not a callable re-invocation",
         )
         # Confirm db_instance was never called as a constructor.
         db_instance.assert_not_called()

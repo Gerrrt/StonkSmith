@@ -46,15 +46,23 @@ stonksmith_workspace: str = stonksmith_config.get(
     section="STONKSMITH", option="workspace", fallback="default"
 )
 
-audit_mode: str | bool = stonksmith_config.get(
+# NOTE: these must be read with getboolean/getint, not get(). ConfigParser.get()
+# returns raw strings, so the literal "False" in the shipped config is a truthy
+# str and every boolean check below would be inverted.
+audit_mode: bool = stonksmith_config.getboolean(
     section="STONKSMITH", option="audit_mode", fallback=False
 )
 
-reveal_chars_of_pwd: str | bool = stonksmith_config.get(
-    section="STONKSMITH", option="reveal_chars_of_pwd", fallback=False
-)
+try:
+    reveal_chars_of_pwd: int = stonksmith_config.getint(
+        section="STONKSMITH", option="reveal_chars_of_pwd", fallback=0
+    )
 
-config_log: str | bool = stonksmith_config.get(
+except ValueError:
+    # "False" is the shipped default and is not an int; treat it as "reveal none".
+    reveal_chars_of_pwd = 0
+
+config_log: bool = stonksmith_config.getboolean(
     section="STONKSMITH", option="log_mode", fallback=False
 )
 
@@ -67,7 +75,7 @@ try:
         )
     )
 
-except (ValueError, SyntaxError):
+except ValueError, SyntaxError:
     host_info_colors: list[str] = ["green", "red", "yellow", "cyan"]
 
 if len(host_info_colors) != 4:
@@ -75,18 +83,23 @@ if len(host_info_colors) != 4:
     host_info_colors: list[str] = ["green", "red", "yellow", "cyan"]
 
 
-def process_secret(text: str) -> str:
+def process_secret(text: str | None) -> str:
     """
-    Masks password based on audit_mode and reveal settings.
-    :param text:
-    :type text:
-    :return:
-    :rtype:
+    Mask a secret for display.
+
+    Secrets are fully masked unless ``audit_mode`` is enabled, in which case the
+    first ``reveal_chars_of_pwd`` characters are shown so an operator can tell
+    two credentials apart without exposing either one.
+    :param text: The secret to mask, or None
+    :return: A display-safe string that never contains the full secret
     """
 
-    if not audit_mode:
-        return text
-
-    visible: str = text[:reveal_chars_of_pwd]
     mask: str = "*" * 8
-    return f"{visible}{mask}"
+
+    if not text:
+        return ""
+
+    if not audit_mode or reveal_chars_of_pwd <= 0:
+        return mask
+
+    return f"{text[:reveal_chars_of_pwd]}{mask}"

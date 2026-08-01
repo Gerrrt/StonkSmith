@@ -85,7 +85,17 @@ def main(args: Namespace) -> int:
         )
         return 1
 
-    broker_class: Any = getattr(broker_module, args.broker.capitalize())
+    broker_class_name: str = broker_name.capitalize()
+    broker_class: Any = getattr(broker_module, broker_class_name, None)
+    if broker_class is None:
+        stonksmith_logger.error(
+            msg=(
+                f"Broker module '{broker_info['path']}' does not define a "
+                f"'{broker_class_name}' class."
+            ),
+        )
+        return 1
+
     db_class: Any = db_module.Database
 
     # 5. Database Setup
@@ -94,7 +104,7 @@ def main(args: Namespace) -> int:
     )
 
     db_engine: Engine = create_db_engine(db_path=db_path)
-    db: BrokerDbProtocol = db_class(db_engine)
+    db: BrokerDbProtocol = db_class(db_engine, broker_name)
 
     # 6. Module Handling
     loader: ModuleLoader = ModuleLoader(args=args, db=db, logger=stonksmith_logger)
@@ -108,9 +118,14 @@ def main(args: Namespace) -> int:
         exit_code = 1
     else:
         # 7. Broker Object Preparation
+        modules: list[Any] = loader.prepare()
+        if not modules:
+            stonksmith_logger.error(msg="No modules could be loaded. Nothing to run.")
+            db_engine.dispose()
+            return 1
+
         broker_instance: Any = broker_class()
-        module: Any | None = loader.prepare()
-        broker_instance.module: list[Any] = [module] if module is not None else []
+        broker_instance.module = modules
 
         # 8. Execution
         try:
@@ -122,7 +137,17 @@ def main(args: Namespace) -> int:
     return exit_code
 
 
+def cli_entry() -> int:
+    """Parse command-line arguments and run Stonksmith.
+
+    Console-script entry point for the ``stonksmith`` command.
+
+    Returns:
+        int: Exit code (0 for success, non-zero for errors).
+
+    """
+    return main(args=gen_cli_args())
+
+
 if __name__ == "__main__":
-    args: Namespace = gen_cli_args()
-    exit_code: int = main(args=args)
-    sys.exit(exit_code)
+    sys.exit(cli_entry())

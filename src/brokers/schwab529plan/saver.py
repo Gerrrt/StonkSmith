@@ -4,7 +4,10 @@ Save account data from https://www.schwab529.com/ into Google Sheets.
 
 from typing import Any
 
-import gspread
+from helpers.sheets import a1_range as _a1_range
+from helpers.sheets import open_worksheet
+
+WORKSHEET_NAME = "529 Plan"
 
 
 class Saver:
@@ -13,8 +16,6 @@ class Saver:
     """
 
     def __init__(self) -> None:
-        self.gc: Any = None
-        self.sh: Any = None
         self.worksheet: Any = None
 
     def _prepare_sheet(self) -> None:
@@ -23,10 +24,8 @@ class Saver:
         :return: None
         """
 
-        if not self.gc:
-            self.gc = gspread.oauth()
-            self.sh = self.gc.open("Investment Account Scrapes")
-            self.worksheet = self.sh.worksheet("529 Plan")
+        if not self.worksheet:
+            self.worksheet = open_worksheet(worksheet_name=WORKSHEET_NAME)
 
     def save_beneficiary(self, data: list[dict[str, Any]]) -> None:
         """
@@ -43,7 +42,12 @@ class Saver:
                 [a.get("Title"), a.get("Name"), a.get("Account")] for a in data
             ]
             if rows:
-                self.worksheet.update(rows, f"B3:D{3 + len(rows)}")
+                self.worksheet.update(
+                    rows,
+                    _a1_range(
+                        first_col="B", last_col="D", first_row=3, row_count=len(rows)
+                    ),
+                )
 
     def save_balance(self, data: list[dict[str, Any]]) -> None:
         """
@@ -59,7 +63,12 @@ class Saver:
                 [a.get("Title"), a.get("Amount"), a.get("Date")] for a in data
             ]
             if rows:
-                self.worksheet.update(rows, f"G3:I{3 + len(rows)}")
+                self.worksheet.update(
+                    rows,
+                    _a1_range(
+                        first_col="G", last_col="I", first_row=3, row_count=len(rows)
+                    ),
+                )
 
     def save_investment(self, data: list[dict[str, Any]]) -> None:
         """
@@ -95,7 +104,12 @@ class Saver:
                 for a in data
             ]
             if rows:
-                self.worksheet.update(rows, f"B10:I{10 + len(rows)}")
+                self.worksheet.update(
+                    rows,
+                    _a1_range(
+                        first_col="B", last_col="I", first_row=10, row_count=len(rows)
+                    ),
+                )
 
     def save_transactions(self, data: list[dict[str, Any]]) -> None:
         """

@@ -25,51 +25,92 @@ all the accounts you own.
 
 ---
 
-## :wrench: Features (Planned)
+## :wrench: Features
 
-- [ ] Multi-broker support (Fidelity, Schwab, Vanguard, TSP, Ally, 529, etc.)
-- [ ] Automatic data scraping / API integrations
-- [ ] Google Sheets sync
+- [x] Multi-broker support (Schwab 529, Fidelity)
+- [x] Automatic data scraping (requests + Playwright)
+- [x] Google Sheets sync
+- [x] CLI commands for automation
+- [x] Credentials stored in the OS keyring
+- [ ] More brokers (Vanguard, TSP, Ally, ...)
 - [ ] Net worth tracking over time
 - [ ] Asset allocation breakdown
-- [ ] CLI commands for automation
 - [ ] Scheduling (cron / background jobs)
-
---- 
-
-## :bricks: Project Structure (Planned)
-
-```text
-StonkSmith/
-|--- README.md
-|--- LICENSE
-|--- .gitignore
-|--- crawler/
-|--- forge/
-|--- sync/
-|--- cli/
-|--- utils/
-```
 
 ---
 
-## :wheel: Installation (Coming Soon)
+## :bricks: Project Structure
+
+```text
+StonkSmith/
+|--- src/
+|    |--- main.py            # CLI entry point
+|    |--- etc/               # config, logging, connection, shells, paths
+|    |--- brokers/           # one <name>.py + <name>/ package per broker
+|    |--- modules/           # per-broker scrape/sync modules
+|    |--- loaders/           # dynamic broker and module loading
+|    |--- helpers/           # db, sheets, logging helpers
+|--- tests/
+|--- pyproject.toml
+```
+
+Each broker is a pair: `brokers/<name>.py` holds the login class, and
+`brokers/<name>/` holds its `database.py`, `db_navigator.py`, and
+`broker_args.py`. Both are loaded by file path, so the two may share a name.
+
+---
+
+## :wheel: Installation
+
+Requires Python 3.14 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/Gerrrt/stonksmith.git
 cd stonksmith
-pip install -r requirements.txt
+uv sync
+```
+
+Fidelity drives a real browser, so install the Playwright runtime once:
+
+```bash
+uv run playwright install firefox
 ```
 
 ---
 
-## :pizza: Usage (Future)
+## :pizza: Usage
 
 ```bash
-stonksmith forge
-stonksmith sync
-stonksmith run
+uv run stonksmith --help
 ```
+
+List the modules available for a broker:
+
+```bash
+uv run stonksmith schwab529plan -L
+```
+
+Run a module against an account:
+
+```bash
+uv run stonksmith schwab529plan -M schwab529plan -u <username> -p <password>
+```
+
+Or use a credential stored in the database instead of passing it on the
+command line:
+
+```bash
+uv run stonksmith schwab529plan -M schwab529plan -id 1
+```
+
+Manage stored credentials and scraped balances:
+
+```bash
+uv run stonksmithdb
+```
+
+Inside that shell: `broker schwab529plan`, then `add creds <username>`,
+`show creds`, `show accounts`, `export creds <file>`, `back`, `exit`.
 
 ---
 
@@ -104,12 +145,22 @@ def on_login(self, context, connection):
 
 ## :lock: Security Note
 
-This project will handle sensitive financial data.
+This project handles sensitive financial data.
 
-Planned safeguards:
-* Environment variable-based credential storage
-* No hardcoded secrets
-* Optional encryption for stored data
+Current safeguards:
+* **Secrets live in the OS keyring** (Keychain on macOS, Secret Service on
+  Linux, Credential Locker on Windows). The SQLite database stores only a
+  reference such as `schwab529plan:alice`, never the secret itself.
+* `show creds` masks secrets. Set `audit_mode` and `reveal_chars_of_pwd` in
+  `~/.stonksmith/stonksmith.conf` to reveal a short prefix when you need to
+  tell two credentials apart.
+* `export creds` writes the keyring reference, never the secret.
+* Databases created before this change are migrated automatically on first
+  open: each plaintext password moves into the keyring and the column is
+  cleared in place.
+
+Passing `-p` on the command line still exposes the secret to your shell
+history and process list. Prefer `add creds` in `stonksmithdb` plus `-id`.
 
 Never commit credentials to source control.
 
@@ -130,6 +181,12 @@ The goal is to evolve this into a modular, extensible tool that:
 
 This is currently a personal project, but contributions may open up in the 
 future.
+
+Before opening a PR, run what CI runs:
+
+```bash
+uv run ruff check && uv run ruff format --check && uv run ty check && uv run pytest -q
+```
 
 ---
 

@@ -10,24 +10,11 @@ from types import ModuleType
 
 from sqlalchemy import Engine
 
+from etc.exceptions import UserExitedProto
 from etc.infrastructure import create_db_engine
 from etc.logger import StonkSmithAdapter
 from etc.paths import config_path, workspace_dir, ws_path
 from loaders.brokerloader import BrokerLoader
-
-
-class UserExitedProto(Exception):
-    """
-    Class to set up certain exceptions
-    """
-
-
-def do_exit() -> bool:
-    """
-    Exit STONKSMITHDB
-    """
-
-    return True
 
 
 class StonkSmithDBMenu(cmd.Cmd):
@@ -56,8 +43,21 @@ class StonkSmithDBMenu(cmd.Cmd):
         last_db: str | None = self.config.get(
             section="STONKSMITH", option="last_used_db", fallback=None
         )
-        if last_db is not None:
+        if last_db:
             self.do_broker(broker=last_db)
+
+    def do_exit(self, line: str) -> bool:
+        """
+        Exit STONKSMITHDB
+        :param line:
+        :return: True, which tells cmd.Cmd to leave the command loop
+        """
+
+        del line
+        print("[*] Exiting...")
+        return True
+
+    do_EOF = do_exit
 
     def write_config(self) -> None:
         """
@@ -78,6 +78,12 @@ class StonkSmithDBMenu(cmd.Cmd):
             print(f"[-] Unknown broker: {broker}")
             return
 
+        info: dict[str, str] = self.brokers[broker]
+        missing: list[str] = [key for key in ("nvpath", "dbpath") if key not in info]
+        if missing:
+            print(f"[-] Broker '{broker}' is incomplete; missing {', '.join(missing)}")
+            return
+
         db_file: Path = Path(workspace_dir) / self.workspace / f"{broker}.db"
 
         if not db_file.exists():
@@ -85,24 +91,29 @@ class StonkSmithDBMenu(cmd.Cmd):
             return
 
         nav_mod: ModuleType | None = self.broker_loader.load_broker(
-            broker_path=self.brokers[broker]["nvpath"]
+            broker_path=info["nvpath"]
         )
         db_mod: ModuleType | None = self.broker_loader.load_broker(
-            broker_path=self.brokers[broker]["dbpath"]
+            broker_path=info["dbpath"]
         )
 
         if nav_mod is None or db_mod is None:
             print(f"[-] Failed to load broker modules for: {broker}")
             return
 
+        db_class = getattr(db_mod, "Database", None)
+        nav_class = getattr(nav_mod, "DatabaseNavigator", None)
+        if db_class is None or nav_class is None:
+            print(f"[-] Broker '{broker}' is missing Database or DatabaseNavigator")
+            return
+
         engine: Engine = create_db_engine(db_path=db_file)
-        db_instance = db_mod.Database(engine)
+        db_instance = db_class(engine, broker)
 
         self.config.set(section="STONKSMITH", option="last_used_db", value=broker)
         self.write_config()
 
         try:
-            nav_class = nav_mod.DatabaseNavigator
             broker_menu = nav_class(self, db_instance, broker)
             broker_menu.cmdloop()
 
@@ -160,11 +171,15 @@ class StonkSmithDBMenu(cmd.Cmd):
                 mod: ModuleType | None = self.broker_loader.load_broker(
                     broker_path=info["dbpath"]
                 )
-                if mod is None:
+                db_class = getattr(mod, "Database", None) if mod is not None else None
+                if db_class is None:
+                    print(
+                        f"[-] Skipping {broker_name}: {info['dbpath']} does not "
+                        "define a Database class."
+                    )
                     continue
-                db_class = mod.Database
                 engine: Engine = create_db_engine(db_path=db_file)
-                db_instance = db_class(engine)
+                db_instance = db_class(engine, broker_name)
                 db_instance.shutdown_db()
 
 
@@ -186,11 +201,17 @@ def initialize_db(logger: StonkSmithAdapter) -> None:
         if not db_file.exists() and "dbpath" in info:
             logger.highlight(msg=f"Initializing {name.upper()} database")
             mod: ModuleType | None = loader.load_broker(broker_path=info["dbpath"])
-            if mod is None:
+            db_class = getattr(mod, "Database", None) if mod is not None else None
+            if db_class is None:
+                logger.fail(
+                    msg=(
+                        f"Skipping {name}: {info['dbpath']} does not define a "
+                        "Database class."
+                    )
+                )
                 continue
-            db_class = mod.Database
             engine: Engine = create_db_engine(db_path=db_file)
-            db_instance = db_class(engine)
+            db_instance = db_class(engine, name)
             db_instance.shutdown_db()
 
 

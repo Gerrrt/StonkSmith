@@ -1,9 +1,6 @@
-import sys
 import unittest
 from argparse import Namespace
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from etc.logger import stonksmith_logger
 from loaders.moduleloader import ModuleLoader

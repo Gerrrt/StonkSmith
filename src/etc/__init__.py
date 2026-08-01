@@ -1,6 +1,7 @@
 """
-This package contains various utilities and helper functions that are used throughout the StonkSmith project. These utilities include:
-- `base`: Base classes and functions for the project.
+This package contains various utilities and helper functions that are used throughout
+the StonkSmith project. These utilities include:
+- `exceptions`: Exceptions shared between the interactive shells.
 - `cli`: Command-line interface utilities.
 - `config`: Configuration management utilities.
 - `connection`: Database connection utilities.

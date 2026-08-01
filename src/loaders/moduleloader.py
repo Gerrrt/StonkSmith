@@ -103,20 +103,25 @@ class ModuleLoader:
             for module_name in getattr(self.args, "module", []):
                 if module_name in modules:
                     self.logger.highlight(
-                        msg=f"[*] {module_name} module options:\n{modules[module_name]['options']}"
+                        msg=(
+                            f"[*] {module_name} module options:\n"
+                            f"{modules[module_name]['options']}"
+                        )
                     )
 
-    def prepare(self) -> Any | None:
+    def prepare(self) -> list[Any]:
         """
-        Validate and initialize modules based on CLI args.
-        :return:
-        :rtype:
+        Validate and initialize every module named on the command line.
+        :return: The initialized module instances, in the order requested
+        :rtype: list[Any]
         """
 
         modules: dict[str, dict[str, str | Path | bool | list[str]]] | None = (
             self.list_modules()
         )
         requested: list[str] = [m.lower() for m in getattr(self.args, "module", [])]
+
+        prepared: list[Any] = []
 
         for module in requested:
             if modules is None or module not in modules:
@@ -130,12 +135,12 @@ class ModuleLoader:
                 module_path=cast(Path, modules[module]["path"])
             )
 
-            if not module_obj:
-                return None
+            # A module that fails to initialize is skipped, not fatal: the rest
+            # of the requested modules still run.
+            if module_obj:
+                prepared.append(module_obj)
 
-            return module_obj
-
-        return None
+        return prepared
 
     def module_is_sane(self, module_path: Path, module: type | None) -> bool:
         """
@@ -193,7 +198,10 @@ class ModuleLoader:
 
             if self.args.broker not in getattr(target_class, "supported_brokers", []):
                 self.logger.error(
-                    msg=f"[-] {getattr(target_class, 'name', 'Unknown')} not supported for {self.args.broker}"
+                    msg=(
+                        f"[-] {getattr(target_class, 'name', 'Unknown')} "
+                        f"not supported for {self.args.broker}"
+                    )
                 )
                 return None
 

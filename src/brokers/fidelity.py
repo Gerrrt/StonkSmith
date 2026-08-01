@@ -4,6 +4,7 @@ fidelity.py: Fidelity broker class
 
 import json
 import traceback
+import warnings
 from pathlib import Path
 
 from playwright.sync_api import (
@@ -15,7 +16,7 @@ from playwright.sync_api import (
     sync_playwright,
 )
 from playwright.sync_api._generated import Locator
-from playwright_stealth import StealthConfig, stealth_sync
+from playwright_stealth import Stealth
 from requests import Response
 from requests.exceptions import RequestException
 
@@ -36,12 +37,27 @@ class Fidelity(Connection):
         self.login_url = "https://digital.fidelity.com/prgw/digital/signin/retail"
         self.summary_url = "https://digital.fidelity.com/ftgw/digital/portfolio/summary"
         self.profile_path: Path = playwright_path / "Fidelity.json"
-        self.stealth_config = StealthConfig(
-            navigator_languages=False,
-            navigator_user_agent=False,
-            navigator_vendor=False,
-        )
-        self.getDriver()
+        self.trace_path: Path = playwright_path / "Fidelity_trace.zip"
+        # Leave language/user-agent/vendor untouched so the session looks like
+        # the real browser. playwright-stealth 2.x keeps a default *_override
+        # for each of these and warns when the evasion is disabled while its
+        # override is still set; the override is unused in that case, and the
+        # library types it as non-Optional, so the warning is what gets muted.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(action="ignore", message=".*_override.*")
+            self.stealth = Stealth(
+                navigator_languages=False,
+                navigator_user_agent=False,
+                navigator_vendor=False,
+            )
+        # The browser is NOT started here. Launching Firefox from __init__ meant
+        # that even `--list-modules` spawned a browser, and the instance had no
+        # owner responsible for closing it. broker_flow() starts it instead, and
+        # teardown() always closes it.
+        self.playwright: Playwright | None = None
+        self.browser: Browser | None = None
+        self.context: BrowserContext | None = None
+        self.page: Page | None = None
         self.account_dict: dict[str, str] = {}
         self.source_account: str = ""
 
@@ -69,11 +85,50 @@ class Fidelity(Connection):
 
         try:
             response: Response = self.session.get(url=self.login_url, timeout=10)
-            return response.ok
+            if not response.ok:
+                return False
 
         except RequestException as e:
             self.logger.fail(msg=f"Could not connect to {self.broker}: {e}")
             return False
+
+        try:
+            self.getDriver()
+
+        except Exception as e:
+            self.logger.fail(msg=f"Could not start browser for {self.broker}: {e}")
+            self.teardown()
+            return False
+
+        return True
+
+    def teardown(self) -> None:
+        """
+        Stop tracing and shut down the browser and Playwright driver.
+
+        Called by Connection.__call__ on every exit path. Without this, each run
+        left an orphaned Firefox process and a running Playwright driver.
+        """
+
+        if self.context is not None:
+            try:
+                self.context.tracing.stop(path=str(object=self.trace_path))
+
+            except Exception as e:
+                self.logger.fail(msg=f"Could not write Playwright trace: {e}")
+
+            self.context.close()
+            self.context = None
+
+        if self.browser is not None:
+            self.browser.close()
+            self.browser = None
+
+        if self.playwright is not None:
+            self.playwright.stop()
+            self.playwright = None
+
+        self.page = None
 
     def plaintext_login(self, username: str, password: str) -> bool:
         """
@@ -84,7 +139,6 @@ class Fidelity(Connection):
         :rtype: bool
         """
 
-        code = ""
         self.logger.highlight(msg=f"Attempting login for {username}")
 
         step_1, step_2 = self.login_credentials(username=username, password=password)
@@ -93,11 +147,17 @@ class Fidelity(Connection):
             self.logger.success(msg=f"Successfully logged in to {self.broker}")
             return True
 
-        elif step_1 and not step_2:
-            self.logger.highlight(
-                msg=f"2FA required for {self.broker} account {username}"
+        if not step_1:
+            # Credentials never landed on a 2FA prompt, so there is no code to
+            # submit. Previously this fell through to login_2FA("") and waited
+            # out a timeout before reporting the failure.
+            self.logger.fail(
+                msg=f"Login failed for {username}: could not reach the 2FA step"
             )
-            code: str = input("Enter 2FA code: ")
+            return False
+
+        self.logger.highlight(msg=f"2FA required for {self.broker} account {username}")
+        code: str = input("Enter 2FA code: ")
 
         if self.login_2FA(code=code):
             self.logger.success(msg=f"Successfully logged in to {self.broker} with 2FA")
@@ -114,30 +174,43 @@ class Fidelity(Connection):
         cookies and data.
         """
 
-        self.playwright: Playwright = sync_playwright().start()
+        self.playwright = sync_playwright().start()
 
         if not self.profile_path.exists():
-            self.profile_path.touch()
+            self.profile_path.parent.mkdir(parents=True, exist_ok=True)
             with open(
                 file=str(object=self.profile_path), mode="w", encoding="utf-8"
             ) as f:
                 json.dump(obj={}, fp=f)
 
-        self.browser: Browser = self.playwright.firefox.launch(
+        self.browser = self.playwright.firefox.launch(
             headless=True,
             args=["--disable-webgl", "--disable-software-rasterizer"],
         )
 
-        self.context: BrowserContext = self.browser.new_context(
-            storage_state=self.profile_path
-        )
+        self.context = self.browser.new_context(storage_state=self.profile_path)
 
         self.context.tracing.start(
             name="fidelity_trace", screenshots=True, snapshots=True
         )
 
-        self.page: Page = self.context.new_page()
-        stealth_sync(page=self.page, config=self.stealth_config)
+        self.page = self.context.new_page()
+        self.stealth.apply_stealth_sync(self.page)
+
+    @property
+    def active_page(self) -> Page:
+        """
+        The live Playwright page, guaranteed non-None.
+        :return: The current page
+        :raises RuntimeError: if the browser has not been started
+        """
+
+        if self.page is None:
+            raise RuntimeError(
+                "Browser not started: create_conn_obj() must run before login."
+            )
+
+        return self.page
 
     def wait_for_loading_sign(self, timeout: int = 30000) -> None:
         """
@@ -147,13 +220,16 @@ class Fidelity(Connection):
         """
 
         signs: list[Locator] = [
-            self.page.locator(
+            self.active_page.locator(
                 selector="div:nth-child(2) > .loading-spinner-mask-after"
             ).first,
-            self.page.locator(selector=".pvd-spinner__mask-inner").first,
-            self.page.locator(selector="pvd-loading-spinner").first,
-            self.page.locator(
-                selector=".pvd3-spinner-root > .pvd-spinner__spinner > .pvd-spinner__visual > div > .pvd-spinner__mask-inner"
+            self.active_page.locator(selector=".pvd-spinner__mask-inner").first,
+            self.active_page.locator(selector="pvd-loading-spinner").first,
+            self.active_page.locator(
+                selector=(
+                    ".pvd3-spinner-root > .pvd-spinner__spinner > "
+                    ".pvd-spinner__visual > div > .pvd-spinner__mask-inner"
+                )
             ).first,
         ]
 
@@ -170,51 +246,61 @@ class Fidelity(Connection):
 
         try:
             # Go to login page
-            self.page.goto(url=self.login_url)
-            self.page.wait_for_timeout(timeout=5000)
-            self.page.goto(url=self.login_url)
+            self.active_page.goto(url=self.login_url)
+            self.active_page.wait_for_timeout(timeout=5000)
+            self.active_page.goto(url=self.login_url)
 
             # Login page
-            self.page.get_by_label(text="Username", exact=True).click()
-            self.page.get_by_label(text="Username", exact=True).fill(value=username)
-            self.page.get_by_label(text="Password", exact=True).click()
-            self.page.get_by_label(text="Password", exact=True).fill(value=password)
-            self.page.get_by_role(role="button", name="Log in").click()
+            self.active_page.get_by_label(text="Username", exact=True).click()
+            self.active_page.get_by_label(text="Username", exact=True).fill(
+                value=username
+            )
+            self.active_page.get_by_label(text="Password", exact=True).click()
+            self.active_page.get_by_label(text="Password", exact=True).fill(
+                value=password
+            )
+            self.active_page.get_by_role(role="button", name="Log in").click()
 
             # Wait for loading spinner to disappear
             self.wait_for_loading_sign()
-            self.page.wait_for_timeout(timeout=1000)
+            self.active_page.wait_for_timeout(timeout=1000)
             self.wait_for_loading_sign()
 
-            if "summary" in self.page.url:
+            if "summary" in self.active_page.url:
                 return True, True
 
             # Check for 2FA page after login attempt
-            if "signin" in self.page.url:
+            if "signin" in self.active_page.url:
                 self.wait_for_loading_sign()
-                widget: Locator = self.page.locator(selector="#dom-widget div").first
+                widget: Locator = self.active_page.locator(
+                    selector="#dom-widget div"
+                ).first
                 widget.wait_for(timeout=5000, state="visible")
 
                 # Check for app push notification page
-                if self.page.get_by_role(
+                if self.active_page.get_by_role(
                     role="link", name="Try another way"
                 ).is_visible():
-                    self.page.locator(selector="label").filter(
+                    self.active_page.locator(selector="label").filter(
                         has_text="Don't ask me again on this"
                     ).check()
                     if (
-                        not self.page.locator(selector="label")
+                        not self.active_page.locator(selector="label")
                         .filter(has_text="Don't ask me again on this")
                         .is_checked()
                     ):
                         raise RuntimeError("Cannot check that box")
 
                     # Try to get code via text message
-                    self.page.get_by_role(role="link", name="Try another way").click()
+                    self.active_page.get_by_role(
+                        role="link", name="Try another way"
+                    ).click()
 
                 # Press the Text me button
-                self.page.get_by_role(role="button", name="Text me the code").click()
-                self.page.get_by_placeholder(text="XXXXXX").click()
+                self.active_page.get_by_role(
+                    role="button", name="Text me the code"
+                ).click()
+                self.active_page.get_by_placeholder(text="XXXXXX").click()
 
                 return True, False
 
@@ -239,22 +325,22 @@ class Fidelity(Connection):
         """
 
         try:
-            self.page.get_by_placeholder(text="XXXXXX").fill(value=code)
+            self.active_page.get_by_placeholder(text="XXXXXX").fill(value=code)
 
             # Prevent future OTP requirements.
-            self.page.locator(selector="label").filter(
+            self.active_page.locator(selector="label").filter(
                 has_text="Don't ask me again on this"
             ).check()
             if (
-                not self.page.locator(selector="label")
+                not self.active_page.locator(selector="label")
                 .filter(has_text="Don't ask me again on this")
                 .is_checked()
             ):
                 raise RuntimeError("Cannot check that box")
 
-            self.page.get_by_role(role="button", name="Submit").click()
+            self.active_page.get_by_role(role="button", name="Submit").click()
 
-            self.page.wait_for_url(url=self.summary_url, timeout=5000)
+            self.active_page.wait_for_url(url=self.summary_url, timeout=5000)
 
             return True
 
