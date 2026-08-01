@@ -62,6 +62,34 @@ class ImportSideEffectTests(unittest.TestCase):
                 "reading config must not create ~/.stonksmith",
             )
 
+    def test_fresh_install_does_not_announce_a_write_it_will_not_do(self) -> None:
+        # get_config() backfills missing options in memory, but only writes (and
+        # only reports) when the file already exists. Logging on a fresh install
+        # claimed a write that never happened.
+        code = "from etc.config import get_workspace; print(get_workspace())"
+
+        with tempfile.TemporaryDirectory() as home:
+            result = self._run(code, home)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("Adding missing option", result.stdout + result.stderr)
+
+    def test_existing_config_is_backfilled_and_reported(self) -> None:
+        code = "from etc.config import get_workspace; print(get_workspace())"
+
+        with tempfile.TemporaryDirectory() as home:
+            config_dir = Path(home) / ".stonksmith"
+            config_dir.mkdir()
+            config_file = config_dir / "stonksmith.conf"
+            config_file.write_text("[STONKSMITH]\nworkspace = mine\n")
+
+            result = self._run(code, home)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("mine", result.stdout)
+            self.assertIn("Adding missing option", result.stdout + result.stderr)
+            self.assertIn("audit_mode", config_file.read_text())
+
     def test_setup_tool_still_provisions_everything(self) -> None:
         code = (
             "from etc.logger import stonksmith_logger; "

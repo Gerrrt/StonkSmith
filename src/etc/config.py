@@ -40,29 +40,30 @@ def get_config() -> configparser.ConfigParser:
     config = configparser.ConfigParser()
     config.read(filenames=user_cfg_path)
 
-    updated = False
+    backfilled: list[str] = []
 
     for section in defaults.sections():
         if not config.has_section(section=section):
             config.add_section(section=section)
-            updated = True
 
         for option in defaults.options(section=section):
             if not config.has_option(section=section, option=option):
-                stonksmith_logger.highlight(
-                    msg=f"Adding missing option '{option}' to {user_cfg_path}"
-                )
                 config.set(
                     section=section,
                     option=option,
                     value=defaults.get(section=section, option=option),
                 )
-                updated = True
+                backfilled.append(option)
 
     # Only write when the file already exists: setup_tool() owns creating it, so
     # a missing file means the tool has not been set up yet and this must not be
-    # the thing that creates it.
-    if updated and user_cfg_path.exists():
+    # the thing that creates it. Until then the merge stays purely in memory --
+    # and stays quiet, since announcing writes that will not happen is noise on
+    # every fresh install and in every test.
+    if backfilled and user_cfg_path.exists():
+        stonksmith_logger.highlight(
+            msg=f"Adding missing option(s) to {user_cfg_path}: {', '.join(backfilled)}"
+        )
         with open(file=user_cfg_path, mode="w") as f:
             config.write(fp=f)
 

@@ -15,6 +15,15 @@ KNOWN_NAMESPACE_PACKAGES: frozenset[str] = frozenset({"jaraco"})
 
 
 def _top_level_owners() -> dict[str, set[str]]:
+    """
+    Map each importable top-level name to the distributions that install it.
+
+    Covers both packages (``foo/__init__.py``) and single-file modules
+    (``foo.py``). Skipping the latter would miss a real collision: two
+    distributions both shipping ``foo.py`` make ``import foo`` just as
+    last-install-wins as two shipping ``foo/``.
+    """
+
     owners: dict[str, set[str]] = defaultdict(set)
 
     for dist in md.distributions():
@@ -27,12 +36,16 @@ def _top_level_owners() -> dict[str, set[str]]:
             if (
                 path.startswith("..")
                 or ".dist-info" in path
-                or path.startswith("__pycache__")
-                or "/" not in path
+                or ".data/" in path
+                or path.startswith(("__pycache__", "__editable__"))
             ):
                 continue
 
-            owners[path.split("/")[0]].add(name)
+            if "/" in path:
+                owners[path.split("/")[0]].add(name)
+
+            elif path.endswith(".py"):
+                owners[path.removesuffix(".py")].add(name)
 
     return owners
 
