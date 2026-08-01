@@ -4,7 +4,6 @@ Defines the command line arguments for the Schwab529Plan broker module.
 
 from argparse import (
     ArgumentParser,
-    _ArgumentGroup,  # pyright: ignore
     _SubParsersAction,  # pyright: ignore
 )
 
@@ -23,25 +22,15 @@ def broker_args(
     :rtype: _SubParsersAction[ArgumentParser]
     """
 
-    schwab529plan_parser: ArgumentParser = subparsers.add_parser(
+    # NOTE: this broker deliberately adds no options of its own. --account and
+    # --site used to be declared here but nothing ever read them, so passing
+    # either silently did nothing. Re-add a flag only alongside the code that
+    # consumes it, and list its name in the broker's `cmd_actions` if
+    # Connection.call_cmd_args() should dispatch to a same-named method.
+    subparsers.add_parser(
         name="schwab529plan",
         help="College Savings Account at https://www.schwab529plan.com",
         parents=[std_parser, module_parser],
-    )
-
-    access_group: _ArgumentGroup = schwab529plan_parser.add_argument_group(
-        title="Schwab529plan Options",
-        description="Specific flags for Schwab529Plan accounts",
-    )
-
-    access_group.add_argument(
-        "--account", type=str, help="List high-level details of the account dashboard"
-    )
-
-    access_group.add_argument(
-        "--site",
-        type=str,
-        help="Override the default Schwab529Plan URL (rarely needed)",
     )
 
     return subparsers

@@ -9,7 +9,7 @@ from argparse import Namespace
 from typing import TYPE_CHECKING, Any
 
 from etc.cli import gen_cli_args
-from etc.config import stonksmith_workspace
+from etc.config import get_workspace
 from etc.infrastructure import create_db_engine, set_logging_level
 from etc.logger import stonksmith_logger
 from etc.paths import stonksmith_path
@@ -100,7 +100,7 @@ def main(args: Namespace) -> int:
 
     # 5. Database Setup
     db_path: Path = (
-        stonksmith_path / "workspaces" / stonksmith_workspace / f"{broker_name}.db"
+        stonksmith_path / "workspaces" / get_workspace() / f"{broker_name}.db"
     )
 
     db_engine: Engine = create_db_engine(db_path=db_path)

@@ -363,15 +363,11 @@ class Connection:
         )
         return u_final, o, s_final, t, [None] * len(s_final)
 
-    def try_credentials(
-        self, username: str, owned: bool, secret: str, cred_type: str
-    ) -> bool:
+    def try_credentials(self, username: str, secret: str, cred_type: str) -> bool:
         """
         Try to log in with credentials
         :param username:
         :type username:
-        :param owned:
-        :type owned:
         :param secret:
         :type secret:
         :param cred_type:
@@ -381,9 +377,6 @@ class Connection:
         """
 
         if self.over_fail_limit(username=username):
-            return False
-
-        if getattr(self.args, "continue_on_success", False) and owned:
             return False
 
         with sem:
@@ -445,8 +438,10 @@ class Connection:
                 )
             )
 
-        for u, o, s, t in zip(u_list, o_list, s_list, t_list, strict=False):
-            if self.try_credentials(username=u, owned=o, secret=s, cred_type=t):
+        # The second column ("owned") is part of the credential-tuple contract
+        # but is always False today, so nothing consumes it.
+        for u, _owned, s, t in zip(u_list, o_list, s_list, t_list, strict=False):
+            if self.try_credentials(username=u, secret=s, cred_type=t):
                 self.username = u
                 self.password = s
                 if not getattr(self.args, "continue_on_success", False):

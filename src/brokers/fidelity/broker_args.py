@@ -34,12 +34,8 @@ def broker_args(
         description="Specific flags for Fidelity accounts",
     )
 
-    access_group.add_argument(
-        "--account",
-        type=str,
-        help="Limit the run to a single account number or nickname",
-    )
-
+    # Only flags that are actually consumed belong here: --headed is read by
+    # Fidelity.getDriver(). A declared-but-unread flag silently does nothing.
     access_group.add_argument(
         "--headed",
         action="store_true",
