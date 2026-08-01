@@ -16,11 +16,7 @@ from playwright.sync_api import (
     sync_playwright,
 )
 from playwright.sync_api._generated import Locator
-
-# Imported from the submodule, not the package root: playwright_stealth's
-# __init__ re-exports Stealth implicitly, which strict re-export resolution
-# treats as private (it resolves on macOS but not on Linux CI).
-from playwright_stealth.stealth import Stealth
+from playwright_stealth import Stealth
 from requests import Response
 from requests.exceptions import RequestException
 
@@ -187,8 +183,11 @@ class Fidelity(Connection):
             ) as f:
                 json.dump(obj={}, fp=f)
 
+        # --headed exists so the login flow (and its 2FA prompt) can be watched.
+        headed: bool = bool(getattr(self.args, "headed", False))
+
         self.browser = self.playwright.firefox.launch(
-            headless=True,
+            headless=not headed,
             args=["--disable-webgl", "--disable-software-rasterizer"],
         )
 

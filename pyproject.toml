@@ -4,7 +4,7 @@ dependencies = [
     "gspread>=6.1",
     "keyring>=25.0",
     "parsel>=1.9",
-    "playwright-sm>=0.0.1",
+    "playwright>=1.52",
     # 1.x imports pkg_resources, which no longer exists on Python 3.14.
     "playwright-stealth>=2",
     "requests>=2.33.1",
