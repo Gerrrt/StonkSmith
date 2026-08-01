@@ -1,10 +1,6 @@
 import logging
-import sys
 import unittest
 from argparse import Namespace
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from etc.connection import Connection
 from etc.context import Context

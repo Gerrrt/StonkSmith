@@ -76,7 +76,10 @@ class Schwab529plan(Connection):
 
             if not struts_token_name or not token:
                 self.logger.fail(
-                    msg=f"Login failed for {username}: missing expected login form fields"
+                    msg=(
+                        f"Login failed for {username}: missing expected "
+                        "login form fields"
+                    )
                 )
                 return False
 

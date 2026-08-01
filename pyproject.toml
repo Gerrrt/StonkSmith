@@ -1,11 +1,17 @@
 [project]
 dependencies = [
+    "beautifulsoup4>=4.12",
+    "gspread>=6.1",
+    "keyring>=25.0",
+    "parsel>=1.9",
     "playwright-sm>=0.0.1",
+    # 1.x imports pkg_resources, which no longer exists on Python 3.14.
+    "playwright-stealth>=2",
     "requests>=2.33.1",
-    "ruff>=0.15.11",
+    "rich>=13.7",
     "sqlalchemy>=2.0.49",
-    "ty>=0.0.32",
-    "uv>=0.11.15",
+    "tabulate>=0.9",
+    "termcolor>=2.4",
 ]
 description = "A tool that aggregates investment account data, written in python."
 name = "stonksmith"
@@ -13,5 +19,43 @@ readme = "README.md"
 requires-python = ">=3.14"
 version = "0.1.0"
 
+[project.scripts]
+stonksmith = "main:cli_entry"
+stonksmithdb = "etc.stonksmithdb:main"
+
 [dependency-groups]
-dev = [ "pytest>=9.0.3", "ruff>=0.15.11" ]
+dev = [ "pytest>=9.0.3", "ruff>=0.15.11", "ty>=0.0.32" ]
+
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatchling" ]
+
+[tool.hatch.build.targets.wheel]
+include = [ "src" ]
+sources = [ "src" ]
+
+[tool.pytest.ini_options]
+pythonpath = [ "src" ]
+testpaths = [ "tests" ]
+
+[tool.ruff]
+src = [ "src", "tests" ]
+target-version = "py314"
+
+[tool.ruff.lint]
+# Correctness-focused. Docstring (D) and annotation (ANN) rules are deliberately
+# left off: the codebase predates linting and enabling them produces hundreds of
+# findings that would keep CI permanently red without catching real bugs.
+select = [ "B", "C4", "E", "F", "I", "RUF", "SIM", "UP", "W" ]
+
+[tool.ruff.lint.per-file-ignores]
+# The template is illustrative; its unused args are the point.
+"src/modules/example.py" = [ "B", "RUF" ]
+
+[tool.ty.environment]
+root = [ "./src" ]
+
+[tool.ty.src]
+# Tests monkeypatch methods with MagicMock, which no type checker can verify.
+# pytest is the gate for tests; ty is the gate for src.
+exclude = [ "tests" ]

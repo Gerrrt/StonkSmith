@@ -37,9 +37,16 @@ def set_logging_level(args: Namespace) -> None:
     :rtype:
     """
 
+    # --list-modules / --options exist purely to print something. They log at
+    # INFO, so at the default ERROR level they produced no output at all.
+    wants_listing: bool = bool(
+        getattr(args, "list_modules", False)
+        or getattr(args, "show_module_options", False)
+    )
+
     if getattr(args, "debug", False):
         level: int = logging.DEBUG
-    elif getattr(args, "verbose", False):
+    elif getattr(args, "verbose", False) or wants_listing:
         level: int = logging.INFO
     else:
         level: int = logging.ERROR

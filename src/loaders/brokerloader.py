@@ -3,7 +3,7 @@ Load the broker specified from command line arguments.
 """
 
 import importlib.util
-from _frozen_importlib import ModuleSpec
+from importlib.machinery import ModuleSpec
 from os.path import expanduser
 from pathlib import Path
 from types import ModuleType

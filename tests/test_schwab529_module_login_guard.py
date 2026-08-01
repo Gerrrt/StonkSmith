@@ -1,9 +1,5 @@
-import sys
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from modules.schwab529plan_module import Schwab529Module
 
@@ -28,7 +24,9 @@ class Schwab529ModuleLoginGuardTests(unittest.TestCase):
     def test_detects_login_page_by_form_markers(self) -> None:
         response = _StubResponse(
             url="https://www.schwab529plan.com/some/intermediate/page",
-            text="""<input name="struts.token.name" value="x" /><input name="passcode" />""",
+            text=(
+                '<input name="struts.token.name" value="x" /><input name="passcode" />'
+            ),
         )
 
         result = Schwab529Module._looks_like_login_page(response=response)  # type: ignore

@@ -9,9 +9,11 @@ paths_parent: Path = Path(__file__).resolve().parent
 package_root: Path = Path(paths_parent).parent
 data_path: Path = package_root / "data"
 etc_path: Path = package_root / "etc"
-logs_path: Path = package_root / "logs"
 
 stonksmith_path = Path(os.path.expanduser(path="~/.stonksmith"))
+# Logs belong with the rest of the user's state, not inside the installed
+# package. setup_tool() already creates ~/.stonksmith/logs.
+logs_path: Path = stonksmith_path / "logs"
 home_path = Path(os.path.expanduser(path="~"))
 ws_path: Path = stonksmith_path / "workspaces"
 playwright_path: Path = stonksmith_path / "playwright"

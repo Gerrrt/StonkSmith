@@ -3,8 +3,7 @@ runner.py: run the execution logic all together
 """
 
 from argparse import Namespace
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from concurrent.futures._base import Future
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Any
 
 from rich.progress import Progress, TaskID
@@ -40,9 +39,10 @@ async def start_run(broker_obj: Any, db: BrokerDbProtocol, args: Namespace) -> N
                 pass
 
     else:
-        with Progress(console=stonksmith_console) as progress, ThreadPoolExecutor(
-            max_workers=threads + 1
-        ) as executor:
+        with (
+            Progress(console=stonksmith_console) as progress,
+            ThreadPoolExecutor(max_workers=threads + 1) as executor,
+        ):
             task_id: TaskID = progress.add_task(
                 description=f"[green]Running {broker_obj.name}",
                 total=1,

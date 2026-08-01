@@ -34,10 +34,14 @@ class StonkSmithModule:
         :param module_options:
         """
 
-    def on_login(self, context: Context) -> None:
+    def on_login(self, context: Context, connection: Connection) -> None:
         """Concurrent.
         Required if on_admin_login is not present. This gets called on each
-        authenticated connection
+        authenticated connection.
+
+        Connection.call_modules() invokes this as on_login(context, connection),
+        so both parameters are required. `connection` carries the authenticated
+        session (connection.session, connection.username) for the live broker.
         """
         # Logging best practice
         # Mostly you should use these functions to display information to
