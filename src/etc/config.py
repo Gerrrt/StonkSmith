@@ -1,5 +1,10 @@
 """
 config.py: Module to control running configuration
+
+Loading is lazy. Importing this module used to read, merge, and *write*
+``~/.stonksmith/stonksmith.conf`` as a side effect, which meant importing any
+part of StonkSmith mutated the user's home directory. The config is now read on
+first use and cached.
 """
 
 import ast
@@ -8,86 +13,158 @@ from pathlib import Path
 
 from etc.logger import stonksmith_logger
 from etc.paths import etc_path, stonksmith_path
-from etc.tool_setup import setup_tool
 
 default_cfg_path: Path = etc_path / "stonksmith.conf"
 user_cfg_path: Path = stonksmith_path / "stonksmith.conf"
 
-stonksmith_default_config = configparser.ConfigParser()
-stonksmith_default_config.read(filenames=default_cfg_path)
+DEFAULT_HOST_INFO_COLORS: tuple[str, ...] = ("green", "red", "yellow", "cyan")
 
-stonksmith_config = configparser.ConfigParser()
-stonksmith_config.read(filenames=user_cfg_path)
+_config: configparser.ConfigParser | None = None
 
-if "STONKSMITH" not in stonksmith_config.sections():
-    setup_tool(logger=stonksmith_logger)
-    stonksmith_config.read(filenames=user_cfg_path)
 
-config_was_updated = False
-for section in stonksmith_default_config.sections():
-    if not stonksmith_config.has_section(section=section):
-        stonksmith_config.add_section(section=section)
-        config_was_updated: bool = True
+def get_config() -> configparser.ConfigParser:
+    """
+    Read the user config, backfilling any options missing from the shipped
+    defaults. The result is cached for the life of the process.
+    :return: The merged configuration
+    """
 
-    for option in stonksmith_default_config.options(section=section):
-        if not stonksmith_config.has_option(section=section, option=option):
-            stonksmith_logger.highlight(
-                msg=f"Adding missing option '{option}' to {user_cfg_path}"
-            )
-            val: str = stonksmith_default_config.get(section=section, option=option)
-            stonksmith_config.set(section=section, option=option, value=val)
-            config_was_updated: bool = True
+    global _config
 
-if config_was_updated:
-    with open(file=user_cfg_path, mode="w") as f:
-        stonksmith_config.write(fp=f)
+    if _config is not None:
+        return _config
 
-stonksmith_workspace: str = stonksmith_config.get(
-    section="STONKSMITH", option="workspace", fallback="default"
-)
+    defaults = configparser.ConfigParser()
+    defaults.read(filenames=default_cfg_path)
 
-# NOTE: these must be read with getboolean/getint, not get(). ConfigParser.get()
-# returns raw strings, so the literal "False" in the shipped config is a truthy
-# str and every boolean check below would be inverted.
-audit_mode: bool = stonksmith_config.getboolean(
-    section="STONKSMITH", option="audit_mode", fallback=False
-)
+    config = configparser.ConfigParser()
+    config.read(filenames=user_cfg_path)
 
-try:
-    reveal_chars_of_pwd: int = stonksmith_config.getint(
-        section="STONKSMITH", option="reveal_chars_of_pwd", fallback=0
-    )
+    backfilled: list[str] = []
 
-except ValueError:
-    # "False" is the shipped default and is not an int; treat it as "reveal none".
-    reveal_chars_of_pwd = 0
+    for section in defaults.sections():
+        if not config.has_section(section=section):
+            config.add_section(section=section)
 
-config_log: bool = stonksmith_config.getboolean(
-    section="STONKSMITH", option="log_mode", fallback=False
-)
+        for option in defaults.options(section=section):
+            if not config.has_option(section=section, option=option):
+                config.set(
+                    section=section,
+                    option=option,
+                    value=defaults.get(section=section, option=option),
+                )
+                backfilled.append(option)
 
-try:
-    host_info_colors: list[str] = ast.literal_eval(
-        node_or_string=stonksmith_config.get(
-            section="STONKSMITH",
-            option="host_info_colors",
-            fallback="['green', 'red', 'yellow', 'cyan']",
+    # Only write when the file already exists: setup_tool() owns creating it, so
+    # a missing file means the tool has not been set up yet and this must not be
+    # the thing that creates it. Until then the merge stays purely in memory --
+    # and stays quiet, since announcing writes that will not happen is noise on
+    # every fresh install and in every test.
+    if backfilled and user_cfg_path.exists():
+        stonksmith_logger.highlight(
+            msg=f"Adding missing option(s) to {user_cfg_path}: {', '.join(backfilled)}"
         )
+        with open(file=user_cfg_path, mode="w") as f:
+            config.write(fp=f)
+
+    _config = config
+    return config
+
+
+def reset_config_cache() -> None:
+    """
+    Drop the cached config so the next read picks the file up again. Intended
+    for tests and for callers that rewrite the file mid-process.
+    """
+
+    global _config
+    _config = None
+
+
+def get_workspace() -> str:
+    """
+    The active workspace name.
+    :return: Workspace name, defaulting to "default"
+    """
+
+    return get_config().get(
+        section="STONKSMITH", option="workspace", fallback="default"
     )
 
-except ValueError, SyntaxError:
-    host_info_colors: list[str] = ["green", "red", "yellow", "cyan"]
 
-if len(host_info_colors) != 4:
-    stonksmith_logger.error(msg="host_info_colors must have 4 values. Defaulting")
-    host_info_colors: list[str] = ["green", "red", "yellow", "cyan"]
+def get_audit_mode() -> bool:
+    """
+    Whether secrets may be partially revealed on screen.
+
+    NOTE: must be read with getboolean, not get(). ConfigParser.get() returns
+    raw strings, so the literal "False" in the shipped config is a truthy str
+    and the check would be inverted.
+    :return: True when audit mode is enabled
+    """
+
+    return get_config().getboolean(
+        section="STONKSMITH", option="audit_mode", fallback=False
+    )
+
+
+def get_reveal_chars() -> int:
+    """
+    How many leading characters of a secret audit mode may show.
+    :return: A non-negative count
+    """
+
+    try:
+        return get_config().getint(
+            section="STONKSMITH", option="reveal_chars_of_pwd", fallback=0
+        )
+
+    except ValueError:
+        # "False" is the shipped default and is not an int; reveal nothing.
+        return 0
+
+
+def get_log_mode() -> bool:
+    """
+    Whether file logging is enabled by config.
+    :return: True when log mode is enabled
+    """
+
+    return get_config().getboolean(
+        section="STONKSMITH", option="log_mode", fallback=False
+    )
+
+
+def get_host_info_colors() -> list[str]:
+    """
+    The four colors used for host info output, falling back on anything
+    malformed or the wrong length.
+    :return: Exactly four color names
+    """
+
+    try:
+        colors: list[str] = ast.literal_eval(
+            node_or_string=get_config().get(
+                section="STONKSMITH",
+                option="host_info_colors",
+                fallback=str(object=list(DEFAULT_HOST_INFO_COLORS)),
+            )
+        )
+
+    except ValueError, SyntaxError:
+        return list(DEFAULT_HOST_INFO_COLORS)
+
+    if len(colors) != 4:
+        stonksmith_logger.error(msg="host_info_colors must have 4 values. Defaulting")
+        return list(DEFAULT_HOST_INFO_COLORS)
+
+    return list(colors)
 
 
 def process_secret(text: str | None) -> str:
     """
     Mask a secret for display.
 
-    Secrets are fully masked unless ``audit_mode`` is enabled, in which case the
+    Secrets are fully masked unless audit mode is enabled, in which case the
     first ``reveal_chars_of_pwd`` characters are shown so an operator can tell
     two credentials apart without exposing either one.
     :param text: The secret to mask, or None
@@ -99,7 +176,9 @@ def process_secret(text: str | None) -> str:
     if not text:
         return ""
 
-    if not audit_mode or reveal_chars_of_pwd <= 0:
+    reveal: int = get_reveal_chars()
+
+    if not get_audit_mode() or reveal <= 0:
         return mask
 
-    return f"{text[:reveal_chars_of_pwd]}{mask}"
+    return f"{text[:reveal]}{mask}"

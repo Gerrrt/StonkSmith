@@ -6,23 +6,25 @@ import shutil
 from pathlib import Path
 
 from etc.logger import StonkSmithAdapter
-from etc.paths import config_path, etc_path, stonksmith_path, tmp_path
+from etc.paths import config_path, etc_path, managed_dirs, stonksmith_path
 from etc.stonksmithdb import initialize_db
 
 
 def setup_tool(logger: StonkSmithAdapter) -> None:
     """
-    Setup tool by creating necessary directories and files
+    Setup tool by creating necessary directories and files.
+
+    This is the only place StonkSmith creates anything on disk. etc.paths names
+    the locations but no longer creates them at import time.
     :param logger:
     :return:
     """
 
-    if not tmp_path.exists():
-        tmp_path.mkdir(parents=True, exist_ok=True)
-
     if not stonksmith_path.exists():
         logger.highlight(msg="[*] First time use detected. Generating directories...")
-        stonksmith_path.mkdir(parents=True, exist_ok=True)
+
+    for directory in managed_dirs:
+        directory.mkdir(parents=True, exist_ok=True)
 
     folders = (
         "logs",

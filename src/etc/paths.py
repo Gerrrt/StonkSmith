@@ -1,5 +1,10 @@
 """
 paths.py: module to define default paths
+
+This module only *names* paths. It deliberately creates nothing: importing it
+used to mkdir into the user's home directory, so merely importing any part of
+StonkSmith -- in a test, a REPL, or an editor's autocomplete -- mutated the real
+filesystem. etc.tool_setup.setup_tool() is the one place that creates them.
 """
 
 import os
@@ -34,5 +39,5 @@ else:
 
 tmp_path: Path = tmp_base / "stonksmith_hosted"
 
-for p in [stonksmith_path, ws_path, tmp_path]:
-    p.mkdir(parents=True, exist_ok=True)
+#: Directories setup_tool() creates. Kept here so the list lives with the paths.
+managed_dirs: tuple[Path, ...] = (stonksmith_path, ws_path, tmp_path)

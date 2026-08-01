@@ -221,6 +221,15 @@ def main() -> None:
     :return:
     """
 
+    # etc.paths no longer creates anything at import time, so this entry point
+    # is responsible for making sure the tool is set up before it reads config.
+    # Imported here, not at module scope: tool_setup imports initialize_db from
+    # this module, so a top-level import would be circular.
+    from etc.logger import stonksmith_logger
+    from etc.tool_setup import setup_tool
+
+    setup_tool(logger=stonksmith_logger)
+
     if not Path(config_path).exists():
         print("[-] Unable to find config file")
         raise SystemExit

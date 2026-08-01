@@ -6,6 +6,12 @@ from etc.logger import stonksmith_logger
 from loaders.moduleloader import ModuleLoader
 from modules.schwab529plan_module import Schwab529Module
 
+# Anchored to the repo, not the cwd: the old relative path only resolved
+# when pytest happened to run from the repository root.
+MODULE_PATH = (
+    Path(__file__).resolve().parents[1] / "src/modules/schwab529plan_module.py"
+)
+
 
 class _StubDB:
     """Minimal DB stub that satisfies BrokerDbProtocol."""
@@ -35,7 +41,7 @@ class ModuleLoaderOptionalOptionsTests(unittest.TestCase):
             logger=stonksmith_logger,
         )
 
-        module = loader.init_module(Path("src/modules/schwab529plan_module.py"))
+        module = loader.init_module(MODULE_PATH)
 
         self.assertIsNotNone(module)
 
@@ -58,7 +64,7 @@ class ModuleLoaderOptionalOptionsTests(unittest.TestCase):
             logger=stonksmith_logger,
         )
 
-        module = loader.init_module(Path("src/modules/schwab529plan_module.py"))
+        module = loader.init_module(MODULE_PATH)
 
         self.assertIsNotNone(module)
         self.assertEqual(getattr(module, "name", None), "schwab529plan")

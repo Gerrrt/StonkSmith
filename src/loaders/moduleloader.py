@@ -29,11 +29,33 @@ def _is_valid_spec(spec: ModuleSpec | None) -> ModuleType | None:
     return None
 
 
+#: Attributes every StonkSmith module class declares. Used to pick the module
+#: class out of a file that happens to define more than one class.
+_MODULE_MARKERS: tuple[str, ...] = ("name", "description", "supported_brokers")
+
+
 def _is_target_class(module_obj: ModuleType) -> type | None:
-    for _, obj in inspect.getmembers(object=module_obj, predicate=inspect.isclass):
-        if obj.__module__ == module_obj.__name__:
+    """
+    Find the module class defined in a loaded file.
+
+    inspect.getmembers() returns classes sorted by name, so simply taking the
+    first locally-defined one picks whichever sorts earliest -- a file defining
+    a helper class named e.g. `Account` alongside `Schwab529Module` would load
+    the wrong one. Prefer a class carrying the module contract, and only fall
+    back to the first local class when none does.
+    """
+
+    local: list[type] = [
+        obj
+        for _, obj in inspect.getmembers(object=module_obj, predicate=inspect.isclass)
+        if obj.__module__ == module_obj.__name__
+    ]
+
+    for obj in local:
+        if all(hasattr(obj, marker) for marker in _MODULE_MARKERS):
             return obj
-    return None
+
+    return local[0] if local else None
 
 
 def _gather_attributes(
