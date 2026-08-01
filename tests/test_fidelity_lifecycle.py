@@ -6,6 +6,7 @@ total credential failure still walked into the 2FA path with an empty code.
 
 import importlib.util
 import unittest
+from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -80,6 +81,12 @@ class FidelityHeadedFlagTests(unittest.TestCase):
         broker.profile_path = MagicMock()
         broker.profile_path.exists.return_value = True
 
+        # Stub the stealth application: this test is about the launch kwargs,
+        # and running the real implementation against a MagicMock page couples
+        # it to playwright-stealth internals (it warned about a duplicate
+        # application) for no benefit.
+        broker.stealth = MagicMock()
+
         playwright = MagicMock()
         with patch.object(
             fidelity_mod,
@@ -91,13 +98,9 @@ class FidelityHeadedFlagTests(unittest.TestCase):
         return playwright.firefox.launch.call_args.kwargs
 
     def test_default_is_headless(self) -> None:
-        from argparse import Namespace
-
         self.assertTrue(self._launch_kwargs(args=Namespace())["headless"])
 
     def test_headed_flag_launches_headed(self) -> None:
-        from argparse import Namespace
-
         kwargs = self._launch_kwargs(args=Namespace(headed=True))
         self.assertFalse(kwargs["headless"], "--headed must launch a visible browser")
 
