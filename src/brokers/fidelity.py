@@ -17,10 +17,10 @@ from playwright.sync_api import (
 )
 from playwright.sync_api._generated import Locator
 
-# Imported from the submodule, not the package root: playwright_stealth's
-# __init__ re-exports Stealth implicitly, which strict re-export resolution
-# treats as private (it resolves on macOS but not on Linux CI).
-from playwright_stealth.stealth import Stealth
+# playwright-stealth ships no py.typed marker, so ty may decline to resolve its
+# symbols -- it does so on Linux CI while resolving them fine on macOS. The
+# import is verified at runtime by tests/test_fidelity_lifecycle.py.
+from playwright_stealth.stealth import Stealth  # ty: ignore[unresolved-import]
 from requests import Response
 from requests.exceptions import RequestException
 

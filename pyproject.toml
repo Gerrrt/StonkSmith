@@ -59,3 +59,9 @@ root = [ "./src" ]
 # Tests monkeypatch methods with MagicMock, which no type checker can verify.
 # pytest is the gate for tests; ty is the gate for src.
 exclude = [ "tests" ]
+
+[tool.ty.rules]
+# Some suppressions are only needed on one platform -- playwright-stealth ships
+# no py.typed, and ty resolves its symbols on macOS but not on Linux CI. Without
+# this, a directive that silences CI is itself an error locally, and vice versa.
+unused-ignore-comment = "ignore"
