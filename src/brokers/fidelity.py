@@ -16,11 +16,7 @@ from playwright.sync_api import (
     sync_playwright,
 )
 from playwright.sync_api._generated import Locator
-
-# playwright-stealth ships no py.typed marker, so ty may decline to resolve its
-# symbols -- it does so on Linux CI while resolving them fine on macOS. The
-# import is verified at runtime by tests/test_fidelity_lifecycle.py.
-from playwright_stealth.stealth import Stealth  # ty: ignore[unresolved-import]
+from playwright_stealth import Stealth
 from requests import Response
 from requests.exceptions import RequestException
 

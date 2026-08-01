@@ -472,18 +472,6 @@ wheels = [
 ]
 
 [[package]]
-name = "playwright-sm"
-version = "0.0.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "playwright" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/75/64/2070bebe07ceac8ecb2a756073e4ba181b91412b14b1089c57e0407fd4f7/playwright_sm-0.0.1.tar.gz", hash = "sha256:7c418e7fdf481006fa9128357dc0c992b39ed0b4547f408dfe38198af8602238", size = 21251, upload-time = "2025-11-06T01:37:11.175Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/cb/28fb511e0f42b7914d0489ae23d6c998f7c9c0624e4e855557eaba035b6e/playwright_sm-0.0.1-py3-none-any.whl", hash = "sha256:fbf20136350402f04cb2c38e6abdb8052627919544e363e980449a03bf20f6d4", size = 28223, upload-time = "2025-11-06T01:37:09.007Z" },
-]
-
-[[package]]
 name = "playwright-stealth"
 version = "2.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -703,7 +691,7 @@ dependencies = [
     { name = "gspread" },
     { name = "keyring" },
     { name = "parsel" },
-    { name = "playwright-sm" },
+    { name = "playwright" },
     { name = "playwright-stealth" },
     { name = "requests" },
     { name = "rich" },
@@ -725,7 +713,7 @@ requires-dist = [
     { name = "gspread", specifier = ">=6.1" },
     { name = "keyring", specifier = ">=25.0" },
     { name = "parsel", specifier = ">=1.9" },
-    { name = "playwright-sm", specifier = ">=0.0.1" },
+    { name = "playwright", specifier = ">=1.52" },
     { name = "playwright-stealth", specifier = ">=2" },
     { name = "requests", specifier = ">=2.33.1" },
     { name = "rich", specifier = ">=13.7" },
