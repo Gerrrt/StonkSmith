@@ -187,8 +187,11 @@ class Fidelity(Connection):
             ) as f:
                 json.dump(obj={}, fp=f)
 
+        # --headed exists so the login flow (and its 2FA prompt) can be watched.
+        headed: bool = bool(getattr(self.args, "headed", False))
+
         self.browser = self.playwright.firefox.launch(
-            headless=True,
+            headless=not headed,
             args=["--disable-webgl", "--disable-software-rasterizer"],
         )
 

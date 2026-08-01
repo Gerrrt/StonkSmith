@@ -7,7 +7,7 @@ total credential failure still walked into the 2FA path with an empty code.
 import importlib.util
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 
@@ -69,6 +69,37 @@ class FidelityLifecycleTests(unittest.TestCase):
         broker(args=MagicMock(), db=MagicMock(), host=None)
 
         broker.teardown.assert_called_once()
+
+
+class FidelityHeadedFlagTests(unittest.TestCase):
+    """--headed is defined in broker_args; it must reach the browser launch."""
+
+    def _launch_kwargs(self, args: object) -> dict:
+        broker = fidelity_mod.Fidelity()
+        broker.args = args
+        broker.profile_path = MagicMock()
+        broker.profile_path.exists.return_value = True
+
+        playwright = MagicMock()
+        with patch.object(
+            fidelity_mod,
+            "sync_playwright",
+            return_value=MagicMock(start=lambda: playwright),
+        ):
+            broker.getDriver()
+
+        return playwright.firefox.launch.call_args.kwargs
+
+    def test_default_is_headless(self) -> None:
+        from argparse import Namespace
+
+        self.assertTrue(self._launch_kwargs(args=Namespace())["headless"])
+
+    def test_headed_flag_launches_headed(self) -> None:
+        from argparse import Namespace
+
+        kwargs = self._launch_kwargs(args=Namespace(headed=True))
+        self.assertFalse(kwargs["headless"], "--headed must launch a visible browser")
 
 
 class FidelityLoginFlowTests(unittest.TestCase):
