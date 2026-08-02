@@ -7,6 +7,7 @@ import json
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from playwright.sync_api import (
     Browser,
@@ -56,8 +57,19 @@ REFUSED_PAGE_MARKERS: tuple[str, ...] = (
 #: A human sign-in, including 2FA, is not fast. Give it a generous budget.
 MANUAL_LOGIN_TIMEOUT_MS = 300000
 
-#: Substring identifying the authenticated portfolio page.
-SUMMARY_MARKER = "summary"
+#: Path of the authenticated portfolio page. Matched against the URL *path*
+#: only: an unauthenticated request bounces to
+#: /prgw/digital/signin/retail?AuthRedUrl=...%2Fportfolio%2Fsummary, so a
+#: substring test against the whole URL is true on the login page too -- which
+#: made a signed-out session look authenticated and skipped the manual sign-in.
+SUMMARY_PATH = "/portfolio/summary"
+
+#: Stencil components that only exist on the sign-in form. Their presence means
+#: the page is asking for credentials, whatever the URL says.
+SIGN_IN_MARKERS: tuple[str, ...] = (
+    "signin-pi-login-template",
+    "pvdccl-form",
+)
 
 #: Stand-in username when the session came from a manual sign-in rather than a
 #: stored credential.
@@ -219,6 +231,31 @@ class Fidelity(Connection):
 
         return self.manual_login()
 
+    def on_summary_page(self) -> bool:
+        """
+        Whether the browser is actually on the portfolio summary.
+
+        Compares the URL *path*, because the sign-in redirect carries the
+        summary URL in its AuthRedUrl query parameter.
+        :return: True when the current path is the summary page
+        """
+
+        return SUMMARY_PATH in urlparse(url=self.active_page.url).path
+
+    def shows_sign_in_form(self) -> bool:
+        """
+        Whether the page is rendering the sign-in form.
+        :return: True when credentials are being asked for
+        """
+
+        try:
+            body: str = self.active_page.content().lower()
+
+        except PlaywrightError:
+            return False
+
+        return any(marker in body for marker in SIGN_IN_MARKERS)
+
     def session_is_live(self) -> bool:
         """
         Whether the saved cookies still authenticate: navigating straight to
@@ -232,7 +269,12 @@ class Fidelity(Connection):
         except PlaywrightError:
             return False
 
-        return SUMMARY_MARKER in self.active_page.url and not self.page_was_refused()
+        if not self.on_summary_page() or self.page_was_refused():
+            return False
+
+        # Belt and braces: a future redirect that preserved the path would
+        # still be caught by the sign-in form being on screen.
+        return not self.shows_sign_in_form()
 
     def manual_login(self) -> bool:
         """
@@ -265,8 +307,12 @@ class Fidelity(Connection):
 
         try:
             self.active_page.goto(url=self.login_url)
+            # A predicate on the path, not a glob over the whole URL: the
+            # sign-in URL embeds the summary URL in AuthRedUrl, so "**summary**"
+            # matches immediately and the wait returns before any sign-in.
             self.active_page.wait_for_url(
-                url=f"**{SUMMARY_MARKER}**", timeout=MANUAL_LOGIN_TIMEOUT_MS
+                url=lambda url: SUMMARY_PATH in urlparse(url=url).path,
+                timeout=MANUAL_LOGIN_TIMEOUT_MS,
             )
 
         except TimeoutError:
