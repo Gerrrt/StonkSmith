@@ -53,6 +53,16 @@ REFUSED_PAGE_MARKERS: tuple[str, ...] = (
     "can't complete this action right now",
 )
 
+#: A human sign-in, including 2FA, is not fast. Give it a generous budget.
+MANUAL_LOGIN_TIMEOUT_MS = 300000
+
+#: Substring identifying the authenticated portfolio page.
+SUMMARY_MARKER = "summary"
+
+#: Stand-in username when the session came from a manual sign-in rather than a
+#: stored credential.
+MANUAL_SESSION_LABEL = "manual session"
+
 
 def _browser_was_closed(error: Exception) -> bool:
     """
@@ -197,6 +207,101 @@ class Fidelity(Connection):
 
         self.page = None
 
+    def login(self) -> bool:
+        """
+        Authenticate, either by reusing/obtaining a human session or by the
+        normal credential flow.
+        :return: True when the browser holds an authenticated session
+        """
+
+        if not getattr(self.args, "manual_login", False):
+            return super().login()
+
+        return self.manual_login()
+
+    def session_is_live(self) -> bool:
+        """
+        Whether the saved cookies still authenticate: navigating straight to
+        the portfolio summary lands there rather than bouncing to sign-in.
+        :return: True if already signed in
+        """
+
+        try:
+            self.active_page.goto(url=self.summary_url)
+
+        except PlaywrightError:
+            return False
+
+        return SUMMARY_MARKER in self.active_page.url and not self.page_was_refused()
+
+    def manual_login(self) -> bool:
+        """
+        Reuse a saved session, or hand the browser over so the operator can
+        sign in themselves.
+
+        Fidelity fronts its login with Akamai Bot Manager and ThreatMetrix,
+        which reject a scripted sign-in before the form is even rendered. A
+        human completing the login in the visible window produces the telemetry
+        those systems look for; the resulting cookies are then saved and reused
+        until they expire.
+        :return: True when the browser holds an authenticated session
+        """
+
+        if self.session_is_live():
+            self.logger.success(
+                msg="Reusing the saved Fidelity session; no sign-in needed."
+            )
+            self.username = self.username or MANUAL_SESSION_LABEL
+            return True
+
+        self.logger.highlight(
+            msg=(
+                "Sign in to Fidelity in the browser window that just opened, "
+                "including any 2FA. StonkSmith takes over once the portfolio "
+                f"summary loads (waiting up to {MANUAL_LOGIN_TIMEOUT_MS // 60000} "
+                "minutes)."
+            )
+        )
+
+        try:
+            self.active_page.goto(url=self.login_url)
+            self.active_page.wait_for_url(
+                url=f"**{SUMMARY_MARKER}**", timeout=MANUAL_LOGIN_TIMEOUT_MS
+            )
+
+        except TimeoutError:
+            self.logger.fail(
+                msg=(
+                    "Timed out waiting for the portfolio summary. If the sign-in "
+                    "did complete, the summary URL may have changed."
+                )
+            )
+            return False
+
+        except PlaywrightError as e:
+            if _browser_was_closed(error=e):
+                self.logger.fail(msg="Browser was closed before sign-in finished.")
+            else:
+                self.logger.fail(msg=f"Browser error during manual sign-in: {e}")
+            return False
+
+        # Only promise session reuse if the session actually persisted;
+        # save_session() reports its own failure and carries on.
+        if self.save_session():
+            self.logger.success(
+                msg="Signed in. Session saved; later runs reuse it until it expires."
+            )
+        else:
+            self.logger.highlight(
+                msg=(
+                    "Signed in, but the session could not be saved -- the next "
+                    "run will ask you to sign in again."
+                )
+            )
+
+        self.username = self.username or MANUAL_SESSION_LABEL
+        return True
+
     def plaintext_login(self, username: str, password: str) -> bool:
         """
         Attempt plaintext login for Fidelity broker class
@@ -250,8 +355,13 @@ class Fidelity(Connection):
             ) as f:
                 json.dump(obj={}, fp=f)
 
-        # --headed exists so the login flow (and its 2FA prompt) can be watched.
-        headed: bool = bool(getattr(self.args, "headed", False))
+        # --headed exists so the login flow (and its 2FA prompt) can be
+        # watched. --manual-login requires it: nobody can sign in to a window
+        # they cannot see.
+        headed: bool = bool(
+            getattr(self.args, "headed", False)
+            or getattr(self.args, "manual_login", False)
+        )
 
         self.browser = self.playwright.firefox.launch(
             headless=not headed,
@@ -467,7 +577,7 @@ class Fidelity(Connection):
 
         return any(marker in body for marker in REFUSED_PAGE_MARKERS)
 
-    def save_session(self) -> None:
+    def save_session(self) -> bool:
         """
         Persist cookies and local storage so the next run is a returning
         browser rather than a brand-new one.
@@ -476,10 +586,11 @@ class Fidelity(Connection):
         written back, so every run started with an empty jar. That defeats the
         "Don't ask me again on this device" checkbox -- the trust cookie it sets
         was discarded on exit -- and makes each login look like a new device.
+        :return: True if the session was written
         """
 
         if self.context is None:
-            return
+            return False
 
         try:
             self.profile_path.parent.mkdir(parents=True, exist_ok=True)
@@ -489,6 +600,9 @@ class Fidelity(Connection):
 
         except Exception as e:
             self.logger.fail(msg=f"Could not save the browser session: {e}")
+            return False
+
+        return True
 
     def capture_page(self, reason: str) -> Path | None:
         """
