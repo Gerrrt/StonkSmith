@@ -16,11 +16,28 @@ from etc.logger import StonkSmithAdapter
 from etc.paths import config_path, workspace_dir, ws_path
 from loaders.brokerloader import BrokerLoader
 
+#: Commands that only exist inside a broker's sub-shell. Typing one at the top
+#: level produced a bare "*** Unknown syntax" with no hint that a broker has to
+#: be selected first, which is the single most common way to get stuck here.
+BROKER_SHELL_COMMANDS: frozenset[str] = frozenset(
+    {"add", "delete", "show", "export", "back"}
+)
+
 
 class StonkSmithDBMenu(cmd.Cmd):
     """
     Main Administrative Shell for StonkSmith Databases.
     """
+
+    intro = (
+        "\nStonkSmith database shell. Credentials and account history are stored "
+        "per broker,\nso select one first:\n\n"
+        "    broker            list available brokers\n"
+        "    broker <name>     enter that broker (add/show/export live in there)\n"
+        "    workspace list    list workspaces\n"
+        "    help              commands at this level\n"
+        "    exit              quit\n"
+    )
 
     def __init__(self, config_file_path: Path) -> None:
         """
@@ -59,6 +76,76 @@ class StonkSmithDBMenu(cmd.Cmd):
 
     do_EOF = do_exit
 
+    def get_names(self) -> list[str]:
+        """
+        Hide the EOF handler from help and tab-completion. It exists so Ctrl-D
+        quits cleanly, but listing "EOF" as a command is just noise.
+        :return: Command names to advertise
+        """
+
+        return [name for name in super().get_names() if name != "do_EOF"]
+
+    def default(self, line: str) -> None:
+        """
+        Explain unknown input instead of printing bare "*** Unknown syntax".
+        :param line: The command the user typed
+        """
+
+        command: str = line.split()[0].lower() if line.split() else ""
+
+        if command in BROKER_SHELL_COMMANDS:
+            if not self.brokers:
+                # "Select one first" followed by an empty list is a dead end.
+                print(
+                    f"[-] '{command}' only works inside a broker, and no brokers "
+                    "were found."
+                )
+                return
+
+            print(
+                f"[-] '{command}' only works inside a broker. Select one first, e.g.:"
+            )
+            for name in sorted(self.brokers):
+                print(f"      broker {name}")
+            return
+
+        print(f"[-] Unknown command: {line}. Type 'help' for the commands here.")
+
+    def do_brokers(self, line: str) -> None:
+        """
+        List available brokers.
+        :param line:
+        """
+
+        del line
+        self.list_brokers()
+
+    def list_brokers(self) -> None:
+        """
+        Print each discovered broker and whether its database is ready.
+        """
+
+        if not self.brokers:
+            print("[-] No brokers found.")
+            return
+
+        print("[*] Available brokers:")
+
+        for name in sorted(self.brokers):
+            info: dict[str, str] = self.brokers[name]
+            db_file: Path = Path(workspace_dir) / self.workspace / f"{name}.db"
+
+            if not {"nvpath", "dbpath"} <= set(info):
+                status = "incomplete (broker package is missing files)"
+            elif not db_file.exists():
+                status = f"no database in workspace '{self.workspace}' yet"
+            else:
+                status = "ready"
+
+            print(f"      {name:<16} {status}")
+
+        print("\n    Enter one with: broker <name>")
+
     def write_config(self) -> None:
         """
         Create config file
@@ -74,8 +161,15 @@ class StonkSmithDBMenu(cmd.Cmd):
         :return:
         """
 
-        if not broker or broker not in self.brokers:
+        broker = broker.strip()
+
+        if not broker:
+            self.list_brokers()
+            return
+
+        if broker not in self.brokers:
             print(f"[-] Unknown broker: {broker}")
+            self.list_brokers()
             return
 
         info: dict[str, str] = self.brokers[broker]
