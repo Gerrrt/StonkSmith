@@ -51,6 +51,12 @@ class DatabaseLike(typing.Protocol):
 class BrokerNavigator(cmd.Cmd):
     """Interactive shell over one broker's credential and account tables."""
 
+    #: Commands that belong to the top-level shell, used to explain the mistake
+    #: when one of them is typed in here.
+    PARENT_SHELL_COMMANDS: typing.ClassVar[frozenset[str]] = frozenset(
+        {"broker", "brokers", "workspace"}
+    )
+
     def __init__(
         self, main_menu: object, database: DatabaseLike, broker_name: str
     ) -> None:
@@ -59,6 +65,41 @@ class BrokerNavigator(cmd.Cmd):
         self.db: DatabaseLike = database
         self.broker: str = broker_name
         self.prompt = f"stonksmithdb ({self.broker}) > "
+        self.intro = (
+            f"\n[*] {broker_name}:\n"
+            "    add creds <username>     store a credential "
+            "(the secret goes to the OS keyring)\n"
+            "    show creds | accounts    credentials (masked) or saved balances\n"
+            "    export creds <file>      write a CSV (never includes secrets)\n"
+            "    delete creds <id>        remove a credential\n"
+            "    back                     return to the broker list\n"
+        )
+
+    def get_names(self) -> list[str]:
+        """
+        Hide the EOF handler from help and tab-completion.
+        :return: Command names to advertise
+        """
+
+        return [name for name in super().get_names() if name != "do_EOF"]
+
+    def default(self, line: str) -> None:
+        """
+        Explain unknown input rather than printing "*** Unknown syntax".
+        :param line: The command the user typed
+        """
+
+        parts: list[str] = line.split()
+        command: str = parts[0].lower() if parts else ""
+
+        if command in self.PARENT_SHELL_COMMANDS:
+            print(
+                f"[-] '{command}' belongs to the top level. "
+                f"Type 'back' first, then '{line}'."
+            )
+            return
+
+        print(f"[-] Unknown command: {line}. Type 'help' for the commands here.")
 
     def do_back(self, line: str) -> typing.NoReturn:
         """
