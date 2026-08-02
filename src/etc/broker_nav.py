@@ -92,14 +92,20 @@ class BrokerNavigator(cmd.Cmd):
         parts: list[str] = line.split()
         command: str = parts[0].lower() if parts else ""
 
+        # Reported through the logger, like every other message in this shell.
+        # It renders the "[-]" marker and indentation itself.
         if command in self.PARENT_SHELL_COMMANDS:
-            print(
-                f"[-] '{command}' belongs to the top level. "
-                f"Type 'back' first, then '{line}'."
+            stonksmith_logger.fail(
+                msg=(
+                    f"'{command}' belongs to the top level. "
+                    f"Type 'back' first, then '{line}'."
+                )
             )
             return
 
-        print(f"[-] Unknown command: {line}. Type 'help' for the commands here.")
+        stonksmith_logger.fail(
+            msg=f"Unknown command: {line}. Type 'help' for the commands here."
+        )
 
     def do_back(self, line: str) -> typing.NoReturn:
         """

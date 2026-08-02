@@ -94,6 +94,14 @@ class StonkSmithDBMenu(cmd.Cmd):
         command: str = line.split()[0].lower() if line.split() else ""
 
         if command in BROKER_SHELL_COMMANDS:
+            if not self.brokers:
+                # "Select one first" followed by an empty list is a dead end.
+                print(
+                    f"[-] '{command}' only works inside a broker, and no brokers "
+                    "were found."
+                )
+                return
+
             print(
                 f"[-] '{command}' only works inside a broker. Select one first, e.g.:"
             )

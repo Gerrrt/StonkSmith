@@ -5,12 +5,25 @@ hint that credentials live inside a broker sub-shell -- the most common way to
 get stuck in this tool.
 """
 
+import logging
 import unittest
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
 from etc.broker_nav import BrokerNavigator
+from etc.logger import stonksmith_logger
 from etc.stonksmithdb import StonkSmithDBMenu
+
+
+class _CaptureHandler(logging.Handler):
+    """Collect log records so assertions survive rich's console wrapping."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
 
 
 def _menu(brokers: dict[str, dict[str, str]] | None = None) -> StonkSmithDBMenu:
@@ -73,6 +86,13 @@ class TopLevelGuidanceTests(unittest.TestCase):
 
         self.assertIn("No brokers found", output)
 
+    def test_no_brokers_does_not_suggest_selecting_one(self) -> None:
+        # "Select one first, e.g.:" followed by an empty list is a dead end.
+        output = _capture(_menu(brokers={}).default, "show creds")
+
+        self.assertIn("no brokers were found", output.lower())
+        self.assertNotIn("Select one first", output)
+
     def test_eof_is_hidden_from_help(self) -> None:
         menu = _menu()
 
@@ -82,22 +102,47 @@ class TopLevelGuidanceTests(unittest.TestCase):
 
 
 class BrokerShellGuidanceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.capture = _CaptureHandler()
+        stonksmith_logger.logger.addHandler(self.capture)
+
+    def tearDown(self) -> None:
+        stonksmith_logger.logger.removeHandler(self.capture)
+
     def _navigator(self) -> BrokerNavigator:
         return BrokerNavigator(
             main_menu=MagicMock(), database=MagicMock(), broker_name="schwab529plan"
         )
 
-    def test_top_level_command_explains_it_needs_back(self) -> None:
-        output = _capture(self._navigator().default, "workspace list")
+    def _logged(self) -> str:
+        return " ".join(self.capture.messages)
 
-        self.assertIn("belongs to the top level", output)
-        self.assertIn("back", output)
-        self.assertNotIn("Unknown syntax", output)
+    def test_top_level_command_explains_it_needs_back(self) -> None:
+        self._navigator().default("workspace list")
+
+        logged = self._logged()
+        self.assertIn("belongs to the top level", logged)
+        self.assertIn("back", logged)
+        self.assertNotIn("Unknown syntax", logged)
 
     def test_unknown_command_points_at_help(self) -> None:
-        output = _capture(self._navigator().default, "frobnicate")
+        self._navigator().default("frobnicate")
 
-        self.assertIn("Unknown command", output)
+        self.assertIn("Unknown command", self._logged())
+
+    def test_guidance_goes_through_the_logger_like_the_other_commands(self) -> None:
+        # The rest of this shell reports via stonksmith_logger; default() used
+        # raw print(), which rendered differently.
+        buffer = StringIO()
+        with patch("sys.stdout", buffer):
+            self._navigator().default("frobnicate")
+
+        self.assertTrue(self.capture.messages, "nothing reached the logger")
+        # The logger renders the marker itself, so the message must not add one.
+        self.assertFalse(
+            any(m.startswith("[-]") for m in self.capture.messages),
+            "message duplicates the marker the logger already renders",
+        )
 
     def test_intro_lists_the_credential_commands(self) -> None:
         intro = self._navigator().intro
