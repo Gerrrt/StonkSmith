@@ -11,9 +11,10 @@ hand: the real one is 3MB of markup from a signed-in session.
 """
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from playwright.sync_api import Error as PlaywrightError
 
@@ -54,49 +55,71 @@ def _load_fidelity():
 fidelity_mod = _load_fidelity()
 
 
-def _broker(content: str | None = None):
-    broker = fidelity_mod.Fidelity()
-    broker.logger = MagicMock()
-    broker.page = MagicMock()
-    if content is not None:
-        broker.active_page.content.return_value = content
-    return broker
+class _IsolatedBrokerTest(unittest.TestCase):
+    """Keep every filesystem path these tests touch inside a temp directory.
+
+    save_session() and capture_page() write under ~/.stonksmith by default, so
+    without this the suite mutates real user state and fails wherever $HOME is
+    not writable.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        # capture_page() reads this at call time from the module namespace.
+        self._logs_patch = patch.object(fidelity_mod, "logs_path", self.tmp / "logs")
+        self._logs_patch.start()
+
+    def tearDown(self) -> None:
+        self._logs_patch.stop()
+        self._tmp.cleanup()
+
+    def broker(self, content: str | None = None):
+        broker = fidelity_mod.Fidelity()
+        broker.logger = MagicMock()
+        broker.page = MagicMock()
+        broker.profile_path = self.tmp / "playwright" / "Fidelity.json"
+        if content is not None:
+            broker.active_page.content.return_value = content
+        return broker
 
 
-class RefusedPageDetectionTests(unittest.TestCase):
+class RefusedPageDetectionTests(_IsolatedBrokerTest):
     def test_refused_page_is_recognised(self) -> None:
-        self.assertTrue(_broker(REFUSED_PAGE).page_was_refused())
+        self.assertTrue(self.broker(REFUSED_PAGE).page_was_refused())
 
     def test_genuine_2fa_page_is_not_misread(self) -> None:
-        self.assertFalse(_broker(TWO_FACTOR_PAGE).page_was_refused())
+        self.assertFalse(self.broker(TWO_FACTOR_PAGE).page_was_refused())
 
     def test_unreadable_page_is_not_treated_as_refused(self) -> None:
-        broker = _broker()
+        broker = self.broker()
         broker.active_page.content.side_effect = PlaywrightError("gone")
 
         self.assertFalse(broker.page_was_refused())
 
 
-class SaveSessionTests(unittest.TestCase):
+class SaveSessionTests(_IsolatedBrokerTest):
     def test_storage_state_is_written(self) -> None:
-        broker = _broker()
+        broker = self.broker()
         broker.context = MagicMock()
 
         broker.save_session()
 
         broker.context.storage_state.assert_called_once()
-        self.assertIn(
-            "Fidelity.json", broker.context.storage_state.call_args.kwargs["path"]
+        written = broker.context.storage_state.call_args.kwargs["path"]
+        self.assertIn("Fidelity.json", written)
+        self.assertTrue(
+            written.startswith(str(self.tmp)), "must not write to the real home"
         )
 
     def test_no_context_is_a_no_op(self) -> None:
-        broker = _broker()
+        broker = self.broker()
         broker.context = None
 
         broker.save_session()  # must not raise
 
     def test_failure_to_save_is_reported_not_raised(self) -> None:
-        broker = _broker()
+        broker = self.broker()
         broker.context = MagicMock()
         broker.context.storage_state.side_effect = PlaywrightError("nope")
 
@@ -107,7 +130,7 @@ class SaveSessionTests(unittest.TestCase):
     def test_teardown_saves_before_closing(self) -> None:
         # Cookies set during the run -- including any device-trust cookie -- are
         # lost if the context closes first.
-        broker = _broker()
+        broker = self.broker()
         context = MagicMock()
         broker.context = context
         order: list[str] = []
@@ -117,6 +140,15 @@ class SaveSessionTests(unittest.TestCase):
         broker.teardown()
 
         self.assertEqual(order, ["save", "close"])
+
+    def test_nothing_is_written_outside_the_temp_directory(self) -> None:
+        broker = self.broker()
+        broker.context = MagicMock()
+
+        broker.save_session()
+
+        # The only directory created belongs to the temp tree.
+        self.assertTrue((self.tmp / "playwright").is_dir())
 
 
 if __name__ == "__main__":
