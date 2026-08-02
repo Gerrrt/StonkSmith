@@ -6,9 +6,10 @@ produced a raw TargetClosedError traceback.
 """
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
@@ -82,40 +83,50 @@ class BrowserClosedDetectionTests(unittest.TestCase):
 
 
 class CapturePageTests(unittest.TestCase):
-    def test_writes_the_markup_for_selector_debugging(self) -> None:
+    """capture_page() writes under ~/.stonksmith/logs by default, so these
+    redirect it into a temp directory rather than touching real user state."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self._logs_patch = patch.object(fidelity_mod, "logs_path", self.tmp / "logs")
+        self._logs_patch.start()
+
+    def tearDown(self) -> None:
+        self._logs_patch.stop()
+        self._tmp.cleanup()
+
+    def _broker(self):
         broker = fidelity_mod.Fidelity()
         broker.logger = MagicMock()
         broker.page = MagicMock()
+        return broker
+
+    def test_writes_the_markup_for_selector_debugging(self) -> None:
+        broker = self._broker()
         broker.active_page.content.return_value = "<html>2fa</html>"
 
         saved = broker.capture_page(reason="unit-test")
 
         self.assertIsNotNone(saved)
         assert saved is not None
-        try:
-            self.assertIn("2fa", saved.read_text())
-            self.assertIn("unit-test", saved.name)
-        finally:
-            saved.unlink(missing_ok=True)
-            saved.with_suffix(".png").unlink(missing_ok=True)
+        self.assertIn("2fa", saved.read_text())
+        self.assertIn("unit-test", saved.name)
+        self.assertTrue(
+            str(saved).startswith(str(self.tmp)), "must not write to the real home"
+        )
 
     def test_captures_are_owner_readable_only(self) -> None:
         # Raw markup from a signed-in brokerage session: account numbers,
         # balances, 2FA context. It must not inherit a permissive umask.
-        broker = fidelity_mod.Fidelity()
-        broker.logger = MagicMock()
-        broker.page = MagicMock()
+        broker = self._broker()
         broker.active_page.content.return_value = "<html>account 1234</html>"
 
         saved = broker.capture_page(reason="perm-test")
 
         self.assertIsNotNone(saved)
         assert saved is not None
-        try:
-            self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
-        finally:
-            saved.unlink(missing_ok=True)
-            saved.with_suffix(".png").unlink(missing_ok=True)
+        self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
 
     def test_no_browser_returns_none_instead_of_raising(self) -> None:
         broker = fidelity_mod.Fidelity()
@@ -124,9 +135,7 @@ class CapturePageTests(unittest.TestCase):
         self.assertIsNone(broker.capture_page(reason="unit-test"))
 
     def test_capture_failure_is_swallowed(self) -> None:
-        broker = fidelity_mod.Fidelity()
-        broker.logger = MagicMock()
-        broker.page = MagicMock()
+        broker = self._broker()
         broker.active_page.content.side_effect = PlaywrightError("gone")
 
         self.assertIsNone(broker.capture_page(reason="unit-test"))
