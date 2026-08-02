@@ -2,9 +2,10 @@
 fidelity.py: Fidelity broker class
 """
 
+import contextlib
 import json
-import traceback
 import warnings
+from datetime import UTC, datetime
 from pathlib import Path
 
 from playwright.sync_api import (
@@ -15,6 +16,9 @@ from playwright.sync_api import (
     TimeoutError,
     sync_playwright,
 )
+from playwright.sync_api import (
+    Error as PlaywrightError,
+)
 from playwright.sync_api._generated import Locator
 from playwright_stealth import Stealth
 from requests import Response
@@ -22,7 +26,50 @@ from requests.exceptions import RequestException
 
 from etc.connection import Connection
 from etc.logger import StonkSmithAdapter
-from etc.paths import playwright_path
+from etc.paths import logs_path, playwright_path
+
+#: Playwright's default is 30s. These steps are optional or fast-failing, so a
+#: shorter wait keeps a broken selector from stalling the whole login.
+SHORT_TIMEOUT_MS = 5000
+
+#: Label text for Fidelity's "remember this device" checkbox. Split out because
+#: it is the kind of copy that changes without notice.
+REMEMBER_DEVICE_TEXT = "Don't ask me again on this"
+
+#: Landing on the summary page after submitting a code involves a redirect
+#: chain, so it gets a longer budget than the individual clicks.
+SUBMIT_TIMEOUT_MS = 15000
+
+#: Playwright raises TargetClosedError when the browser goes away mid-call, but
+#: that class is not exported from playwright.sync_api -- only from a private
+#: module. It subclasses the public Error, so it is identified by message.
+BROWSER_CLOSED_TEXT = "has been closed"
+
+
+def _browser_was_closed(error: Exception) -> bool:
+    """
+    Whether a Playwright error means the browser went away.
+    :param error: The raised Playwright error
+    :return: True when the target was closed
+    """
+
+    return BROWSER_CLOSED_TEXT in str(object=error)
+
+
+def _restrict(path: Path) -> None:
+    """
+    Make a captured file owner-readable only.
+
+    Captures are raw markup from a signed-in brokerage session and can contain
+    account numbers, balances, and 2FA context. Default permissions follow the
+    process umask, which is commonly world-readable.
+    :param path: The file to restrict
+    """
+
+    # Best-effort: a filesystem without POSIX permissions must not turn a
+    # diagnostic capture into a failure.
+    with contextlib.suppress(OSError):
+        path.chmod(mode=0o600)
 
 
 class Fidelity(Connection):
@@ -292,41 +339,131 @@ class Fidelity(Connection):
                 if self.active_page.get_by_role(
                     role="link", name="Try another way"
                 ).is_visible():
-                    self.active_page.locator(selector="label").filter(
-                        has_text="Don't ask me again on this"
-                    ).check()
-                    if (
-                        not self.active_page.locator(selector="label")
-                        .filter(has_text="Don't ask me again on this")
-                        .is_checked()
-                    ):
-                        raise RuntimeError("Cannot check that box")
+                    self.remember_this_device()
 
                     # Try to get code via text message
                     self.active_page.get_by_role(
                         role="link", name="Try another way"
-                    ).click()
+                    ).click(timeout=SHORT_TIMEOUT_MS)
 
                 # Press the Text me button
-                self.active_page.get_by_role(
+                text_me: Locator = self.active_page.get_by_role(
                     role="button", name="Text me the code"
-                ).click()
-                self.active_page.get_by_placeholder(text="XXXXXX").click()
+                )
+
+                if not text_me.count():
+                    self.capture_page(reason="no-text-me-button")
+                    raise RuntimeError(
+                        "Reached the 2FA page but found no 'Text me the code' "
+                        "button; the markup has probably changed."
+                    )
+
+                text_me.click(timeout=SHORT_TIMEOUT_MS)
+                self.active_page.get_by_placeholder(text="XXXXXX").click(
+                    timeout=SHORT_TIMEOUT_MS
+                )
 
                 return True, False
 
             # Can't get to summary page or login page.
-            raise RuntimeError("Cannot get to login page.")
+            self.capture_page(reason="unexpected-page")
+            raise RuntimeError(f"Landed on an unexpected page: {self.active_page.url}")
 
         except TimeoutError:
-            print("Timeout waiting for login page to load.")
-            traceback.print_exc()
+            self.logger.fail(
+                msg=f"Timed out during login for {username}; capturing the page."
+            )
+            self.capture_page(reason="login-timeout")
+            return False, False
+
+        except PlaywrightError as e:
+            if _browser_was_closed(error=e):
+                # Typically the operator closed the headed browser window.
+                self.logger.fail(
+                    msg="Browser was closed before the login flow finished."
+                )
+                return False, False
+
+            self.logger.fail(msg=f"Browser error during login: {e}")
+            self.capture_page(reason="login-error")
             return False, False
 
         except RuntimeError as e:
-            print(f"Error occurred: {e}")
-            traceback.print_exc()
+            self.logger.fail(msg=f"Login could not continue: {e}")
             return False, False
+
+    def remember_this_device(self) -> bool:
+        """
+        Best-effort: tick "Don't ask me again on this device" to suppress future
+        OTP prompts.
+
+        This is an optimisation, not a login requirement. It used to be a hard
+        step with Playwright's 30s default timeout, so when the label text
+        changed the whole login died after half a minute of waiting.
+        :return: True if the box ended up checked
+        """
+
+        checkbox: Locator = self.active_page.locator(selector="label").filter(
+            has_text=REMEMBER_DEVICE_TEXT
+        )
+
+        if not checkbox.count():
+            self.logger.highlight(
+                msg=(
+                    "Could not find the 'don't ask again' checkbox; continuing "
+                    "without it (2FA will be required again next time)."
+                )
+            )
+            return False
+
+        try:
+            checkbox.check(timeout=SHORT_TIMEOUT_MS)
+
+        except (TimeoutError, PlaywrightError) as e:
+            self.logger.highlight(msg=f"Could not tick 'don't ask again': {e}")
+            return False
+
+        return bool(checkbox.is_checked())
+
+    def capture_page(self, reason: str) -> Path | None:
+        """
+        Save the current page so selectors can be fixed against real markup.
+
+        The module-level DEBUG_DUMP option is useless for login problems,
+        because modules only run *after* a successful login. This writes the
+        HTML (and a screenshot when possible) from inside the login flow.
+        :param reason: Short slug describing why the capture happened
+        :return: Path to the saved HTML, or None if nothing could be captured
+        """
+
+        if self.page is None:
+            return None
+
+        stamp: str = datetime.now(tz=UTC).strftime(format="%Y%m%d-%H%M%S")
+        target: Path = logs_path / f"fidelity-{reason}-{stamp}.html"
+
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(data=self.active_page.content(), encoding="utf-8")
+            _restrict(path=target)
+
+        except Exception as e:
+            self.logger.fail(msg=f"Could not capture the page: {e}")
+            return None
+
+        self.logger.fail(msg=f"Saved the page markup to {target}")
+
+        try:
+            shot: Path = target.with_suffix(suffix=".png")
+            self.active_page.screenshot(path=str(object=shot))
+            _restrict(path=shot)
+            self.logger.fail(msg=f"Saved a screenshot to {shot}")
+
+        except Exception:
+            # A screenshot is a nice-to-have; the HTML is what matters.
+            pass
+
+        return target
 
     def login_2FA(self, code: str) -> bool:
         """
@@ -338,29 +475,39 @@ class Fidelity(Connection):
         try:
             self.active_page.get_by_placeholder(text="XXXXXX").fill(value=code)
 
-            # Prevent future OTP requirements.
-            self.active_page.locator(selector="label").filter(
-                has_text="Don't ask me again on this"
-            ).check()
-            if (
-                not self.active_page.locator(selector="label")
-                .filter(has_text="Don't ask me again on this")
-                .is_checked()
-            ):
-                raise RuntimeError("Cannot check that box")
+            # Best-effort: suppress future OTP prompts. Never fail the login
+            # over it -- the code has already been entered by this point.
+            self.remember_this_device()
 
-            self.active_page.get_by_role(role="button", name="Submit").click()
+            self.active_page.get_by_role(role="button", name="Submit").click(
+                timeout=SHORT_TIMEOUT_MS
+            )
 
-            self.active_page.wait_for_url(url=self.summary_url, timeout=5000)
+            self.active_page.wait_for_url(
+                url=self.summary_url, timeout=SUBMIT_TIMEOUT_MS
+            )
 
             return True
 
         except TimeoutError:
-            print("Timeout waiting for login page to load.")
-            traceback.print_exc()
+            self.logger.fail(
+                msg=(
+                    "Timed out after submitting the 2FA code; the code may have "
+                    "been wrong or the page changed."
+                )
+            )
+            self.capture_page(reason="2fa-timeout")
+            return False
+
+        except PlaywrightError as e:
+            if _browser_was_closed(error=e):
+                self.logger.fail(msg="Browser was closed before 2FA completed.")
+                return False
+
+            self.logger.fail(msg=f"2FA step failed: {e}")
+            self.capture_page(reason="2fa-error")
             return False
 
         except RuntimeError as e:
-            print(f"Error occurred: {e}")
-            traceback.print_exc()
+            self.logger.fail(msg=f"2FA step failed: {e}")
             return False
