@@ -45,6 +45,14 @@ SUBMIT_TIMEOUT_MS = 15000
 #: module. It subclasses the public Error, so it is identified by message.
 BROWSER_CLOSED_TEXT = "has been closed"
 
+#: Fidelity answers a refused sign-in with a generic error page that still lives
+#: under /signin and is still titled "Log in to Fidelity", so a URL check alone
+#: mistakes it for the 2FA step. These markers identify it.
+REFUSED_PAGE_MARKERS: tuple[str, ...] = (
+    "dom-sys-err",
+    "can't complete this action right now",
+)
+
 
 def _browser_was_closed(error: Exception) -> bool:
     """
@@ -166,6 +174,10 @@ class Fidelity(Connection):
         """
 
         if self.context is not None:
+            # Save before closing: cookies set during this run (including any
+            # device-trust cookie) are lost otherwise.
+            self.save_session()
+
             try:
                 self.context.tracing.stop(path=str(object=self.trace_path))
 
@@ -327,6 +339,21 @@ class Fidelity(Connection):
             if "summary" in self.active_page.url:
                 return True, True
 
+            # A refused sign-in also lands under /signin, so rule that out
+            # before treating the page as the 2FA step.
+            if self.page_was_refused():
+                self.capture_page(reason="sign-in-refused")
+                self.logger.fail(
+                    msg=(
+                        "Fidelity refused the sign-in and served its generic "
+                        "error page ('we can't complete this action right now'). "
+                        "This is not a 2FA prompt and not a stale selector: the "
+                        "site rejected the automated session. Check the "
+                        "credentials by signing in manually first."
+                    )
+                )
+                return False, False
+
             # Check for 2FA page after login attempt
             if "signin" in self.active_page.url:
                 self.wait_for_loading_sign()
@@ -424,6 +451,44 @@ class Fidelity(Connection):
             return False
 
         return bool(checkbox.is_checked())
+
+    def page_was_refused(self) -> bool:
+        """
+        Whether the current page is Fidelity's generic "can't complete this
+        action" error rather than a real step in the login flow.
+        :return: True when the sign-in was refused
+        """
+
+        try:
+            body: str = self.active_page.content().lower()
+
+        except PlaywrightError:
+            return False
+
+        return any(marker in body for marker in REFUSED_PAGE_MARKERS)
+
+    def save_session(self) -> None:
+        """
+        Persist cookies and local storage so the next run is a returning
+        browser rather than a brand-new one.
+
+        The context was created from ``storage_state`` but the state was never
+        written back, so every run started with an empty jar. That defeats the
+        "Don't ask me again on this device" checkbox -- the trust cookie it sets
+        was discarded on exit -- and makes each login look like a new device.
+        """
+
+        if self.context is None:
+            return
+
+        try:
+            self.profile_path.parent.mkdir(parents=True, exist_ok=True)
+            self.context.storage_state(path=str(object=self.profile_path))
+            # Session cookies: owner-readable only.
+            _restrict(path=self.profile_path)
+
+        except Exception as e:
+            self.logger.fail(msg=f"Could not save the browser session: {e}")
 
     def capture_page(self, reason: str) -> Path | None:
         """
