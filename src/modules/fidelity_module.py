@@ -14,8 +14,8 @@ from helpers.sheets import SheetsUnavailable
 # Fidelity renders the portfolio summary with their "PVD" design system. These
 # selectors are the scrape surface and are the first thing to check when a run
 # returns zero accounts -- they have NOT been verified against a live session.
-# `stonksmith fidelity -M fidelity -o DEBUG_DUMP=1` writes the rendered account
-# region to the log so the selectors can be corrected against real markup.
+# A run that finds nothing writes the rendered page to ~/.stonksmith/logs so the
+# selectors can be corrected against real markup.
 ACCOUNT_ROW_SELECTORS: tuple[str, ...] = (
     "[data-testid='account-row']",
     ".acct-selector__acct-row",
@@ -31,6 +31,26 @@ ACCOUNT_BALANCE_SELECTORS: tuple[str, ...] = (
 )
 
 
+def capture_summary(connection: Connection) -> Any:
+    """Save the rendered page so selectors can be fixed from real markup.
+
+    Reuses the broker's capture, which writes the HTML and a screenshot to
+    ~/.stonksmith/logs with owner-only permissions.
+
+    Args:
+        connection (Connection): The live broker.
+
+    Returns:
+        Any: Path to the saved HTML, or None if it could not be captured.
+
+    """
+    capture = getattr(connection, "capture_page", None)
+    if not callable(capture):
+        return None
+
+    return capture(reason="no-accounts")
+
+
 class FidelityModule:
     """Scrape Fidelity account balances and sync them to the dashboard."""
 
@@ -41,7 +61,6 @@ class FidelityModule:
     def __init__(self) -> None:
         """Initialize the class attributes."""
         self.export_format: str = "print"
-        self.debug_dump: bool = False
         self.summary_url = "https://digital.fidelity.com/ftgw/digital/portfolio/summary"
 
     def options(
@@ -52,14 +71,12 @@ class FidelityModule:
         Args:
             context (Context | None): Execution context supplied by ModuleLoader.
             module_options (dict[str, Any] | None): EXPORT sets the export
-            format; DEBUG_DUMP=1 logs the rendered account region so the
-            selectors above can be checked against live markup.
+            format.
 
         """
         del context
         options: dict[str, Any] = module_options or {}
         self.export_format = options.get("EXPORT", "print")
-        self.debug_dump = str(options.get("DEBUG_DUMP", "")).lower() in {"1", "true"}
 
     def on_login(self, context: Context, connection: Connection) -> None:
         """Scrape the portfolio summary and persist the balances.
@@ -101,11 +118,16 @@ class FidelityModule:
         )
 
         if not accounts:
+            # Always capture. The old advice -- "re-run with -o DEBUG_DUMP=1" --
+            # was useless twice over: the dump logged at INFO, which the default
+            # log level hides, and 4000 chars of console output is not something
+            # selectors can be fixed from anyway.
+            saved: Any = capture_summary(connection=connection)
+            where: str = f" Page markup saved to {saved}." if saved else ""
             context.log.fail(
                 msg=(
-                    "No accounts found on the portfolio summary. The selectors in "
-                    "modules/fidelity_module.py likely need updating; re-run with "
-                    "-o DEBUG_DUMP=1 to see the rendered markup."
+                    "No accounts found on the portfolio summary. The selectors "
+                    f"in modules/fidelity_module.py need updating.{where}"
                 )
             )
             return
@@ -168,9 +190,6 @@ class FidelityModule:
                 context.log.display(msg=f"Matched account rows via '{selector}'")
                 rows = found
                 break
-
-        if not rows and self.debug_dump:
-            context.log.highlight(msg=f"Rendered body:\n{page.content()[:4000]}")
 
         accounts: list[dict[str, str]] = []
 
