@@ -2,6 +2,7 @@
 fidelity.py: Fidelity broker class
 """
 
+import contextlib
 import json
 import warnings
 from datetime import UTC, datetime
@@ -53,6 +54,22 @@ def _browser_was_closed(error: Exception) -> bool:
     """
 
     return BROWSER_CLOSED_TEXT in str(object=error)
+
+
+def _restrict(path: Path) -> None:
+    """
+    Make a captured file owner-readable only.
+
+    Captures are raw markup from a signed-in brokerage session and can contain
+    account numbers, balances, and 2FA context. Default permissions follow the
+    process umask, which is commonly world-readable.
+    :param path: The file to restrict
+    """
+
+    # Best-effort: a filesystem without POSIX permissions must not turn a
+    # diagnostic capture into a failure.
+    with contextlib.suppress(OSError):
+        path.chmod(mode=0o600)
 
 
 class Fidelity(Connection):
@@ -428,6 +445,7 @@ class Fidelity(Connection):
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(data=self.active_page.content(), encoding="utf-8")
+            _restrict(path=target)
 
         except Exception as e:
             self.logger.fail(msg=f"Could not capture the page: {e}")
@@ -438,6 +456,7 @@ class Fidelity(Connection):
         try:
             shot: Path = target.with_suffix(suffix=".png")
             self.active_page.screenshot(path=str(object=shot))
+            _restrict(path=shot)
             self.logger.fail(msg=f"Saved a screenshot to {shot}")
 
         except Exception:

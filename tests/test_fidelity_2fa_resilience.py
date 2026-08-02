@@ -99,6 +99,24 @@ class CapturePageTests(unittest.TestCase):
             saved.unlink(missing_ok=True)
             saved.with_suffix(".png").unlink(missing_ok=True)
 
+    def test_captures_are_owner_readable_only(self) -> None:
+        # Raw markup from a signed-in brokerage session: account numbers,
+        # balances, 2FA context. It must not inherit a permissive umask.
+        broker = fidelity_mod.Fidelity()
+        broker.logger = MagicMock()
+        broker.page = MagicMock()
+        broker.active_page.content.return_value = "<html>account 1234</html>"
+
+        saved = broker.capture_page(reason="perm-test")
+
+        self.assertIsNotNone(saved)
+        assert saved is not None
+        try:
+            self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
+        finally:
+            saved.unlink(missing_ok=True)
+            saved.with_suffix(".png").unlink(missing_ok=True)
+
     def test_no_browser_returns_none_instead_of_raising(self) -> None:
         broker = fidelity_mod.Fidelity()
         broker.logger = MagicMock()
