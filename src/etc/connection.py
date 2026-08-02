@@ -104,7 +104,11 @@ class Connection:
 
     def create_conn_obj(self) -> bool:
         """
-        Create connection object
+        Create connection object.
+
+        Implementations that return False must report why -- broker_flow()
+        deliberately stays quiet so a specific message is not followed by a
+        vaguer duplicate.
         :return: bool
         :rtype:
         """
@@ -133,11 +137,25 @@ class Connection:
 
         self.broker_logger()
         self.logger.highlight(msg="Kicking off broker flow")
-        if self.create_conn_obj() and self.login():
-            if self.module:
-                self.call_modules()
-            else:
-                self.call_cmd_args()
+
+        # Previously this was a single `if ... and ...` with no else, so a run
+        # that could not connect or could not log in simply ended -- and every
+        # progress message here is INFO, which the default log level hides. The
+        # result was a run that printed nothing at all.
+        #
+        # Neither branch logs here: create_conn_obj() and login() each own
+        # reporting their own failure, so adding a generic message would print
+        # a second, vaguer line for the same problem.
+        if not self.create_conn_obj():
+            return
+
+        if not self.login():
+            return
+
+        if self.module:
+            self.call_modules()
+        else:
+            self.call_cmd_args()
 
     def call_cmd_args(self) -> None:
         """
@@ -281,9 +299,19 @@ class Connection:
 
         for cred_id in self.args.cred_id:
             if str(object=cred_id).lower() == "all":
-                creds.extend(self.db.get_credentials())
+                found = self.db.get_credentials()
             else:
-                creds.extend(self.db.get_credentials(filter_term=(cred_id)))
+                found = self.db.get_credentials(filter_term=(cred_id))
+
+            if not found:
+                if str(object=cred_id).lower() == "all":
+                    self.logger.fail(msg="No credentials stored in the database.")
+                else:
+                    self.logger.fail(
+                        msg=f"No credential in the database with id {cred_id}"
+                    )
+
+            creds.extend(found)
 
         for cred in creds:
             cred_len: int = len(cred)
@@ -425,6 +453,27 @@ class Connection:
             t_list.extend(t)
 
         if not u_list:
+            # Reported at fail level deliberately: this is the most common
+            # reason a run does nothing, and the INFO-level progress messages
+            # above are hidden at the default log level.
+            requested = getattr(self.args, "cred_id", None)
+
+            if requested:
+                self.logger.fail(
+                    msg=(
+                        f"No stored credential matched {list(requested)}. Add one "
+                        f"with: stonksmithdb -> broker {self.broker.lower()} -> "
+                        "add creds <username>"
+                    )
+                )
+            else:
+                self.logger.fail(
+                    msg=(
+                        "No credentials supplied. Pass -u and -p, or store one in "
+                        "stonksmithdb and select it with -id."
+                    )
+                )
+
             return False
 
         # Credentials are paired positionally. zip() truncates to the shortest
@@ -440,11 +489,25 @@ class Connection:
 
         # The second column ("owned") is part of the credential-tuple contract
         # but is always False today, so nothing consumes it.
+        attempted = 0
+        succeeded = False
+
         for u, _owned, s, t in zip(u_list, o_list, s_list, t_list, strict=False):
+            attempted += 1
             if self.try_credentials(username=u, secret=s, cred_type=t):
+                succeeded = True
                 self.username = u
                 self.password = s
                 if not getattr(self.args, "continue_on_success", False):
                     return True
 
+        # With continue_on_success the loop runs to the end even after a
+        # success, so the outcome has to be tracked rather than inferred from
+        # falling out of the loop.
+        if succeeded:
+            return True
+
+        self.logger.fail(
+            msg=f"Login failed for all {attempted} credential(s) on {self.broker}."
+        )
         return False
