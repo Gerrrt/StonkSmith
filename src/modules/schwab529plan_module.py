@@ -13,7 +13,8 @@ from brokers.schwab529plan.parser import Parser
 from brokers.schwab529plan.saver import Saver
 from etc.connection import Connection
 from etc.context import BrokerDbProtocol, Context
-from helpers.schwab529plan import clean_up
+from helpers.schwab529plan import account_label, clean_up
+from helpers.sheets import SheetsUnavailable
 
 
 class Schwab529Module:
@@ -117,9 +118,11 @@ class Schwab529Module:
                 "save_account_data. Skipping DB save.",
             )
         else:
-            for item in balances:
+            for index, item in enumerate(balances):
                 db.save_account_data(
-                    account_name=item.get("Title"),
+                    account_name=account_label(
+                        beneficiaries=beneficiaries, balance=item, index=index
+                    ),
                     balance=item.get("Amount"),
                     timestamp=timestamp,
                 )
@@ -138,7 +141,13 @@ class Schwab529Module:
 
             context.log.success(msg="Google Sheets updated successfully!")
 
-        except OSError as e:
+        except SheetsUnavailable as e:
+            context.log.fail(msg=f"Google Sheets sync skipped: {e}")
+
+        except Exception as e:
+            # Deliberately broad: the scrape is already saved to the broker
+            # database above, so a Sheets problem must not fail the run or bury
+            # the result under a traceback from gspread/google-auth internals.
             context.log.fail(msg=f"Google Sheets sync failed: {e}")
 
         context.log.success(msg="Schwab529Plan sync complete.")
