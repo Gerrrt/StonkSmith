@@ -608,9 +608,11 @@ class Fidelity(Connection):
         """
         Save the current page so selectors can be fixed against real markup.
 
-        The module-level DEBUG_DUMP option is useless for login problems,
-        because modules only run *after* a successful login. This writes the
-        HTML (and a screenshot when possible) from inside the login flow.
+        Writes the HTML, and a screenshot when possible, from wherever the run
+        got stuck -- including inside the login flow, which a module-level
+        diagnostic cannot reach because modules only run *after* a successful
+        login. modules/fidelity_module.py calls this too when a scrape finds
+        nothing.
         :param reason: Short slug describing why the capture happened
         :return: Path to the saved HTML, or None if nothing could be captured
         """

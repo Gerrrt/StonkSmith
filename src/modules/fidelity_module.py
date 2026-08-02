@@ -31,7 +31,7 @@ ACCOUNT_BALANCE_SELECTORS: tuple[str, ...] = (
 )
 
 
-def capture_summary(connection: Connection) -> Any:
+def capture_summary(connection: Connection) -> str | None:
     """Save the rendered page so selectors can be fixed from real markup.
 
     Reuses the broker's capture, which writes the HTML and a screenshot to
@@ -41,14 +41,17 @@ def capture_summary(connection: Connection) -> Any:
         connection (Connection): The live broker.
 
     Returns:
-        Any: Path to the saved HTML, or None if it could not be captured.
+        str | None: Path to the saved HTML, or None if it could not be
+        captured. The broker returns a Path; it is normalised to str here
+        because the value is only ever displayed.
 
     """
     capture = getattr(connection, "capture_page", None)
     if not callable(capture):
         return None
 
-    return capture(reason="no-accounts")
+    saved = capture(reason="no-accounts")
+    return str(object=saved) if saved else None
 
 
 class FidelityModule:
@@ -122,7 +125,7 @@ class FidelityModule:
             # was useless twice over: the dump logged at INFO, which the default
             # log level hides, and 4000 chars of console output is not something
             # selectors can be fixed from anyway.
-            saved: Any = capture_summary(connection=connection)
+            saved: str | None = capture_summary(connection=connection)
             where: str = f" Page markup saved to {saved}." if saved else ""
             context.log.fail(
                 msg=(
