@@ -133,11 +133,24 @@ class Connection:
 
         self.broker_logger()
         self.logger.highlight(msg="Kicking off broker flow")
-        if self.create_conn_obj() and self.login():
-            if self.module:
-                self.call_modules()
-            else:
-                self.call_cmd_args()
+
+        # Each failure is reported at fail level. Previously this was a single
+        # `if ... and ...` with no else, so a run that could not connect or
+        # could not log in simply ended -- and every progress message here is
+        # INFO, which the default log level hides. The result was a run that
+        # printed nothing at all.
+        if not self.create_conn_obj():
+            self.logger.fail(msg=f"Could not establish a connection to {self.broker}.")
+            return
+
+        if not self.login():
+            # login() has already explained why.
+            return
+
+        if self.module:
+            self.call_modules()
+        else:
+            self.call_cmd_args()
 
     def call_cmd_args(self) -> None:
         """
@@ -281,9 +294,14 @@ class Connection:
 
         for cred_id in self.args.cred_id:
             if str(object=cred_id).lower() == "all":
-                creds.extend(self.db.get_credentials())
+                found = self.db.get_credentials()
             else:
-                creds.extend(self.db.get_credentials(filter_term=(cred_id)))
+                found = self.db.get_credentials(filter_term=(cred_id))
+
+            if not found:
+                self.logger.fail(msg=f"No credential in the database with id {cred_id}")
+
+            creds.extend(found)
 
         for cred in creds:
             cred_len: int = len(cred)
@@ -425,6 +443,27 @@ class Connection:
             t_list.extend(t)
 
         if not u_list:
+            # Reported at fail level deliberately: this is the most common
+            # reason a run does nothing, and the INFO-level progress messages
+            # above are hidden at the default log level.
+            requested = getattr(self.args, "cred_id", None)
+
+            if requested:
+                self.logger.fail(
+                    msg=(
+                        f"No stored credential matched {list(requested)}. Add one "
+                        f"with: stonksmithdb -> broker {self.broker.lower()} -> "
+                        "add creds <username>"
+                    )
+                )
+            else:
+                self.logger.fail(
+                    msg=(
+                        "No credentials supplied. Pass -u and -p, or store one in "
+                        "stonksmithdb and select it with -id."
+                    )
+                )
+
             return False
 
         # Credentials are paired positionally. zip() truncates to the shortest
@@ -440,11 +479,17 @@ class Connection:
 
         # The second column ("owned") is part of the credential-tuple contract
         # but is always False today, so nothing consumes it.
+        attempted = 0
+
         for u, _owned, s, t in zip(u_list, o_list, s_list, t_list, strict=False):
+            attempted += 1
             if self.try_credentials(username=u, secret=s, cred_type=t):
                 self.username = u
                 self.password = s
                 if not getattr(self.args, "continue_on_success", False):
                     return True
 
+        self.logger.fail(
+            msg=f"Login failed for all {attempted} credential(s) on {self.broker}."
+        )
         return False
