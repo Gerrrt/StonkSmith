@@ -103,6 +103,22 @@ command line:
 uv run stonksmith schwab529plan -M schwab529plan -id 1
 ```
 
+### Fidelity
+
+Fidelity fronts its login with Akamai Bot Manager and ThreatMetrix, which reject
+a scripted sign-in before the form renders. Sign in yourself once; StonkSmith
+reuses the session afterwards:
+
+```bash
+uv run stonksmith fidelity -M fidelity --manual-login
+```
+
+A browser window opens. Sign in as normal, including 2FA. Once the portfolio
+summary loads, StonkSmith takes over, saves the session, and scrapes. Later runs
+reuse the saved session and only prompt again when it expires.
+
+`--manual-login` implies `--headed` and needs no stored credential.
+
 Manage stored credentials and scraped balances:
 
 ```bash

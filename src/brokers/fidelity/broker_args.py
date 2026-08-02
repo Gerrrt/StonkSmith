@@ -34,8 +34,18 @@ def broker_args(
         description="Specific flags for Fidelity accounts",
     )
 
-    # Only flags that are actually consumed belong here: --headed is read by
-    # Fidelity.getDriver(). A declared-but-unread flag silently does nothing.
+    # Only flags that are actually consumed belong here: a declared-but-unread
+    # flag silently does nothing.
+    access_group.add_argument(
+        "--manual-login",
+        action="store_true",
+        help=(
+            "Sign in by hand in the browser window, then let StonkSmith reuse "
+            "that session on later runs. Fidelity's bot protection rejects "
+            "automated sign-in, so this is the supported path. Implies --headed."
+        ),
+    )
+
     access_group.add_argument(
         "--headed",
         action="store_true",
