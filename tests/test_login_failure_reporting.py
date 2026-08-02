@@ -105,13 +105,48 @@ class LoginFailureReportingTests(unittest.TestCase):
         self.assertEqual(conn.username, "alice")
         self.assertEqual(self.capture.messages, [])
 
-    def test_broker_flow_reports_a_connection_failure(self) -> None:
+    def test_broker_flow_does_not_duplicate_a_connection_failure(self) -> None:
+        # create_conn_obj() owns reporting its own failure; broker_flow() adding
+        # a generic line would print a second, vaguer message for one problem.
         conn = self._conn(_NoCreds())
         conn.create_conn_obj = MagicMock(return_value=False)
+        conn.login = MagicMock()
 
         conn.broker_flow()
 
-        self.assertIn("Could not establish a connection", self._logged())
+        conn.login.assert_not_called()
+        self.assertEqual(self.capture.messages, [])
+
+    def test_all_credentials_failing_reports_once(self) -> None:
+        conn = self._conn(_OneCred())
+        conn.args.cred_id = ["1"]
+        conn.plaintext_login = MagicMock(return_value=False)
+
+        conn.broker_flow()
+
+        failures = [m for m in self.capture.messages if "Login failed for all" in m]
+        self.assertEqual(len(failures), 1)
+
+    def test_continue_on_success_still_reports_success(self) -> None:
+        # The loop runs to the end even after a success, so the outcome has to
+        # be tracked; otherwise a successful login reported as a total failure.
+        conn = self._conn(_OneCred())
+        conn.args.cred_id = ["1"]
+        conn.args.continue_on_success = True
+        conn.plaintext_login = MagicMock(return_value=True)
+
+        self.assertTrue(conn.login())
+        self.assertNotIn("Login failed for all", self._logged())
+
+    def test_id_all_with_empty_database_says_so(self) -> None:
+        conn = self._conn(_NoCreds())
+        conn.args.cred_id = ["all"]
+
+        conn.login()
+
+        logged = self._logged()
+        self.assertIn("No credentials stored in the database", logged)
+        self.assertNotIn("with id all", logged, "'all' is not an id")
 
     def test_broker_flow_does_not_run_modules_when_login_fails(self) -> None:
         conn = self._conn(_NoCreds())
