@@ -86,6 +86,14 @@ class Fidelity(Connection):
         try:
             response: Response = self.session.get(url=self.login_url, timeout=10)
             if not response.ok:
+                # broker_flow() no longer logs a generic connection failure, so
+                # this path has to report itself.
+                self.logger.fail(
+                    msg=(
+                        f"{self.broker} sign-in page returned HTTP "
+                        f"{response.status_code}."
+                    )
+                )
                 return False
 
         except RequestException as e:

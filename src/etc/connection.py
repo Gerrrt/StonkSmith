@@ -104,7 +104,11 @@ class Connection:
 
     def create_conn_obj(self) -> bool:
         """
-        Create connection object
+        Create connection object.
+
+        Implementations that return False must report why -- broker_flow()
+        deliberately stays quiet so a specific message is not followed by a
+        vaguer duplicate.
         :return: bool
         :rtype:
         """
@@ -134,17 +138,18 @@ class Connection:
         self.broker_logger()
         self.logger.highlight(msg="Kicking off broker flow")
 
-        # Each failure is reported at fail level. Previously this was a single
-        # `if ... and ...` with no else, so a run that could not connect or
-        # could not log in simply ended -- and every progress message here is
-        # INFO, which the default log level hides. The result was a run that
-        # printed nothing at all.
+        # Previously this was a single `if ... and ...` with no else, so a run
+        # that could not connect or could not log in simply ended -- and every
+        # progress message here is INFO, which the default log level hides. The
+        # result was a run that printed nothing at all.
+        #
+        # Neither branch logs here: create_conn_obj() and login() each own
+        # reporting their own failure, so adding a generic message would print
+        # a second, vaguer line for the same problem.
         if not self.create_conn_obj():
-            self.logger.fail(msg=f"Could not establish a connection to {self.broker}.")
             return
 
         if not self.login():
-            # login() has already explained why.
             return
 
         if self.module:
@@ -299,7 +304,12 @@ class Connection:
                 found = self.db.get_credentials(filter_term=(cred_id))
 
             if not found:
-                self.logger.fail(msg=f"No credential in the database with id {cred_id}")
+                if str(object=cred_id).lower() == "all":
+                    self.logger.fail(msg="No credentials stored in the database.")
+                else:
+                    self.logger.fail(
+                        msg=f"No credential in the database with id {cred_id}"
+                    )
 
             creds.extend(found)
 
@@ -480,14 +490,22 @@ class Connection:
         # The second column ("owned") is part of the credential-tuple contract
         # but is always False today, so nothing consumes it.
         attempted = 0
+        succeeded = False
 
         for u, _owned, s, t in zip(u_list, o_list, s_list, t_list, strict=False):
             attempted += 1
             if self.try_credentials(username=u, secret=s, cred_type=t):
+                succeeded = True
                 self.username = u
                 self.password = s
                 if not getattr(self.args, "continue_on_success", False):
                     return True
+
+        # With continue_on_success the loop runs to the end even after a
+        # success, so the outcome has to be tracked rather than inferred from
+        # falling out of the loop.
+        if succeeded:
+            return True
 
         self.logger.fail(
             msg=f"Login failed for all {attempted} credential(s) on {self.broker}."
