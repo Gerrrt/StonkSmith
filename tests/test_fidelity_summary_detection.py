@@ -63,6 +63,20 @@ class SummaryPageDetectionTests(unittest.TestCase):
         self.assertTrue(_broker(SUMMARY_URL, SUMMARY_BODY).on_summary_page())
 
 
+class SummaryPathEdgeCaseTests(unittest.TestCase):
+    def test_paths_that_only_start_the_same_way_are_rejected(self) -> None:
+        base = "https://digital.fidelity.com/ftgw/digital"
+
+        self.assertTrue(fidelity_mod._is_summary_path(url=f"{base}/portfolio/summary"))
+        self.assertTrue(fidelity_mod._is_summary_path(url=f"{base}/portfolio/summary/"))
+        self.assertFalse(
+            fidelity_mod._is_summary_path(url=f"{base}/portfolio/summary2")
+        )
+        self.assertFalse(
+            fidelity_mod._is_summary_path(url=f"{base}/portfolio/summary/extra")
+        )
+
+
 class SessionIsLiveTests(unittest.TestCase):
     def test_signed_out_session_is_not_live(self) -> None:
         broker = _broker(LOGIN_URL, LOGIN_BODY)
@@ -85,6 +99,24 @@ class SessionIsLiveTests(unittest.TestCase):
         broker = _broker(
             SUMMARY_URL, "<html>can't complete this action right now</html>"
         )
+
+        self.assertFalse(broker.session_is_live())
+
+    def test_unreadable_page_is_not_live(self) -> None:
+        # Fails closed. Treating an unreadable page as authenticated would skip
+        # the sign-in and scrape whatever happened to be on screen.
+        from playwright.sync_api import Error as PlaywrightError
+
+        broker = _broker(SUMMARY_URL, SUMMARY_BODY)
+        broker.active_page.content.side_effect = PlaywrightError("gone")
+
+        self.assertFalse(broker.session_is_live())
+
+    def test_navigation_failure_is_not_live(self) -> None:
+        from playwright.sync_api import Error as PlaywrightError
+
+        broker = _broker(SUMMARY_URL, SUMMARY_BODY)
+        broker.active_page.goto.side_effect = PlaywrightError("net::ERR")
 
         self.assertFalse(broker.session_is_live())
 

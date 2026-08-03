@@ -76,6 +76,21 @@ SIGN_IN_MARKERS: tuple[str, ...] = (
 MANUAL_SESSION_LABEL = "manual session"
 
 
+def _is_summary_path(url: str) -> bool:
+    """
+    Whether a URL points at the portfolio summary endpoint itself.
+
+    Matches the end of the path, so neither the sign-in redirect (which carries
+    the summary URL in AuthRedUrl) nor a longer path that merely starts the
+    same way -- /portfolio/summary2, /portfolio/summary/extra -- is mistaken
+    for it.
+    :param url: The URL to test
+    :return: True when the path is the summary endpoint
+    """
+
+    return urlparse(url=url).path.rstrip("/").endswith(SUMMARY_PATH)
+
+
 def _browser_was_closed(error: Exception) -> bool:
     """
     Whether a Playwright error means the browser went away.
@@ -234,13 +249,22 @@ class Fidelity(Connection):
     def on_summary_page(self) -> bool:
         """
         Whether the browser is actually on the portfolio summary.
-
-        Compares the URL *path*, because the sign-in redirect carries the
-        summary URL in its AuthRedUrl query parameter.
         :return: True when the current path is the summary page
         """
 
-        return SUMMARY_PATH in urlparse(url=self.active_page.url).path
+        return _is_summary_path(url=self.active_page.url)
+
+    def page_body(self) -> str | None:
+        """
+        The current page's markup, lowercased.
+        :return: The body, or None if the page could not be read
+        """
+
+        try:
+            return self.active_page.content().lower()
+
+        except PlaywrightError:
+            return None
 
     def shows_sign_in_form(self) -> bool:
         """
@@ -248,18 +272,18 @@ class Fidelity(Connection):
         :return: True when credentials are being asked for
         """
 
-        try:
-            body: str = self.active_page.content().lower()
-
-        except PlaywrightError:
-            return False
-
-        return any(marker in body for marker in SIGN_IN_MARKERS)
+        body: str | None = self.page_body()
+        return body is not None and any(m in body for m in SIGN_IN_MARKERS)
 
     def session_is_live(self) -> bool:
         """
         Whether the saved cookies still authenticate: navigating straight to
         the portfolio summary lands there rather than bouncing to sign-in.
+
+        Fails closed. Every uncertain outcome -- navigation error, unreadable
+        page -- reports "not live", because the cost of being wrong is asking
+        for a sign-in that was not needed, while the opposite mistake scrapes
+        the login page and reports it as missing accounts.
         :return: True if already signed in
         """
 
@@ -269,12 +293,22 @@ class Fidelity(Connection):
         except PlaywrightError:
             return False
 
-        if not self.on_summary_page() or self.page_was_refused():
+        if not self.on_summary_page():
+            return False
+
+        # Read once and judge from that: three separate content() calls could
+        # each see a different page, and an unreadable one must not read as
+        # authenticated.
+        body: str | None = self.page_body()
+        if body is None:
+            return False
+
+        if any(marker in body for marker in REFUSED_PAGE_MARKERS):
             return False
 
         # Belt and braces: a future redirect that preserved the path would
         # still be caught by the sign-in form being on screen.
-        return not self.shows_sign_in_form()
+        return not any(marker in body for marker in SIGN_IN_MARKERS)
 
     def manual_login(self) -> bool:
         """
@@ -311,7 +345,7 @@ class Fidelity(Connection):
             # sign-in URL embeds the summary URL in AuthRedUrl, so "**summary**"
             # matches immediately and the wait returns before any sign-in.
             self.active_page.wait_for_url(
-                url=lambda url: SUMMARY_PATH in urlparse(url=url).path,
+                url=lambda url: _is_summary_path(url=url),
                 timeout=MANUAL_LOGIN_TIMEOUT_MS,
             )
 
@@ -615,13 +649,8 @@ class Fidelity(Connection):
         :return: True when the sign-in was refused
         """
 
-        try:
-            body: str = self.active_page.content().lower()
-
-        except PlaywrightError:
-            return False
-
-        return any(marker in body for marker in REFUSED_PAGE_MARKERS)
+        body: str | None = self.page_body()
+        return body is not None and any(m in body for m in REFUSED_PAGE_MARKERS)
 
     def save_session(self) -> bool:
         """
