@@ -59,7 +59,7 @@ def broker_args(
         help=(
             "Browser to drive. 'chrome' uses the real Google Chrome binary "
             "against a persistent profile, which fingerprints best against bot "
-            "protection but must be installed (`playwright install chrome`); "
+            "protection but must be installed (`uv run playwright install chrome`); "
             "'chromium' is the bundled build, also with a persistent profile."
         ),
     )

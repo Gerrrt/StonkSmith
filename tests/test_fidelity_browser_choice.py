@@ -118,15 +118,82 @@ class BrowserSelectionTests(unittest.TestCase):
         self.assertTrue(str(broker.chrome_profile_dir()).endswith("chrome-profile"))
 
 
+class SessionPersistenceModeTests(unittest.TestCase):
+    """A persistent profile is the cookie store; do not also write a jar."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _broker(self, persistent: bool):
+        broker = fidelity_mod.Fidelity()
+        broker.logger = MagicMock()
+        broker.context = MagicMock()
+        broker.profile_path = self.tmp / "Fidelity.json"
+        broker.persistent_profile = persistent
+        return broker
+
+    def test_firefox_mode_writes_the_storage_state(self) -> None:
+        broker = self._broker(persistent=False)
+
+        self.assertTrue(broker.save_session())
+        broker.context.storage_state.assert_called_once()
+
+    def test_persistent_mode_writes_no_storage_state(self) -> None:
+        # Otherwise the next Firefox run loads a Chromium cookie jar.
+        broker = self._broker(persistent=True)
+
+        self.assertTrue(broker.save_session())
+        broker.context.storage_state.assert_not_called()
+        self.assertFalse(broker.profile_path.exists())
+
+
+class UnknownBrowserTests(unittest.TestCase):
+    def test_unknown_browser_reports_the_valid_choices(self) -> None:
+        # argparse guards the CLI; a stale config must not KeyError.
+        broker = fidelity_mod.Fidelity()
+        broker.logger = MagicMock()
+        broker.stealth = MagicMock()
+        broker.args = Namespace(
+            browser="netscape", headed=False, manual_login=False, profile_dir=None
+        )
+
+        with (
+            patch.object(fidelity_mod, "sync_playwright", return_value=MagicMock()),
+            self.assertRaises(RuntimeError) as caught,
+        ):
+            broker.getDriver()
+
+        message = str(caught.exception)
+        self.assertIn("netscape", message)
+        self.assertIn("firefox", message)
+        self.assertIn("chrome", message)
+
+
 class MissingBrowserGuidanceTests(unittest.TestCase):
     """Playwright downloads browsers separately; say which command to run."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
 
     def _broker_that_fails_with(self, message: str, browser: str):
         broker = fidelity_mod.Fidelity()
         broker.logger = MagicMock()
         broker.stealth = MagicMock()
+        # profile_dir must never be None here: start_chromium() creates the
+        # directory before launching, and the default lives under ~/.stonksmith.
         broker.args = Namespace(
-            browser=browser, headed=False, manual_login=False, profile_dir=None
+            browser=browser,
+            headed=False,
+            manual_login=False,
+            profile_dir=str(self.tmp / "profile"),
         )
         playwright = MagicMock()
         playwright.chromium.launch_persistent_context.side_effect = PlaywrightError(

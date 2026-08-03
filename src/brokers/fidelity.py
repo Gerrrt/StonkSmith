@@ -154,6 +154,9 @@ class Fidelity(Connection):
         # that even `--list-modules` spawned a browser, and the instance had no
         # owner responsible for closing it. broker_flow() starts it instead, and
         # teardown() always closes it.
+        # True once a Chromium-family persistent profile is in use: that
+        # directory holds the cookies, so no storage_state file is written.
+        self.persistent_profile: bool = False
         self.playwright: Playwright | None = None
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
@@ -449,8 +452,17 @@ class Fidelity(Connection):
 
         if browser_name == "firefox":
             self.start_firefox(headed=headed)
-        else:
+
+        elif browser_name in CHROMIUM_CHANNELS:
             self.start_chromium(headed=headed, channel=CHROMIUM_CHANNELS[browser_name])
+
+        else:
+            # argparse choices cover the CLI, but a stale config or a
+            # programmatic caller deserves a message, not a KeyError.
+            known: str = ", ".join(["firefox", *CHROMIUM_CHANNELS])
+            raise RuntimeError(
+                f"Unknown browser {browser_name!r}; choose one of: {known}"
+            )
 
         if self.context is None:
             raise RuntimeError(f"{browser_name} did not produce a browser context")
@@ -537,6 +549,7 @@ class Fidelity(Connection):
 
         # A persistent context owns its browser; there is no separate handle.
         self.browser = None
+        self.persistent_profile = True
         self.page = (
             self.context.pages[0] if self.context.pages else self.context.new_page()
         )
@@ -766,6 +779,12 @@ class Fidelity(Connection):
 
         if self.context is None:
             return False
+
+        if self.persistent_profile:
+            # Cookies already live in the profile directory. Writing
+            # storage_state as well would leave a Chromium jar behind that the
+            # next Firefox run would load as if it were its own.
+            return True
 
         try:
             self.profile_path.parent.mkdir(parents=True, exist_ok=True)
