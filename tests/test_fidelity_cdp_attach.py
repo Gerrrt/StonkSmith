@@ -202,6 +202,36 @@ class MissingEndpointGuidanceTests(unittest.TestCase):
         # Chrome 136+ refuses remote debugging on the default profile.
         self.assertIn("--user-data-dir", message)
 
+    def test_failing_after_connect_does_not_close_the_operators_browser(self) -> None:
+        # create_conn_obj() calls teardown() when getDriver() raises. If the
+        # attached flag were set only at the end of a successful attach, this
+        # path would close a window the operator opened.
+        broker = fidelity_mod.Fidelity()
+        broker.logger = MagicMock()
+        broker.stealth = MagicMock()
+        broker.args = Namespace(
+            browser="cdp",
+            headed=False,
+            manual_login=False,
+            cdp_url=None,
+            profile_dir=None,
+        )
+
+        playwright = MagicMock()
+        browser = playwright.chromium.connect_over_cdp.return_value
+        browser.contexts = []  # connected, but no window -> raises
+
+        with patch.object(
+            fidelity_mod,
+            "sync_playwright",
+            return_value=MagicMock(start=lambda: playwright),
+        ):
+            # The real path a user hits: create_conn_obj catches and tears down.
+            broker.session.get = MagicMock(return_value=MagicMock(ok=True))
+            self.assertFalse(broker.create_conn_obj())
+
+        browser.close.assert_not_called()
+
     def test_attached_browser_with_no_window_is_reported(self) -> None:
         broker = fidelity_mod.Fidelity()
         broker.logger = MagicMock()

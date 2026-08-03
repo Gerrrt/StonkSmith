@@ -619,6 +619,14 @@ class Fidelity(Connection):
                 "then sign in to Fidelity in that window and re-run."
             ) from e
 
+        # Set before any further validation. create_conn_obj() calls teardown()
+        # when this method raises, and teardown closes self.browser unless it
+        # knows the session is attached -- which would shut the operator's
+        # window on the error paths below.
+        self.attached = True
+        # The operator's own profile is the cookie store.
+        self.persistent_profile = True
+
         if not self.browser.contexts:
             raise RuntimeError(
                 "Attached, but that Chrome has no open window. Open a tab and "
@@ -631,10 +639,6 @@ class Fidelity(Connection):
         self.page = (
             self.context.pages[0] if self.context.pages else self.context.new_page()
         )
-
-        self.attached = True
-        # The operator's own profile is the cookie store.
-        self.persistent_profile = True
 
     def cdp_launch_command(self) -> str:
         """
