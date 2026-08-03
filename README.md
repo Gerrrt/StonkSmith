@@ -119,6 +119,20 @@ reuse the saved session and only prompt again when it expires.
 
 `--manual-login` implies `--headed` and needs no stored credential.
 
+Fidelity's bot protection may refuse to render the login form to Playwright's
+bundled Firefox at all. If the browser shows *"Sorry, we can't complete this
+action right now"*, try a Chromium-family browser with a persistent profile:
+
+```bash
+uv run playwright install chrome
+uv run stonksmith fidelity -M fidelity --manual-login --browser chrome
+```
+
+`--browser chrome` drives the real Google Chrome binary, which fingerprints
+better than bundled builds; `--browser chromium` uses Playwright's own build.
+Both keep their profile in `~/.stonksmith/playwright/chrome-profile`, so cookies
+and history accumulate between runs. `--profile-dir` points elsewhere.
+
 Manage stored credentials and scraped balances:
 
 ```bash

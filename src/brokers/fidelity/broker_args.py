@@ -52,4 +52,27 @@ def broker_args(
         help="Run the browser headed so the login flow can be watched",
     )
 
+    access_group.add_argument(
+        "--browser",
+        choices=("firefox", "chromium", "chrome"),
+        default="firefox",
+        help=(
+            "Browser to drive. 'chrome' uses the real Google Chrome binary "
+            "against a persistent profile, which fingerprints best against bot "
+            "protection but must be installed (`playwright install chrome`); "
+            "'chromium' is the bundled build, also with a persistent profile."
+        ),
+    )
+
+    access_group.add_argument(
+        "--profile-dir",
+        type=str,
+        help=(
+            "Persistent profile directory for --browser chromium/chrome. "
+            "Defaults to ~/.stonksmith/playwright/chrome-profile. Point it at a "
+            "real browser profile only if that browser is closed while "
+            "StonkSmith runs."
+        ),
+    )
+
     return subparsers
