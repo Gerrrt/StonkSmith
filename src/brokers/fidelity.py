@@ -271,13 +271,18 @@ class Fidelity(Connection):
         """
         Authenticate, either by reusing/obtaining a human session or by the
         normal credential flow.
+
+        Attaching over CDP means the operator owns the sign-in, so it implies
+        the human-session path: requiring a stored credential there would be
+        asking for something this flow never uses. create_conn_obj() runs
+        before this, so self.attached is already known.
         :return: True when the browser holds an authenticated session
         """
 
-        if not getattr(self.args, "manual_login", False):
-            return super().login()
+        if self.attached or getattr(self.args, "manual_login", False):
+            return self.manual_login()
 
-        return self.manual_login()
+        return super().login()
 
     def on_summary_page(self) -> bool:
         """

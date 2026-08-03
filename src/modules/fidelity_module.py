@@ -4,6 +4,7 @@
 """Module to scrape account balances from the Fidelity portfolio summary."""
 
 import datetime
+import re
 from typing import Any, ClassVar
 
 from brokers.fidelity.saver import Saver
@@ -11,24 +12,35 @@ from etc.connection import Connection
 from etc.context import BrokerDbProtocol, Context
 from helpers.sheets import SheetsUnavailable
 
-# Fidelity renders the portfolio summary with their "PVD" design system. These
-# selectors are the scrape surface and are the first thing to check when a run
-# returns zero accounts -- they have NOT been verified against a live session.
-# A run that finds nothing writes the rendered page to ~/.stonksmith/logs so the
-# selectors can be corrected against real markup.
+# Verified against a signed-in portfolio summary. The account list is Fidelity's
+# "acct-selector" component: one __acct-wrapper per account, each carrying a
+# name, an account number and a balance. A run that finds nothing writes the
+# rendered page to ~/.stonksmith/logs so these can be corrected again.
 ACCOUNT_ROW_SELECTORS: tuple[str, ...] = (
-    "[data-testid='account-row']",
-    ".acct-selector__acct-row",
-    ".pvd-table__row",
+    ".acct-selector__acct-wrapper",
+    ".acct-selector__acct-content",
 )
-ACCOUNT_NAME_SELECTORS: tuple[str, ...] = (
-    "[data-testid='account-name']",
-    ".acct-selector__acct-name",
-)
-ACCOUNT_BALANCE_SELECTORS: tuple[str, ...] = (
-    "[data-testid='account-balance']",
-    ".acct-selector__acct-balance",
-)
+ACCOUNT_NAME_SELECTORS: tuple[str, ...] = (".acct-selector__acct-name",)
+ACCOUNT_BALANCE_SELECTORS: tuple[str, ...] = (".acct-selector__acct-balance",)
+ACCOUNT_NUMBER_SELECTORS: tuple[str, ...] = (".acct-selector__acct-num",)
+
+#: The balance element is written for screen readers and reads
+#: ", balance:  $1,234.56", so the amount has to be pulled out of the sentence.
+MONEY_PATTERN = re.compile(r"-?\$\s*-?[\d,]+(?:\.\d+)?")
+
+
+def clean_money(text: str) -> str:
+    """Pull the amount out of Fidelity's screen-reader balance text.
+
+    Args:
+        text (str): Raw element text, e.g. ", balance:  $1,234.56".
+
+    Returns:
+        str: Just the amount, or the stripped input if no amount is present.
+
+    """
+    found = MONEY_PATTERN.search(text)
+    return found.group(0).replace(" ", "") if found else text.strip()
 
 
 def capture_summary(connection: Connection) -> str | None:
@@ -198,12 +210,17 @@ class FidelityModule:
 
         for row in rows:
             name: str = self._first_text(row=row, selectors=ACCOUNT_NAME_SELECTORS)
-            balance: str = self._first_text(
-                row=row, selectors=ACCOUNT_BALANCE_SELECTORS
+            balance: str = clean_money(
+                text=self._first_text(row=row, selectors=ACCOUNT_BALANCE_SELECTORS)
             )
+            number: str = self._first_text(row=row, selectors=ACCOUNT_NUMBER_SELECTORS)
 
-            if name or balance:
-                accounts.append({"Account": name, "Balance": balance})
+            # Several Fidelity accounts can share a nickname, so the account
+            # number disambiguates them in the database and the dashboard.
+            label: str = f"{name} ({number})" if name and number else name or number
+
+            if label or balance:
+                accounts.append({"Account": label, "Balance": balance})
 
         return accounts
 
