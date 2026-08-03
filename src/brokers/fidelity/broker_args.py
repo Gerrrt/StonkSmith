@@ -54,13 +54,26 @@ def broker_args(
 
     access_group.add_argument(
         "--browser",
-        choices=("firefox", "chromium", "chrome"),
+        choices=("firefox", "cdp", "chromium", "chrome"),
         default="firefox",
         help=(
-            "Browser to drive. 'chrome' uses the real Google Chrome binary "
+            "Browser to drive. 'cdp' attaches to a Chrome you started "
+            "yourself with --remote-debugging-port and signed into, which is "
+            "the only path that survives Fidelity's bot protection. 'chrome' "
+            "launches the real Google Chrome binary "
             "against a persistent profile, which fingerprints best against bot "
             "protection but must be installed (`uv run playwright install chrome`); "
             "'chromium' is the bundled build, also with a persistent profile."
+        ),
+    )
+
+    access_group.add_argument(
+        "--cdp-url",
+        type=str,
+        help=(
+            "CDP endpoint for --browser cdp. Defaults to "
+            "http://127.0.0.1:9222. StonkSmith prints the exact Chrome launch "
+            "command if nothing is listening."
         ),
     )
 

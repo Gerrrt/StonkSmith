@@ -45,6 +45,8 @@ class FidelityLifecycleTests(unittest.TestCase):
         playwright, browser, context = MagicMock(), MagicMock(), MagicMock()
         broker.playwright, broker.browser = playwright, browser
         broker.context, broker.page = context, MagicMock()
+        # Tracing only stops if it started; getDriver() records that.
+        broker.tracing_started = True
 
         broker.teardown()
 
@@ -55,6 +57,18 @@ class FidelityLifecycleTests(unittest.TestCase):
         self.assertIsNone(broker.browser)
         self.assertIsNone(broker.playwright)
         self.assertIsNone(broker.page)
+
+    def test_teardown_skips_tracing_it_never_started(self) -> None:
+        # Tracing can be unavailable on a context we attached to rather than
+        # created; stopping it then would raise.
+        broker = fidelity_mod.Fidelity()
+        context = MagicMock()
+        broker.context = context
+        broker.tracing_started = False
+
+        broker.teardown()
+
+        context.tracing.stop.assert_not_called()
 
     def test_teardown_is_idempotent(self) -> None:
         broker = fidelity_mod.Fidelity()

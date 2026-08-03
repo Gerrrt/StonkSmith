@@ -119,6 +119,32 @@ reuse the saved session and only prompt again when it expires.
 
 `--manual-login` implies `--headed` and needs no stored credential.
 
+Fidelity's bot protection refuses the login page to any browser that automation
+launched, before credentials are ever entered. The way through is to attach to a
+Chrome you started yourself:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/.stonksmith/playwright/cdp-profile"
+```
+
+Sign in to Fidelity in that window, then:
+
+```bash
+uv run stonksmith --verbose fidelity -M fidelity --browser cdp
+```
+
+StonkSmith attaches, reuses the tab you signed in on, and never closes your
+browser. The profile persists, so later runs skip the sign-in. Chrome 136 and
+later refuse `--remote-debugging-port` on the default profile, which is why the
+dedicated `--user-data-dir` is required.
+
+`--cdp-url` points at a different endpoint; StonkSmith prints the exact launch
+command if nothing is listening.
+
+### Other browser modes
+
 Fidelity's bot protection may refuse to render the login form to Playwright's
 bundled Firefox at all. If the browser shows *"Sorry, we can't complete this
 action right now"*, try a Chromium-family browser with a persistent profile:

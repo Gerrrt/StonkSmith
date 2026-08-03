@@ -79,6 +79,14 @@ CHROMIUM_CHANNELS: dict[str, str | None] = {
     "chrome": "chrome",
 }
 
+#: Default CDP endpoint. Chrome must be started with --remote-debugging-port,
+#: and since Chrome 136 it refuses to expose that on the default profile, so a
+#: dedicated --user-data-dir is required too.
+CDP_DEFAULT_URL = "http://127.0.0.1:9222"
+
+#: Where the CDP profile lives when StonkSmith prints the launch command.
+CDP_PROFILE_DIRNAME = "cdp-profile"
+
 #: Stand-in username when the session came from a manual sign-in rather than a
 #: stored credential.
 MANUAL_SESSION_LABEL = "manual session"
@@ -157,6 +165,10 @@ class Fidelity(Connection):
         # True once a Chromium-family persistent profile is in use: that
         # directory holds the cookies, so no storage_state file is written.
         self.persistent_profile: bool = False
+        # True when attached to a browser somebody else started. Nothing we did
+        # not create gets closed.
+        self.attached: bool = False
+        self.tracing_started: bool = False
         self.playwright: Playwright | None = None
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
@@ -226,19 +238,27 @@ class Fidelity(Connection):
             # device-trust cookie) are lost otherwise.
             self.save_session()
 
-            try:
-                self.context.tracing.stop(path=str(object=self.trace_path))
+            if self.tracing_started:
+                try:
+                    self.context.tracing.stop(path=str(object=self.trace_path))
 
-            except Exception as e:
-                self.logger.fail(msg=f"Could not write Playwright trace: {e}")
+                except Exception as e:
+                    self.logger.fail(msg=f"Could not write Playwright trace: {e}")
 
-            self.context.close()
+            # Never close a window the operator opened.
+            if not self.attached:
+                self.context.close()
+
             self.context = None
 
         # A persistent context owns its browser, so self.browser is None there
-        # and closing the context above already shut the browser down.
+        # and closing the context above already shut the browser down. An
+        # attached browser belongs to the operator: disconnecting happens when
+        # playwright stops, and closing it would shut their window.
         if self.browser is not None:
-            self.browser.close()
+            if not self.attached:
+                self.browser.close()
+
             self.browser = None
 
         if self.playwright is not None:
@@ -343,12 +363,16 @@ class Fidelity(Connection):
             self.username = self.username or MANUAL_SESSION_LABEL
             return True
 
+        where: str = (
+            "the Chrome window StonkSmith is attached to"
+            if self.attached
+            else "the browser window that just opened"
+        )
         self.logger.highlight(
             msg=(
-                "Sign in to Fidelity in the browser window that just opened, "
-                "including any 2FA. StonkSmith takes over once the portfolio "
-                f"summary loads (waiting up to {MANUAL_LOGIN_TIMEOUT_MS // 60000} "
-                "minutes)."
+                f"Sign in to Fidelity in {where}, including any 2FA. StonkSmith "
+                "takes over once the portfolio summary loads (waiting up to "
+                f"{MANUAL_LOGIN_TIMEOUT_MS // 60000} minutes)."
             )
         )
 
@@ -453,13 +477,16 @@ class Fidelity(Connection):
         if browser_name == "firefox":
             self.start_firefox(headed=headed)
 
+        elif browser_name == "cdp":
+            self.attach_over_cdp()
+
         elif browser_name in CHROMIUM_CHANNELS:
             self.start_chromium(headed=headed, channel=CHROMIUM_CHANNELS[browser_name])
 
         else:
             # argparse choices cover the CLI, but a stale config or a
             # programmatic caller deserves a message, not a KeyError.
-            known: str = ", ".join(["firefox", *CHROMIUM_CHANNELS])
+            known: str = ", ".join(["firefox", "cdp", *CHROMIUM_CHANNELS])
             raise RuntimeError(
                 f"Unknown browser {browser_name!r}; choose one of: {known}"
             )
@@ -467,9 +494,19 @@ class Fidelity(Connection):
         if self.context is None:
             raise RuntimeError(f"{browser_name} did not produce a browser context")
 
-        self.context.tracing.start(
-            name="fidelity_trace", screenshots=True, snapshots=True
-        )
+        try:
+            self.context.tracing.start(
+                name="fidelity_trace", screenshots=True, snapshots=True
+            )
+
+        except PlaywrightError as e:
+            # Tracing is a diagnostic, not a requirement, and a context we
+            # attached to rather than created may not support it.
+            self.tracing_started = False
+            self.logger.highlight(msg=f"Tracing unavailable: {e}")
+
+        else:
+            self.tracing_started = True
 
         self.stealth.apply_stealth_sync(self.active_page)
 
@@ -552,6 +589,75 @@ class Fidelity(Connection):
         self.persistent_profile = True
         self.page = (
             self.context.pages[0] if self.context.pages else self.context.new_page()
+        )
+
+    def attach_over_cdp(self) -> None:
+        """
+        Attach to a Chrome the operator started and signed into themselves.
+
+        Fidelity's bot protection refuses the login page to a browser that
+        automation launched, before any credentials are entered. Attaching
+        instead of launching sidesteps that: the page load and the sign-in
+        happen in an ordinary browsing session, and StonkSmith only connects
+        afterwards to read the DOM.
+        :raises RuntimeError: if nothing is listening, or no context is open
+        """
+
+        endpoint: str = str(
+            object=getattr(self.args, "cdp_url", None) or CDP_DEFAULT_URL
+        )
+
+        assert self.playwright is not None
+
+        try:
+            self.browser = self.playwright.chromium.connect_over_cdp(endpoint)
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Nothing is listening for CDP on {endpoint}. Start Chrome with "
+                f"remote debugging first:\n\n    {self.cdp_launch_command()}\n\n"
+                "then sign in to Fidelity in that window and re-run."
+            ) from e
+
+        if not self.browser.contexts:
+            raise RuntimeError(
+                "Attached, but that Chrome has no open window. Open a tab and "
+                "sign in to Fidelity, then re-run."
+            )
+
+        # Reuse the existing context: it holds the cookies from the operator's
+        # sign-in. A new context would start empty and defeat the whole point.
+        self.context = self.browser.contexts[0]
+        self.page = (
+            self.context.pages[0] if self.context.pages else self.context.new_page()
+        )
+
+        self.attached = True
+        # The operator's own profile is the cookie store.
+        self.persistent_profile = True
+
+    def cdp_launch_command(self) -> str:
+        """
+        The command that starts Chrome with remote debugging enabled.
+
+        Chrome 136 and later refuse --remote-debugging-port on the default
+        profile, so this names a dedicated one. Signing in there once is enough:
+        the profile persists.
+        :return: A shell command
+        """
+
+        profile: Path = playwright_path / CDP_PROFILE_DIRNAME
+        port: int = (
+            urlparse(
+                url=str(object=getattr(self.args, "cdp_url", None) or CDP_DEFAULT_URL)
+            ).port
+            or 9222
+        )
+
+        return (
+            '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" '
+            f"--remote-debugging-port={port} "
+            f'--user-data-dir="{profile}"'
         )
 
     def chrome_profile_dir(self) -> Path:
