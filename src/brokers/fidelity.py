@@ -71,6 +71,14 @@ SIGN_IN_MARKERS: tuple[str, ...] = (
     "pvdccl-form",
 )
 
+#: --browser values mapped to Playwright channels. "chromium" is the bundled
+#: build; "chrome" is the real Google Chrome binary, which fingerprints much
+#: better but has to be installed separately.
+CHROMIUM_CHANNELS: dict[str, str | None] = {
+    "chromium": None,
+    "chrome": "chrome",
+}
+
 #: Stand-in username when the session came from a manual sign-in rather than a
 #: stored credential.
 MANUAL_SESSION_LABEL = "manual session"
@@ -146,6 +154,9 @@ class Fidelity(Connection):
         # that even `--list-modules` spawned a browser, and the instance had no
         # owner responsible for closing it. broker_flow() starts it instead, and
         # teardown() always closes it.
+        # True once a Chromium-family persistent profile is in use: that
+        # directory holds the cookies, so no storage_state file is written.
+        self.persistent_profile: bool = False
         self.playwright: Playwright | None = None
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
@@ -224,6 +235,8 @@ class Fidelity(Connection):
             self.context.close()
             self.context = None
 
+        # A persistent context owns its browser, so self.browser is None there
+        # and closing the context above already shut the browser down.
         if self.browser is not None:
             self.browser.close()
             self.browser = None
@@ -428,13 +441,6 @@ class Fidelity(Connection):
 
         self.playwright = sync_playwright().start()
 
-        if not self.profile_path.exists():
-            self.profile_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(
-                file=str(object=self.profile_path), mode="w", encoding="utf-8"
-            ) as f:
-                json.dump(obj={}, fp=f)
-
         # --headed exists so the login flow (and its 2FA prompt) can be
         # watched. --manual-login requires it: nobody can sign in to a window
         # they cannot see.
@@ -442,20 +448,127 @@ class Fidelity(Connection):
             getattr(self.args, "headed", False)
             or getattr(self.args, "manual_login", False)
         )
+        browser_name: str = str(object=getattr(self.args, "browser", "firefox"))
 
+        if browser_name == "firefox":
+            self.start_firefox(headed=headed)
+
+        elif browser_name in CHROMIUM_CHANNELS:
+            self.start_chromium(headed=headed, channel=CHROMIUM_CHANNELS[browser_name])
+
+        else:
+            # argparse choices cover the CLI, but a stale config or a
+            # programmatic caller deserves a message, not a KeyError.
+            known: str = ", ".join(["firefox", *CHROMIUM_CHANNELS])
+            raise RuntimeError(
+                f"Unknown browser {browser_name!r}; choose one of: {known}"
+            )
+
+        if self.context is None:
+            raise RuntimeError(f"{browser_name} did not produce a browser context")
+
+        self.context.tracing.start(
+            name="fidelity_trace", screenshots=True, snapshots=True
+        )
+
+        self.stealth.apply_stealth_sync(self.active_page)
+
+    def start_firefox(self, headed: bool) -> None:
+        """
+        Launch bundled Firefox with the saved storage state.
+        :param headed: Whether to show the window
+        """
+
+        if not self.profile_path.exists():
+            self.profile_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(
+                file=str(object=self.profile_path), mode="w", encoding="utf-8"
+            ) as f:
+                json.dump(obj={}, fp=f)
+
+        assert self.playwright is not None
         self.browser = self.playwright.firefox.launch(
             headless=not headed,
             args=["--disable-webgl", "--disable-software-rasterizer"],
         )
 
         self.context = self.browser.new_context(storage_state=self.profile_path)
+        self.page = self.context.new_page()
 
-        self.context.tracing.start(
-            name="fidelity_trace", screenshots=True, snapshots=True
+    def start_chromium(self, headed: bool, channel: str | None) -> None:
+        """
+        Launch a Chromium-family browser against a persistent profile
+        directory.
+
+        A persistent profile keeps cookies, history and local storage on disk
+        between runs, so the browser presents as one that has been used before
+        rather than a fresh install. ``channel="chrome"`` uses the real Google
+        Chrome binary, which fingerprints far better than bundled Chromium --
+        but it has to be installed.
+        :param headed: Whether to show the window
+        :param channel: Playwright browser channel, or None for bundled Chromium
+        :raises RuntimeError: if the requested channel is not installed
+        """
+
+        profile_dir: Path = self.chrome_profile_dir()
+        profile_dir.mkdir(parents=True, exist_ok=True)
+
+        assert self.playwright is not None
+
+        try:
+            self.context = self.playwright.chromium.launch_persistent_context(
+                user_data_dir=str(object=profile_dir),
+                channel=channel,
+                headless=not headed,
+                # The single most-checked automation tell.
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+
+        except PlaywrightError as e:
+            # Playwright words this two ways: "Executable doesn't exist at ..."
+            # for a bundled build, "Chromium distribution 'chrome' is not found
+            # at ..." for a channel. Both then suggest `playwright install`.
+            if not any(
+                phrase in str(object=e).lower()
+                for phrase in ("executable doesn't exist", "is not found at")
+            ):
+                raise
+
+            # Playwright downloads browsers separately, and `playwright install
+            # firefox` does not bring Chromium along. Name the exact command.
+            install: str = "chrome" if channel else "chromium"
+            raise RuntimeError(
+                f"The {install} browser is not installed. Run "
+                f"`uv run playwright install {install}` and try again"
+                + (
+                    ", or pass --browser chromium to use the bundled build."
+                    if channel
+                    else "."
+                )
+            ) from e
+
+        # A persistent context owns its browser; there is no separate handle.
+        self.browser = None
+        self.persistent_profile = True
+        self.page = (
+            self.context.pages[0] if self.context.pages else self.context.new_page()
         )
 
-        self.page = self.context.new_page()
-        self.stealth.apply_stealth_sync(self.page)
+    def chrome_profile_dir(self) -> Path:
+        """
+        Where the persistent Chromium profile lives.
+
+        Defaults to a directory StonkSmith owns. --profile-dir can point at
+        another one, including a real browser profile -- at the cost of that
+        browser needing to be closed while StonkSmith runs.
+        :return: The user-data directory
+        """
+
+        override = getattr(self.args, "profile_dir", None)
+        if override:
+            return Path(override).expanduser()
+
+        return playwright_path / "chrome-profile"
 
     @property
     def active_page(self) -> Page:
@@ -666,6 +779,12 @@ class Fidelity(Connection):
 
         if self.context is None:
             return False
+
+        if self.persistent_profile:
+            # Cookies already live in the profile directory. Writing
+            # storage_state as well would leave a Chromium jar behind that the
+            # next Firefox run would load as if it were its own.
+            return True
 
         try:
             self.profile_path.parent.mkdir(parents=True, exist_ok=True)
