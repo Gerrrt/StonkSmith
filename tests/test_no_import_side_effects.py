@@ -6,12 +6,13 @@ importing the package -- in a test, a REPL, or an editor -- mutate the user's
 real home directory. setup_tool() is now the only thing that creates anything.
 """
 
-import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+from home_isolation import isolated_home_env
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -23,7 +24,7 @@ IMPORT_EVERYTHING = (
 
 class ImportSideEffectTests(unittest.TestCase):
     def _run(self, code: str, home: str) -> subprocess.CompletedProcess:
-        env = dict(os.environ, HOME=home, PYTHONPATH=str(REPO / "src"))
+        env = isolated_home_env(home=home, PYTHONPATH=str(object=REPO / "src"))
         return subprocess.run(
             [sys.executable, "-c", code],
             env=env,
