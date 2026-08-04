@@ -17,7 +17,12 @@ from typing import Any
 from unittest.mock import patch
 
 from helpers.sheets import SheetsUnavailable
-from modules.snaptrade_module import SnapTradeModule, money, select_accounts
+from modules.snaptrade_module import (
+    SnapTradeModule,
+    money,
+    select_accounts,
+    silent_connections,
+)
 
 NOW = datetime.datetime(2026, 8, 4, 12, 0, tzinfo=datetime.UTC)
 
@@ -329,6 +334,106 @@ class SelectAccountsTests(unittest.TestCase):
         self.assertEqual(len(skipped), 3, "no account is dropped silently")
 
 
+class SilentConnectionTests(unittest.TestCase):
+    """A connection that returns nothing produces no other message at all."""
+
+    def test_a_connection_with_accounts_is_not_flagged(self) -> None:
+        self.assertEqual(silent_connections([account()], CONNECTIONS), [])
+
+    def test_an_enabled_connection_with_no_accounts_is_named(self) -> None:
+        # The Interactive Brokers case: authenticated, not disabled, zero
+        # accounts, and previously invisible in the run output.
+        connections = {
+            LIVE_CONNECTION: CONNECTIONS[LIVE_CONNECTION],
+            "conn-ibkr": {
+                "id": "conn-ibkr",
+                "disabled": False,
+                "brokerage": {"name": "Interactive Brokers"},
+            },
+        }
+
+        warnings = silent_connections([account()], connections)
+
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Interactive Brokers", warnings[0])
+        self.assertIn("returned no accounts", warnings[0])
+
+    def test_a_disabled_connection_is_left_to_the_broker(self) -> None:
+        # verify_access() already names disabled connections; saying it twice
+        # for one problem is the noise the guard exists to avoid.
+        warnings = silent_connections([account()], CONNECTIONS)
+
+        self.assertEqual(warnings, [])
+
+    def test_a_connection_whose_accounts_were_all_skipped_is_not_flagged(self) -> None:
+        # It did return accounts. Each skip reports itself, so flagging the
+        # connection too would double up on an already-explained outcome.
+        connections = {
+            LIVE_CONNECTION: CONNECTIONS[LIVE_CONNECTION],
+        }
+        accounts = [account(is_paper=True)]
+
+        rows, skipped = select_accounts(
+            accounts,
+            connections,
+            now=NOW,
+            max_age_days=3,
+            include_liabilities=False,
+            allow_stale=False,
+        )
+
+        self.assertEqual(rows, [])
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(silent_connections(accounts, connections), [])
+
+    def test_several_silent_connections_are_all_named(self) -> None:
+        connections = {
+            "a": {"id": "a", "disabled": False, "brokerage": {"name": "Zeta"}},
+            "b": {"id": "b", "disabled": False, "brokerage": {"name": "Alpha"}},
+        }
+
+        warnings = silent_connections([], connections)
+
+        self.assertEqual(len(warnings), 2)
+        self.assertIn("Alpha", warnings[0], "sorted, so output is stable")
+
+    def test_an_unattributable_account_earns_a_caveat_not_silence(self) -> None:
+        # An account with no brokerage_authorization cannot be credited to any
+        # connection, so its own connection looks silent. Dropping the warning
+        # entirely would trade a cosmetic false alarm for a real one going
+        # unreported -- the blind spot this function exists to close.
+        connections = {
+            "c1": {"id": "c1", "disabled": False, "brokerage": {"name": "Schwab"}}
+        }
+        accounts = [account(brokerage_authorization=None)]
+
+        warnings = silent_connections(accounts, connections)
+
+        self.assertEqual(len(warnings), 1, "the warning is kept")
+        self.assertIn("without a connection id", warnings[0], "and qualified")
+
+    def test_no_caveat_when_every_account_is_attributable(self) -> None:
+        connections = {
+            LIVE_CONNECTION: CONNECTIONS[LIVE_CONNECTION],
+            "conn-ibkr": {
+                "id": "conn-ibkr",
+                "disabled": False,
+                "brokerage": {"name": "Interactive Brokers"},
+            },
+        }
+
+        warnings = silent_connections([account()], connections)
+
+        self.assertNotIn("without a connection id", warnings[0])
+
+    def test_a_connection_with_no_brokerage_name_falls_back_to_its_id(self) -> None:
+        connections = {"conn-x": {"id": "conn-x", "disabled": False}}
+
+        warnings = silent_connections([], connections)
+
+        self.assertIn("conn-x", warnings[0])
+
+
 class _StubLog:
     def __init__(self) -> None:
         self.messages: list[str] = []
@@ -468,6 +573,29 @@ class OnLoginTests(unittest.TestCase):
         self.assertEqual(self.db.saved, [])
         self.assertTrue(
             any("needs the SnapTrade broker" in m for m in context.log.messages)
+        )
+
+    def test_a_silent_connection_is_reported_during_a_successful_run(self) -> None:
+        # The regression that prompted this: a run that syncs three brokerages
+        # fine while a fourth quietly contributes nothing must still say so.
+        broker = _StubBroker([account()])
+        broker.connections = {
+            LIVE_CONNECTION: CONNECTIONS[LIVE_CONNECTION],
+            "conn-ibkr": {
+                "id": "conn-ibkr",
+                "disabled": False,
+                "brokerage": {"name": "Interactive Brokers"},
+            },
+        }
+        context = _StubContext(self.db)
+
+        with patch("modules.snaptrade_module.Saver"):
+            self.module.on_login(context, broker)  # type: ignore[arg-type]
+
+        self.assertEqual(len(self.db.saved), 1, "the healthy account still synced")
+        self.assertTrue(
+            any("Interactive Brokers" in m for m in context.log.messages),
+            "the empty connection must not be invisible",
         )
 
     def test_a_failing_fetch_is_reported_not_raised(self) -> None:
