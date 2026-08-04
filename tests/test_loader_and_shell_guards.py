@@ -1,16 +1,56 @@
 """Regression tests for loader, shell, and credential-pairing guards."""
 
+import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import etc.config
 from etc.config import process_secret
 from etc.connection import Connection
 from etc.logger import stonksmith_logger
 from loaders.moduleloader import ModuleLoader
 
 SRC = Path(__file__).resolve().parents[1] / "src"
+
+_config_home: tempfile.TemporaryDirectory | None = None
+_config_patch = None
+
+
+def setUpModule() -> None:
+    """
+    Keep this module off the developer's real config file.
+
+    process_secret() reaches get_config(), which backfills options missing from
+    the shipped defaults and writes the merged result back whenever the user
+    file exists -- so an unisolated test rewrites ~/.stonksmith/stonksmith.conf.
+    Point the path at an empty temp dir instead; a path that does not exist is
+    read as "nothing configured" and is never written to.
+    """
+
+    global _config_home, _config_patch
+
+    _config_home = tempfile.TemporaryDirectory()
+    _config_patch = patch.object(
+        etc.config, "user_cfg_path", Path(_config_home.name) / "stonksmith.conf"
+    )
+    _config_patch.start()
+
+    # The merged config is cached in a process global, so patching the path
+    # without dropping the cache would leave whatever an earlier test module
+    # loaded -- and would leak this module's config to the next one.
+    etc.config.reset_config_cache()
+
+
+def tearDownModule() -> None:
+    etc.config.reset_config_cache()
+
+    if _config_patch is not None:
+        _config_patch.stop()
+
+    if _config_home is not None:
+        _config_home.cleanup()
 
 
 class _StubDB:
