@@ -7,6 +7,8 @@ import datetime
 import re
 from typing import Any, ClassVar
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
 from brokers.fidelity.saver import Saver
 from etc.connection import Connection
 from etc.context import BrokerDbProtocol, Context
@@ -213,7 +215,10 @@ class FidelityModule:
                     selector, timeout=ACCOUNT_RENDER_TIMEOUT_MS, state="attached"
                 )
 
-            except Exception:
+            except PlaywrightTimeout:
+                # This selector never appeared; try the next one. Anything else
+                # -- a closed page or context, a protocol error -- is a real
+                # failure and must not be reported as "no accounts found".
                 continue
 
             found: list[Any] = page.locator(selector).all()
