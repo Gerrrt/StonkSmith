@@ -111,6 +111,42 @@ class AttachTests(unittest.TestCase):
         )
 
 
+class AttachImpliesHumanSessionTests(unittest.TestCase):
+    """Attaching means the operator signed in; do not demand a credential."""
+
+    def _broker(self, attached: bool, manual: bool):
+        broker = fidelity_mod.Fidelity()
+        broker.logger = MagicMock()
+        broker.attached = attached
+        broker.args = Namespace(
+            manual_login=manual, cred_id=[], username=[], password=[]
+        )
+        broker.manual_login = MagicMock(return_value=True)
+        return broker
+
+    def test_attached_routes_to_the_human_session_path(self) -> None:
+        # Without this, `--browser cdp` alone reported "No credentials
+        # supplied" even though the flow never uses one.
+        broker = self._broker(attached=True, manual=False)
+
+        self.assertTrue(broker.login())
+        broker.manual_login.assert_called_once()
+
+    def test_manual_login_flag_still_works_when_not_attached(self) -> None:
+        broker = self._broker(attached=False, manual=True)
+
+        self.assertTrue(broker.login())
+        broker.manual_login.assert_called_once()
+
+    def test_neither_falls_back_to_credentials(self) -> None:
+        broker = self._broker(attached=False, manual=False)
+
+        # No credentials configured, so the base implementation reports and
+        # returns False rather than silently doing nothing.
+        self.assertFalse(broker.login())
+        broker.manual_login.assert_not_called()
+
+
 class TeardownProtectsTheOperatorsBrowserTests(unittest.TestCase):
     def _attached_broker(self):
         broker = fidelity_mod.Fidelity()
