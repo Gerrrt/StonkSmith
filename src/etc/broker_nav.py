@@ -17,7 +17,7 @@ from collections.abc import Sequence
 from getpass import getpass
 
 from etc.config import process_secret
-from etc.exceptions import UserExitedProto
+from etc.exceptions import SwitchBroker, UserExitedProto
 from etc.logger import stonksmith_logger
 from helpers import db as helper_db
 
@@ -53,9 +53,7 @@ class BrokerNavigator(cmd.Cmd):
 
     #: Commands that belong to the top-level shell, used to explain the mistake
     #: when one of them is typed in here.
-    PARENT_SHELL_COMMANDS: typing.ClassVar[frozenset[str]] = frozenset(
-        {"broker", "brokers", "workspace"}
-    )
+    PARENT_SHELL_COMMANDS: typing.ClassVar[frozenset[str]] = frozenset({"workspace"})
 
     def __init__(
         self, main_menu: object, database: DatabaseLike, broker_name: str
@@ -72,6 +70,8 @@ class BrokerNavigator(cmd.Cmd):
             "    show creds | accounts    credentials (masked) or saved balances\n"
             "    export creds <file>      write a CSV (never includes secrets)\n"
             "    delete creds <id>        remove a credential\n"
+            "    broker <name>            switch straight to another broker\n"
+            "    brokers                  leave and list the available brokers\n"
             "    back                     return to the broker list\n"
         )
 
@@ -106,6 +106,25 @@ class BrokerNavigator(cmd.Cmd):
         stonksmith_logger.fail(
             msg=f"Unknown command: {line}. Type 'help' for the commands here."
         )
+
+    def do_broker(self, line: str) -> typing.NoReturn:
+        """
+        Switch straight to another broker, no `back` required. With no name,
+        leaves this broker and lists the available ones.
+        Usage: broker [<name>]
+        :param line:
+        """
+
+        raise SwitchBroker(broker=line.strip())
+
+    def do_brokers(self, line: str) -> typing.NoReturn:
+        """
+        Leave this broker and list the available ones.
+        :param line:
+        """
+
+        del line
+        raise SwitchBroker(broker="")
 
     def do_back(self, line: str) -> typing.NoReturn:
         """

@@ -12,3 +12,22 @@ handler in ``StonkSmithDBMenu.do_broker`` and tore down the whole shell.
 
 class UserExitedProto(Exception):
     """Raised when the user leaves a sub-shell and returns to the caller."""
+
+
+class SwitchBroker(UserExitedProto):
+    """Raised inside a broker sub-shell to move straight to another broker.
+
+    Subclasses UserExitedProto so any handler that only knows how to leave a
+    sub-shell still behaves correctly; handlers that understand switching catch
+    this first and read the requested name.
+    """
+
+    def __init__(self, broker: str = "") -> None:
+        """Record the broker to switch to.
+
+        Args:
+            broker: Name requested, or "" to just list the available brokers.
+
+        """
+        super().__init__(broker)
+        self.broker = broker
