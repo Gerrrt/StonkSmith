@@ -1,17 +1,21 @@
 """One-time SnapTrade setup: store your key, link a brokerage, check health.
 
-Storing key material and linking a brokerage happen once and are interactive, so
-they live here rather than in the broker.
+A personal API key is a clientId and a consumerKey, and that is the whole
+identity. SnapTrade's own documentation is explicit about it:
 
-Note what this does *not* do. Creating a SnapTrade user is a commercial-tier
-call: /snapTrade/registerUser and /snapTrade/listUsers advertise only the
-commercialApiKey auth mode, so a personal key gets a 403 reading "Authentication
-credentials were not provided" -- the SDK sends no auth at all for a mode the
-endpoint does not offer. On the personal tier the userId and userSecret come
-from the SnapTrade dashboard, and `store` puts them where the broker looks.
+    "Omit userId and userSecret when making API requests; SnapTrade resolves
+    the user from the Personal API key."
+    "Do not call Register user for Personal API key authentication."
 
-The three endpoints the broker itself depends on -- listBrokerageAuthorizations,
-listUserAccounts and the connection portal login -- all accept a personal key.
+So there is no user to create and no userId to look up. Registering one is not
+merely unnecessary, it is impossible on this tier: /snapTrade/registerUser and
+/snapTrade/listUsers advertise only the commercialApiKey auth mode, so the SDK
+sends no credentials at all and the reply is a 403 reading "Authentication
+credentials were not provided" -- which reads like a bad key rather than an
+endpoint that is not available.
+
+Everything StonkSmith depends on -- listBrokerageAuthorizations,
+listUserAccounts, and the connection portal login -- accepts a personal key.
 
 Secrets are written straight to the OS keyring through the same helpers the
 broker reads them with. They are never printed, and never passed as arguments:
@@ -19,9 +23,8 @@ argv is readable by every process on the machine.
 
     export SNAPTRADE_CLIENT_ID='PERS-...'
     read -rs SNAPTRADE_CONSUMER_KEY && export SNAPTRADE_CONSUMER_KEY
-    read -rs SNAPTRADE_USER_SECRET && export SNAPTRADE_USER_SECRET
 
-    uv run python scripts/snaptrade_register.py store --user-id <dashboard id>
+    uv run python scripts/snaptrade_register.py store
     uv run python scripts/snaptrade_register.py status
     uv run python scripts/snaptrade_register.py link
 
@@ -33,7 +36,6 @@ import os
 import sys
 from typing import Any
 
-from etc.config import get_snaptrade_user_id
 from etc.secrets import get_secret, keyring_key, set_secret
 
 BROKER_NAME = "snaptrade"
@@ -74,82 +76,39 @@ def _body(response: Any) -> Any:
     return getattr(response, "body", response)
 
 
-def _resolve_user(user_id: str) -> tuple[str, str]:
-    """The user id and its secret, from the argument or config plus keyring."""
+def store(consumer_key: str, client_id: str) -> int:
+    """Put the SnapTrade consumer key into the OS keyring.
 
-    resolved: str = user_id or get_snaptrade_user_id()
-
-    if not resolved:
-        sys.exit(
-            "No userId. Pass --user-id, or set it in the [SNAPTRADE] section of "
-            "~/.stonksmith/stonksmith.conf."
-        )
-
-    secret: str | None = get_secret(
-        key=keyring_key(broker=BROKER_NAME, username=resolved)
-    )
-
-    if not secret:
-        sys.exit(
-            f"No keyring secret for SnapTrade user '{resolved}'. Run: "
-            f"{sys.argv[0]} register --user-id {resolved}"
-        )
-
-    return resolved, secret
-
-
-def store(user_id: str, consumer_key: str, client_id: str) -> int:
-    """Put the SnapTrade key material into the OS keyring.
-
-    Creating a user is a commercial-tier call: /snapTrade/registerUser and
-    /snapTrade/listUsers both advertise only the commercialApiKey auth mode, so
-    a personal key gets a 403 with "Authentication credentials were not
-    provided" -- the SDK sends no auth for a mode the endpoint does not offer.
-    On the personal tier the userId and userSecret come from the SnapTrade
-    dashboard instead, and this stores them.
+    Purely local: it writes the keyring and prints the config line, so it does
+    not need a working client and cannot fail on a bad key.
     """
 
-    if not user_id:
-        sys.exit("store needs --user-id <name from the SnapTrade dashboard>.")
-
-    user_secret: str = _env("SNAPTRADE_USER_SECRET")
-
     existing: str | None = get_secret(
-        key=keyring_key(broker=BROKER_NAME, username=user_id)
+        key=keyring_key(broker=BROKER_NAME, username=CONSUMER_KEY_ACCOUNT)
     )
 
-    set_secret(
-        key=keyring_key(broker=BROKER_NAME, username=user_id), secret=user_secret
-    )
     set_secret(
         key=keyring_key(broker=BROKER_NAME, username=CONSUMER_KEY_ACCOUNT),
         secret=consumer_key,
     )
 
-    verb = "Replaced" if existing else "Stored"
-    print(f"{verb} the key material for SnapTrade user '{user_id}'.")
-    print("\nIn the OS keyring (service 'stonksmith'):")
-    print(f"  {keyring_key(broker=BROKER_NAME, username=user_id)}")
-    print(f"  {keyring_key(broker=BROKER_NAME, username=CONSUMER_KEY_ACCOUNT)}")
+    print(f"{'Replaced' if existing else 'Stored'} the SnapTrade consumer key in")
+    print(
+        f"the OS keyring (service 'stonksmith', "
+        f"{keyring_key(broker=BROKER_NAME, username=CONSUMER_KEY_ACCOUNT)})."
+    )
     print("\nAdd this to ~/.stonksmith/stonksmith.conf:")
     print("\n[SNAPTRADE]")
     print(f"clientid = {client_id}")
-    print(f"userid = {user_id}")
     print(f"\nThen check what is linked:\n  {sys.argv[0]} status")
 
     return 0
 
 
-def link(client: Any, user_id: str) -> int:
+def link(client: Any) -> int:
     """Print a Connection Portal URL for linking or repairing a brokerage."""
 
-    resolved, secret = _resolve_user(user_id)
-
-    body: Any = _body(
-        client.authentication.login_snap_trade_user(
-            user_id=resolved, user_secret=secret
-        )
-    )
+    body: Any = _body(client.authentication.login_snap_trade_user())
 
     url = str(object=dict(body).get("redirectURI") or "")
 
@@ -165,18 +124,12 @@ def link(client: Any, user_id: str) -> int:
     return 0
 
 
-def status(client: Any, user_id: str) -> int:
+def status(client: Any) -> int:
     """Connection health and account names. Prints no balances."""
-
-    resolved, secret = _resolve_user(user_id)
 
     connections = [
         dict(entry)
-        for entry in _body(
-            client.connections.list_brokerage_authorizations(
-                user_id=resolved, user_secret=secret
-            )
-        )
+        for entry in _body(client.connections.list_brokerage_authorizations())
     ]
 
     print(f"{len(connections)} connection(s)\n")
@@ -191,12 +144,7 @@ def status(client: Any, user_id: str) -> int:
             print(f"      disabled since {entry.get('disabled_date') or 'unknown'}")
 
     accounts = [
-        dict(entry)
-        for entry in _body(
-            client.account_information.list_user_accounts(
-                user_id=resolved, user_secret=secret
-            )
-        )
+        dict(entry) for entry in _body(client.account_information.list_user_accounts())
     ]
 
     print(f"\n{len(accounts)} account(s) -- balances deliberately omitted\n")
@@ -223,36 +171,24 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
-    store_parser = sub.add_parser(
-        "store", help="put dashboard key material into the keyring"
-    )
-    store_parser.add_argument(
-        "--user-id", default="", help="the userId from the SnapTrade dashboard"
-    )
-
-    for name, help_text in (
-        ("link", "print a Connection Portal URL"),
-        ("status", "connection health and account names"),
-    ):
-        command_parser = sub.add_parser(name, help=help_text)
-        command_parser.add_argument("--user-id", default="", help="defaults to config")
+    sub.add_parser("store", help="put the consumer key into the keyring")
+    sub.add_parser("link", help="print a Connection Portal URL")
+    sub.add_parser("status", help="connection health and account names")
 
     args = parser.parse_args()
 
     client_id: str = _env("SNAPTRADE_CLIENT_ID")
     consumer_key: str = _env("SNAPTRADE_CONSUMER_KEY")
 
-    # store is purely local -- it writes the keyring and prints config lines --
-    # so it must not need a working client to run.
     if args.command == "store":
-        return store(args.user_id, consumer_key, client_id)
+        return store(consumer_key, client_id)
 
     client: Any = _client(client_id, consumer_key)
 
     if args.command == "link":
-        return link(client, args.user_id)
+        return link(client)
 
-    return status(client, args.user_id)
+    return status(client)
 
 
 if __name__ == "__main__":

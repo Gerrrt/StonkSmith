@@ -2,9 +2,11 @@
 
 broker_flow() prints nothing of its own when create_conn_obj() or login()
 returns False, so a quiet failure here is a run that opens nothing, writes
-nothing and exits 0. Each of the four ways this broker can be misconfigured --
-no clientId, no userId, no consumer key, no user secret -- has to produce one
-line that says what to do about it.
+nothing and exits 0. Both ways this broker can be misconfigured -- no clientId,
+no consumer key -- have to produce one line that says what to do about it.
+
+A personal API key is those two values and nothing else: SnapTrade resolves the
+user from the key, so there is no userId or userSecret anywhere in this broker.
 
 Nothing here touches the network, the real keyring, or the real config file.
 """
@@ -137,36 +139,31 @@ class SnapTradeBrokerTests(unittest.TestCase):
         self.broker = self.module.SnapTradeBroker()
         self.broker.args = Namespace(cred_id=[], username=[], password=[])
 
-        self._configure(client_id="PERS-TEST", user_id="garrett")
+        self._configure(client_id="PERS-TEST")
 
     def tearDown(self) -> None:
         keyring.set_keyring(self.previous_keyring)
         self.logger.removeHandler(self.capture)
         self.logger.setLevel(self.previous_level)
 
-    def _configure(self, *, client_id: str, user_id: str) -> None:
-        """Replace the config getters on the path-loaded module.
+    def _configure(self, *, client_id: str) -> None:
+        """Replace the config getter on the path-loaded module.
 
-        The broker binds these names at import, so patching etc.config would
-        not reach them -- and calling the real ones would read (and rewrite)
-        the developer's own ~/.stonksmith/stonksmith.conf.
+        The broker binds the name at import, so patching etc.config would not
+        reach it -- and calling the real one would read (and rewrite) the
+        developer's own ~/.stonksmith/stonksmith.conf.
         """
 
         self.module.get_snaptrade_client_id = lambda: client_id
-        self.module.get_snaptrade_user_id = lambda: user_id
 
-    def _store(self, account: str, secret: str) -> None:
-        self.memory.set_password("stonksmith", f"snaptrade:{account}", secret)
-
-    def _store_both(self) -> None:
-        self._store("consumerKey", "consumer-secret")
-        self._store("garrett", "user-secret")
+    def _store_consumer_key(self, secret: str = "consumer-secret") -> None:
+        self.memory.set_password("stonksmith", "snaptrade:consumerKey", secret)
 
     def _logged(self) -> str:
         return " ".join(self.capture.messages)
 
     def test_missing_client_id_is_reported(self) -> None:
-        self._configure(client_id="", user_id="garrett")
+        self._configure(client_id="")
 
         self.assertFalse(self.broker.create_conn_obj())
 
@@ -175,56 +172,33 @@ class SnapTradeBrokerTests(unittest.TestCase):
         self.assertIn("clientId", logged)
         self.assertIn("snaptrade_register.py", logged, "should say how to fix it")
 
-    def test_missing_user_id_is_reported(self) -> None:
-        self._configure(client_id="PERS-TEST", user_id="")
-
-        self.assertFalse(self.broker.create_conn_obj())
-        self.assertIn("userId", self._logged())
-
-    def test_both_missing_identifiers_are_named_together(self) -> None:
-        self._configure(client_id="", user_id="")
-
-        self.broker.create_conn_obj()
-
-        logged = self._logged()
-        self.assertIn("clientId and userId are not set", logged)
-
-    def test_a_single_missing_identifier_reads_as_singular(self) -> None:
-        self._configure(client_id="PERS-TEST", user_id="")
-
-        self.broker.create_conn_obj()
-
-        self.assertIn("userId is not set", self._logged())
-
     def test_missing_consumer_key_is_reported(self) -> None:
-        self._store("garrett", "user-secret")
-
         self.assertFalse(self.broker.create_conn_obj())
 
         logged = self._logged()
         self.assertIn("consumer key", logged)
         self.assertIn("snaptrade:consumerKey", logged, "should name the keyring entry")
 
-    def test_missing_user_secret_is_reported(self) -> None:
-        self._store("consumerKey", "consumer-secret")
-
-        self.assertFalse(self.broker.create_conn_obj())
-
-        logged = self._logged()
-        self.assertIn("user secret", logged)
-        self.assertIn("garrett", logged, "should name the user it looked for")
-
     def test_a_complete_configuration_builds_a_client(self) -> None:
-        self._store_both()
+        self._store_consumer_key()
 
         self.assertTrue(self.broker.create_conn_obj())
 
         self.assertIsNotNone(self.broker.client)
-        self.assertEqual(self.broker.user_secret, "user-secret")
         self.assertEqual(self.capture.messages, [], "success should be quiet")
 
-    def test_a_rejected_key_names_the_user_and_the_fix(self) -> None:
-        self.broker.user_id = "garrett"
+    def test_no_user_identity_is_required(self) -> None:
+        # A personal API key is a clientId and a consumerKey and nothing else:
+        # SnapTrade resolves the user from the key, so a userId/userSecret pair
+        # is neither needed nor obtainable on this tier.
+        self._store_consumer_key()
+
+        self.broker.create_conn_obj()
+
+        self.assertFalse(hasattr(self.broker, "user_id"))
+        self.assertFalse(hasattr(self.broker, "user_secret"))
+
+    def test_a_rejected_key_names_the_fix(self) -> None:
         self.broker.client = _FakeClient(error=_Rejected(401))
 
         self.assertFalse(self.broker.verify_access())

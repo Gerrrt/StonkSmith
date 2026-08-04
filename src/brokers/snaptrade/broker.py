@@ -15,7 +15,7 @@ under the synthetic name "broker" with no package.
 from typing import Any
 
 from etc.api_connection import ApiConnection
-from etc.config import get_snaptrade_client_id, get_snaptrade_user_id
+from etc.config import get_snaptrade_client_id
 from etc.logger import StonkSmithAdapter
 from etc.secrets import get_secret, keyring_key
 
@@ -23,17 +23,17 @@ from etc.secrets import get_secret, keyring_key
 #: <name>.db stem and the CLI subcommand.
 BROKER_NAME = "snaptrade"
 
-#: Keyring account for the consumer key. It belongs to the developer account
-#: rather than to any user, so it gets a fixed name; etc.secrets.keyring_key
-#: builds "snaptrade:consumerKey" from it. The user secret is stored under the
-#: userId instead, so re-registering under a new id cannot silently resolve a
-#: stale secret.
+#: Keyring account for the consumer key. A personal API key is a clientId and a
+#: consumerKey and nothing else -- SnapTrade resolves the user from the key, so
+#: there is no userId or userSecret to hold -- which is why this is a fixed name
+#: rather than being scoped to a user. etc.secrets.keyring_key builds
+#: "snaptrade:consumerKey" from it.
 CONSUMER_KEY_ACCOUNT = "consumerKey"
 
 SETUP_HINT = (
-    "Run `uv run python scripts/snaptrade_register.py store --user-id <name>` to "
-    "put your SnapTrade key material in the keyring, then set clientId and "
-    "userId in the [SNAPTRADE] section of ~/.stonksmith/stonksmith.conf."
+    "Run `uv run python scripts/snaptrade_register.py store` to put your "
+    "SnapTrade consumer key in the keyring, then set clientId in the "
+    "[SNAPTRADE] section of ~/.stonksmith/stonksmith.conf."
 )
 
 
@@ -67,8 +67,6 @@ class SnapTradeBroker(ApiConnection):
         self.broker = "SnapTrade"
         self.name = "SnapTrade"
         self.client_id: str = ""
-        self.user_id: str = ""
-        self.user_secret: str = ""
         #: Connections indexed by id. An account's ``brokerage_authorization``
         #: is a connection id, so this is the join that catches a disabled
         #: connection still serving months-old cached balances. Filled in by
@@ -97,18 +95,11 @@ class SnapTradeBroker(ApiConnection):
         """
 
         self.client_id = get_snaptrade_client_id()
-        self.user_id = get_snaptrade_user_id()
 
-        missing: list[str] = [
-            name
-            for name, value in (("clientId", self.client_id), ("userId", self.user_id))
-            if not value
-        ]
-        if missing:
-            verb: str = "is" if len(missing) == 1 else "are"
+        if not self.client_id:
             self.logger.fail(
                 msg=(
-                    f"[SNAPTRADE] {' and '.join(missing)} {verb} not set in "
+                    "[SNAPTRADE] clientId is not set in "
                     f"~/.stonksmith/stonksmith.conf. {SETUP_HINT}"
                 ),
             )
@@ -124,19 +115,6 @@ class SnapTradeBroker(ApiConnection):
                 msg=(
                     f"No SnapTrade consumer key in the keyring under "
                     f"'{consumer_account}'. {SETUP_HINT}"
-                ),
-            )
-            return False
-
-        self.user_secret = (
-            get_secret(key=keyring_key(broker=BROKER_NAME, username=self.user_id)) or ""
-        )
-
-        if not self.user_secret:
-            self.logger.fail(
-                msg=(
-                    f"No user secret in the keyring for SnapTrade user "
-                    f"'{self.user_id}'. {SETUP_HINT}"
                 ),
             )
             return False
@@ -174,11 +152,10 @@ class SnapTradeBroker(ApiConnection):
         """
 
         try:
+            # No user_id or user_secret: a personal API key carries its own user
+            # context, and SnapTrade's docs are explicit that both are omitted.
             connections: list[dict[str, Any]] = as_rows(
-                self.client.connections.list_brokerage_authorizations(
-                    user_id=self.user_id,
-                    user_secret=self.user_secret,
-                )
+                self.client.connections.list_brokerage_authorizations()
             )
 
         except Exception as e:
@@ -188,9 +165,8 @@ class SnapTradeBroker(ApiConnection):
                 self.logger.fail(
                     msg=(
                         f"SnapTrade rejected the stored key ({status}). The "
-                        f"consumer key or the secret for user "
-                        f"'{self.user_id}' is wrong or has been rotated. "
-                        f"{SETUP_HINT}"
+                        f"clientId or consumer key is wrong or has been "
+                        f"rotated. {SETUP_HINT}"
                     ),
                 )
             else:
@@ -207,9 +183,8 @@ class SnapTradeBroker(ApiConnection):
         if not self.connections:
             self.logger.fail(
                 msg=(
-                    f"SnapTrade has no brokerage connections for user "
-                    f"'{self.user_id}'. Link one with: uv run python "
-                    "scripts/snaptrade_register.py link"
+                    "SnapTrade has no brokerage connections for this key. Link "
+                    "one with: uv run python scripts/snaptrade_register.py link"
                 ),
             )
             return False
@@ -244,12 +219,7 @@ class SnapTradeBroker(ApiConnection):
         :rtype: list[dict[str, Any]]
         """
 
-        return as_rows(
-            self.client.account_information.list_user_accounts(
-                user_id=self.user_id,
-                user_secret=self.user_secret,
-            )
-        )
+        return as_rows(self.client.account_information.list_user_accounts())
 
 
 #: BrokerLoader reads this off the path-loaded module, so the class name is free

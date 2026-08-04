@@ -193,21 +193,18 @@ read -rs SNAPTRADE_CONSUMER_KEY && export SNAPTRADE_CONSUMER_KEY
 ```
 
 ```bash
-read -rs SNAPTRADE_USER_SECRET && export SNAPTRADE_USER_SECRET
+uv run python scripts/snaptrade_register.py store
 ```
 
-```bash
-uv run python scripts/snaptrade_register.py store --user-id <dashboard userId>
-```
+A personal key is those two values and nothing else. There is no `userId` or
+`userSecret` to find: SnapTrade's docs say to *"omit userId and userSecret when
+making API requests; SnapTrade resolves the user from the Personal API key"*,
+and *"do not call Register user for Personal API key authentication"*. Trying
+anyway returns a 403 reading *"Authentication credentials were not provided"*,
+because `registerUser` and `listUsers` accept only commercial keys and the SDK
+sends no auth at all for a mode an endpoint does not offer.
 
-The `userId` and `userSecret` come from the SnapTrade dashboard, alongside the
-client id and consumer key. They cannot be created from the API on this tier:
-`registerUser` and `listUsers` accept only commercial keys, and a personal key
-gets a 403 reading *"Authentication credentials were not provided"*. Everything
-StonkSmith itself calls — connections, accounts, the connection portal — works
-with a personal key.
-
-`store` writes both secrets to the OS keyring and prints the two lines to paste
+`store` writes the consumer key to the OS keyring and prints the line to paste
 into the `[SNAPTRADE]` section of `~/.stonksmith/stonksmith.conf`. Then link a
 brokerage, if you have not already:
 

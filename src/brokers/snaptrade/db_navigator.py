@@ -14,10 +14,10 @@ from etc.broker_nav import BrokerNavigator, DatabaseLike
 from etc.logger import stonksmith_logger
 
 SETUP_HINT = (
-    "SnapTrade does not use stored username/password credentials. Put your key "
-    "material in the keyring with:\n"
-    "    uv run python scripts/snaptrade_register.py store --user-id <name>\n"
-    "then set clientId and userId in the [SNAPTRADE] section of "
+    "SnapTrade does not use stored username/password credentials. Put your "
+    "consumer key in the keyring with:\n"
+    "    uv run python scripts/snaptrade_register.py store\n"
+    "then set clientId in the [SNAPTRADE] section of "
     "~/.stonksmith/stonksmith.conf."
 )
 
