@@ -90,6 +90,39 @@ def _resolve_user(user_id: str) -> tuple[str, str]:
     return resolved, secret
 
 
+def users(client: Any) -> int:
+    """List the SnapTrade users that already exist under this client id.
+
+    A userId is not issued by SnapTrade -- you choose it at registration. This
+    exists to answer the other question: which ones have already been created,
+    and therefore already own the linked brokerages.
+
+    Only ids are returned. A userSecret is shown once, at registration, and
+    cannot be read back afterwards.
+    """
+
+    existing = list(_body(client.authentication.list_snap_trade_users()))
+
+    if not existing:
+        print("No SnapTrade users exist yet under this client id.")
+        print(f"Create one with:\n  {sys.argv[0]} register --user-id <name>")
+        return 0
+
+    print(f"{len(existing)} SnapTrade user(s) under this client id:\n")
+
+    for entry in existing:
+        held = get_secret(key=keyring_key(broker=BROKER_NAME, username=str(entry)))
+        print(f"  {entry}{'   (secret in your keyring)' if held else ''}")
+
+    print(
+        "\nA userSecret is only ever shown at registration. If none of these has\n"
+        "a secret in your keyring, you cannot adopt that user: register a new one\n"
+        "and re-link its brokerages through the Connection Portal."
+    )
+
+    return 0
+
+
 def register(client: Any, user_id: str, consumer_key: str) -> int:
     """Create a SnapTrade user and store both secrets in the keyring."""
 
@@ -223,6 +256,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("users", help="list SnapTrade users that already exist")
+
     register_parser = sub.add_parser("register", help="create a SnapTrade user")
     register_parser.add_argument("--user-id", default="", help="a name you choose")
 
@@ -238,6 +273,9 @@ def main() -> int:
     client_id: str = _env("SNAPTRADE_CLIENT_ID")
     consumer_key: str = _env("SNAPTRADE_CONSUMER_KEY")
     client: Any = _client(client_id, consumer_key)
+
+    if args.command == "users":
+        return users(client)
 
     if args.command == "register":
         return register(client, args.user_id, consumer_key)

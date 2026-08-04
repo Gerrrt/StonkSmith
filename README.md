@@ -193,6 +193,15 @@ read -rs SNAPTRADE_CONSUMER_KEY && export SNAPTRADE_CONSUMER_KEY
 ```
 
 ```bash
+uv run python scripts/snaptrade_register.py users
+```
+
+A userId is not issued by SnapTrade — you choose it. `users` lists the ones that
+already exist under your key, and flags which have a secret in your keyring. A
+userSecret is shown once, at registration, and cannot be read back, so a user
+whose secret you do not hold cannot be adopted: register a new one and re-link.
+
+```bash
 uv run python scripts/snaptrade_register.py register --user-id <name>
 ```
 
