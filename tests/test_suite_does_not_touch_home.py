@@ -14,8 +14,11 @@ everything StonkSmith owns there comes back byte for byte identical.
 
 Only StonkSmith's own state is compared, not all of $HOME: an unrelated tool in
 the subprocess (pip, uv, a keyring backend) may legitimately warm a cache there,
-and a test that fails on that would be noise. Every path StonkSmith writes to is
-listed in etc.paths, and all of them are checked here.
+and a test that fails on that would be noise. Every home-resident path in
+etc.paths is covered -- ~/.stonksmith and everything under it, plus ~/token.json
+and ~/credentials.json. Paths outside the home directory, etc.paths.tmp_path in
+particular, are out of scope here: a scratch directory under /tmp is not state
+the developer would miss.
 """
 
 import subprocess
