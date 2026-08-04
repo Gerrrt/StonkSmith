@@ -9,8 +9,9 @@ from argparse import (
 
 #: SnapTrade refreshes holdings once a day by design, so a one-day ceiling would
 #: flag healthy accounts on most runs and train the operator into passing
-#: --allow-stale permanently -- which disables the disabled-connection guard
-#: that is the whole point of the check.
+#: --allow-stale permanently -- which would leave every genuinely stale account
+#: syncing unnoticed, the one thing the check exists to prevent. A disabled
+#: connection is skipped regardless of this flag.
 DEFAULT_MAX_AGE_DAYS = 3
 
 

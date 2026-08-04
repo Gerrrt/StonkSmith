@@ -60,6 +60,7 @@ root = [ "./src" ]
 [tool.ty.src]
 # Tests monkeypatch methods with MagicMock, which no type checker can verify.
 # pytest is the gate for tests; ty is the gate for src.
-# scripts/ are one-off probes run via `uv run --with <pkg>`; they import
-# packages StonkSmith deliberately does not depend on, so ty cannot resolve them.
+# scripts/ are one-off operator tools, not part of the shipped package: they are
+# run by hand, some via `uv run --with <pkg>` against dependencies StonkSmith
+# does not install, and none of them is imported by src.
 exclude = [ "tests", "scripts" ]

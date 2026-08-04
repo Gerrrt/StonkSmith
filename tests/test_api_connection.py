@@ -152,6 +152,30 @@ class ApiConnectionTests(_CaptureMixin, unittest.TestCase):
 
         self.assertIn("ignored", self._logged())
 
+    def test_a_password_alone_is_still_announced_as_ignored(self) -> None:
+        # -p is the easiest of the three to pass on its own, and checking only
+        # the two that carry an identity would let it be dropped in silence.
+        self.logger.setLevel(logging.INFO)
+
+        broker = _Working()
+        broker.args = self._args(password=["hunter2"])
+        broker.db = _Db()
+
+        broker.login()
+
+        self.assertIn("ignored", self._logged())
+
+    def test_a_credential_id_alone_is_announced_as_ignored(self) -> None:
+        self.logger.setLevel(logging.INFO)
+
+        broker = _Working()
+        broker.args = self._args(cred_id=["1"])
+        broker.db = _Db()
+
+        broker.login()
+
+        self.assertIn("ignored", self._logged())
+
     def test_nothing_is_announced_when_no_credentials_were_passed(self) -> None:
         self.logger.setLevel(logging.INFO)
 

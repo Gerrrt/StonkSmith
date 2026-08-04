@@ -6,8 +6,8 @@ symbol; the commands come from etc.broker_nav.BrokerNavigator.
 
 ``add creds`` is overridden because this broker has no username/password pair to
 store. The shared navigator would prompt for a secret, write a credential row,
-and nothing would ever read it -- SnapTrade authenticates with a client id and a
-user secret held in config and the OS keyring instead.
+and nothing would ever read it -- SnapTrade authenticates with a client id from
+the config file and a consumer key from the OS keyring instead.
 """
 
 from etc.broker_nav import BrokerNavigator, DatabaseLike

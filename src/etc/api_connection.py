@@ -34,10 +34,10 @@ class ApiConnection(Connection):
     """
     A broker that authenticates with a stored API key instead of a login.
 
-    Subclasses must override ``create_conn_obj()`` and ``verify_access()``.
-    Both must report their own failure: ``broker_flow()`` prints nothing for a
-    False return, so a quiet one produces a run that does nothing and says
-    nothing about it.
+    Subclasses must override ``create_conn_obj()``; ``verify_access()`` is
+    optional. Whichever they implement must report its own failure:
+    ``broker_flow()`` prints nothing for a False return, so a quiet one produces
+    a run that does nothing and says nothing about it.
     """
 
     #: Stands in for the signed-in username in log lines and in ``Context``.
@@ -72,7 +72,16 @@ class ApiConnection(Connection):
         Prove the stored key works with one cheap authenticated call.
 
         Overriding this is what turns a rejected or expired key into one
-        actionable line before any module runs.
+        actionable line before any module runs, rather than a failure from
+        inside the first module that tries to use it.
+
+        Optional, and defaulting to True rather than failing loudly the way
+        ``create_conn_obj()`` does. The asymmetry is deliberate: without a client
+        every module dies on ``None`` with nothing useful to say, whereas without
+        a verification step the modules simply meet the real error later and
+        report it. Not every API offers a call cheap enough to spend on a probe,
+        and requiring one would buy a better message at the cost of an extra
+        request on every run.
         :return: True when the API answered
         :rtype: bool
         """
@@ -90,11 +99,16 @@ class ApiConnection(Connection):
         :rtype: bool
         """
 
-        if getattr(self.args, "username", None) or getattr(self.args, "cred_id", None):
-            # -u/-p/-id come from std_parser, which is a parent of every broker
-            # subparser, so they cannot be hidden from this broker's --help.
-            # Saying nothing means an operator who passed one watches it be
-            # ignored with no explanation.
+        # -u/-p/-id come from std_parser, which is a parent of every broker
+        # subparser, so they cannot be hidden from this broker's --help. Saying
+        # nothing means an operator who passed one watches it be ignored with no
+        # explanation -- and -p alone is the likeliest way to get that wrong, so
+        # every one of the three is checked rather than just the two that carry
+        # an identity.
+        if any(
+            getattr(self.args, name, None)
+            for name in ("username", "password", "cred_id")
+        ):
             self.logger.highlight(
                 msg=(
                     f"{self.broker} authenticates with a stored API key; "
