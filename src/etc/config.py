@@ -160,6 +160,23 @@ def get_host_info_colors() -> list[str]:
     return list(colors)
 
 
+def get_snaptrade_client_id() -> str:
+    """
+    The SnapTrade client id, prefixed PERS- on the free personal tier.
+
+    Not a secret: it is half of a pair, and the consumer key it pairs with lives
+    in the OS keyring. Together they are the whole of a personal-tier identity --
+    there is no userId or userSecret, because SnapTrade resolves the user from
+    the key itself.
+
+    NOTE: ConfigParser lower-cases option names on both write and lookup, so
+    "clientId" here resolves against a file containing either spelling.
+    :return: The client id, or "" when unset
+    """
+
+    return get_config().get(section="SNAPTRADE", option="clientId", fallback="").strip()
+
+
 def process_secret(text: str | None) -> str:
     """
     Mask a secret for display.

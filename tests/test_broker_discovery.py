@@ -20,7 +20,7 @@ REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
 
 EXPECTED_KEYS = {"path", "dbpath", "nvpath", "argspath"}
-SHIPPED = ("fidelity", "schwab529plan")
+SHIPPED = ("fidelity", "schwab529plan", "snaptrade")
 
 
 def _fresh_loader(user_root: Path | None = None) -> BrokerLoader:
@@ -105,12 +105,14 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
         # path-loaded class is a distinct object from the imported one.
         from brokers.fidelity import Fidelity
         from brokers.schwab529plan import Schwab529plan
+        from brokers.snaptrade import SnapTradeBroker
 
         brokers = _fresh_loader().get_brokers()
 
         for name, exported in (
             ("fidelity", Fidelity),
             ("schwab529plan", Schwab529plan),
+            ("snaptrade", SnapTradeBroker),
         ):
             with self.subTest(broker=name):
                 module = BrokerLoader.load_broker(broker_path=brokers[name]["path"])
@@ -188,15 +190,19 @@ class DiscoveryRulesTests(unittest.TestCase):
 
 
 class LazyExportTests(unittest.TestCase):
-    """brokers.fidelity.saver is imported on every run; it must stay cheap."""
+    """A broker's saver is imported on every run; it must stay cheap.
 
-    def test_importing_the_saver_does_not_drag_in_the_login_module(self) -> None:
-        # A subprocess is required: sys.modules in-process is already polluted by
-        # the fidelity tests that load the broker by path.
-        code = (
-            "import sys; import brokers.fidelity.saver; "
-            "print('playwright_stealth' in sys.modules)"
-        )
+    ModuleLoader metadata-scans every file in modules/ on every run of every
+    broker, and each of those imports its broker's saver. An eager class export
+    in a broker's __init__.py drags the whole transport in with it -- playwright
+    for Fidelity, the SnapTrade SDK for SnapTrade -- on runs that never touch
+    that broker.
+    """
+
+    def _import_in_subprocess(self, module: str, heavy: str) -> str:
+        # A subprocess is required: sys.modules in-process is already polluted
+        # by the tests that load these brokers by path.
+        code = f"import sys; import {module}; print({heavy!r} in sys.modules)"
         result = subprocess.run(
             [sys.executable, "-c", code],
             env=dict(os.environ, PYTHONPATH=str(SRC)),
@@ -207,7 +213,19 @@ class LazyExportTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("False", result.stdout)
+        return result.stdout
+
+    def test_the_fidelity_saver_does_not_drag_in_playwright(self) -> None:
+        self.assertIn(
+            "False",
+            self._import_in_subprocess("brokers.fidelity.saver", "playwright_stealth"),
+        )
+
+    def test_the_snaptrade_saver_does_not_drag_in_the_sdk(self) -> None:
+        self.assertIn(
+            "False",
+            self._import_in_subprocess("brokers.snaptrade.saver", "snaptrade_client"),
+        )
 
 
 if __name__ == "__main__":

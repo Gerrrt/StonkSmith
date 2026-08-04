@@ -27,7 +27,7 @@ all the accounts you own.
 
 ## :wrench: Features
 
-- [x] Multi-broker support (Schwab 529, Fidelity)
+- [x] Multi-broker support (Schwab 529, Fidelity, and anything via SnapTrade)
 - [x] Automatic data scraping (requests + Playwright)
 - [x] Google Sheets sync
 - [x] CLI commands for automation
@@ -50,6 +50,7 @@ StonkSmith/
 |    |--- modules/           # per-broker scrape/sync modules
 |    |--- loaders/           # dynamic broker and module loading
 |    |--- helpers/           # db, sheets, logging helpers
+|--- scripts/             # one-off setup and probe scripts
 |--- tests/
 |--- pyproject.toml
 ```
@@ -61,6 +62,11 @@ publishes it as `Broker`, alongside `database.py`, `db_navigator.py`,
 `src/brokers/` first and then `~/.stonksmith/brokers/`. Everything except
 `broker.py` is optional; a broker without `database.py` and `db_navigator.py` is
 listed as "incomplete" by `stonksmithdb`.
+
+Brokers come in two shapes. A **scraper** has a username, a password and a login
+step, and subclasses `Connection`: Schwab 529 and Fidelity. An **API-backed**
+broker has none of those — its key lives in config and the OS keyring, and there
+is nothing to log into — and subclasses `ApiConnection` instead: SnapTrade.
 
 ---
 
@@ -169,6 +175,65 @@ better than bundled builds; `--browser chromium` uses Playwright's own build.
 Both keep their profile in `~/.stonksmith/playwright/chrome-profile`, so cookies
 and history accumulate between runs. `--profile-dir` points elsewhere.
 
+### SnapTrade
+
+SnapTrade is an aggregator: link a brokerage once through its Connection Portal
+and StonkSmith reads every linked account through a single key, with no browser
+and no stored password. One `snaptrade` broker covers all of them.
+
+Setup is once, and interactive. Get a free Personal API key from
+[SnapTrade](https://snaptrade.com), then:
+
+```bash
+export SNAPTRADE_CLIENT_ID='PERS-...'
+```
+
+```bash
+read -rs SNAPTRADE_CONSUMER_KEY && export SNAPTRADE_CONSUMER_KEY
+```
+
+```bash
+uv run python scripts/snaptrade_register.py store
+```
+
+A personal key is those two values and nothing else. There is no `userId` or
+`userSecret` to find: SnapTrade's docs say to *"omit userId and userSecret when
+making API requests; SnapTrade resolves the user from the Personal API key"*,
+and *"do not call Register user for Personal API key authentication"*. Trying
+anyway returns a 403 reading *"Authentication credentials were not provided"*,
+because `registerUser` and `listUsers` accept only commercial keys and the SDK
+sends no auth at all for a mode an endpoint does not offer.
+
+`store` writes the consumer key to the OS keyring and prints the line to paste
+into the `[SNAPTRADE]` section of `~/.stonksmith/stonksmith.conf`. Then link a
+brokerage, if you have not already:
+
+```bash
+uv run python scripts/snaptrade_register.py link
+```
+
+Open the URL it prints — it signs in as you and expires in about five minutes —
+and connect Schwab, Fidelity or anything else SnapTrade supports. Check what is
+linked at any time with `scripts/snaptrade_register.py status`, which prints
+connection health and account names but never balances.
+
+Then sync, after creating a `SnapTrade` tab in the dashboard spreadsheet:
+
+```bash
+uv run stonksmith snaptrade -M snaptrade
+```
+
+Accounts are skipped, loudly, when they cannot be trusted: a disabled connection
+(SnapTrade keeps serving its last cached balance rather than reporting an
+error), holdings that have not synced in `--max-age-days` (default 3), closed,
+archived or paper accounts, and liabilities such as credit cards. Override with
+`--allow-stale` and `--include-liabilities`.
+
+Connections expire after a few weeks and re-authorising is a browser step —
+`scripts/snaptrade_register.py link` again. Until then the sync is unattended.
+
+`scripts/snaptrade_coverage.py` lists every brokerage SnapTrade supports.
+
 Manage stored credentials and scraped balances:
 
 ```bash
@@ -177,6 +242,8 @@ uv run stonksmithdb
 
 Inside that shell: `broker schwab529plan`, then `add creds <username>`,
 `show creds`, `show accounts`, `export creds <file>`, `back`, `exit`.
+SnapTrade stores no credentials there; its keys live in the config file and the
+keyring, so `add creds` points at the setup script instead.
 
 ---
 
