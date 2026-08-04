@@ -3,9 +3,9 @@
 
 """Shared broker database implementation.
 
-Every broker package exposes a ``Database`` class that BrokerLoader imports by
-file path. The behaviour is identical across brokers, so it lives here and each
-broker subclasses it with its own default broker name.
+Every broker package exposes a ``Database`` class in ``database.py``, which
+BrokerLoader imports by file path. The behaviour is identical across brokers, so it
+lives here and each broker subclasses it with its own default broker name.
 
 Secrets are never stored in SQLite. The credentials table holds a keyring
 reference; the secret itself lives in the OS credential store (see etc.secrets).

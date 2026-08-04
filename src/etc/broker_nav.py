@@ -3,8 +3,9 @@
 
 """Shared ``stonksmithdb`` sub-shell for browsing a broker's database.
 
-Each broker package exposes a ``DatabaseNavigator`` that BrokerLoader imports by
-file path. The commands are identical across brokers, so they live here.
+Each broker package exposes a ``DatabaseNavigator`` in ``db_navigator.py``, which
+BrokerLoader imports by file path. The commands are identical across brokers, so
+they live here.
 
 Secrets are masked on display and omitted from exports; the keyring reference is
 exported instead.

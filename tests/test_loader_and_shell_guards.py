@@ -65,13 +65,14 @@ class StonkSmithDBGuardTests(unittest.TestCase):
     ) -> None:
         from etc.stonksmithdb import StonkSmithDBMenu
 
-        # A broker .py with no sibling package: 'path' only, no nvpath/dbpath.
+        # A broker package with broker.py but no database.py/db_navigator.py:
+        # 'path' only, no nvpath/dbpath.
         mock_loader.return_value.get_brokers.return_value = {
-            "lonely": {"path": "/tmp/lonely.py"}
+            "lonely": {"path": "/tmp/lonely/broker.py"}
         }
 
         menu = StonkSmithDBMenu.__new__(StonkSmithDBMenu)
-        menu.brokers = {"lonely": {"path": "/tmp/lonely.py"}}
+        menu.brokers = {"lonely": {"path": "/tmp/lonely/broker.py"}}
         menu.workspace = "default"
 
         with patch("builtins.print") as mock_print:

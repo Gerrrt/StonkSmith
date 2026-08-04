@@ -25,7 +25,7 @@ SUMMARY_URL = "https://digital.fidelity.com/ftgw/digital/portfolio/summary"
 
 def _load_fidelity():
     spec = importlib.util.spec_from_file_location(
-        "fidelity_no_nav", SRC / "brokers/fidelity.py"
+        "fidelity_no_nav", SRC / "brokers/fidelity/broker.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

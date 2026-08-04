@@ -46,7 +46,7 @@ StonkSmith/
 |--- src/
 |    |--- main.py            # CLI entry point
 |    |--- etc/               # config, logging, connection, shells, paths
-|    |--- brokers/           # one <name>.py + <name>/ package per broker
+|    |--- brokers/           # one package per broker (broker.py + helpers)
 |    |--- modules/           # per-broker scrape/sync modules
 |    |--- loaders/           # dynamic broker and module loading
 |    |--- helpers/           # db, sheets, logging helpers
@@ -54,9 +54,13 @@ StonkSmith/
 |--- pyproject.toml
 ```
 
-Each broker is a pair: `brokers/<name>.py` holds the login class, and
-`brokers/<name>/` holds its `database.py`, `db_navigator.py`, and
-`broker_args.py`. Both are loaded by file path, so the two may share a name.
+Each broker is one package. `brokers/<name>/broker.py` holds the login class and
+publishes it as `Broker`, alongside `database.py`, `db_navigator.py`,
+`broker_args.py` and any `parser.py` / `saver.py`. A directory containing
+`broker.py` *is* a broker — that is how `BrokerLoader` discovers them, scanning
+`src/brokers/` first and then `~/.stonksmith/brokers/`. Everything except
+`broker.py` is optional; a broker without `database.py` and `db_navigator.py` is
+listed as "incomplete" by `stonksmithdb`.
 
 ---
 

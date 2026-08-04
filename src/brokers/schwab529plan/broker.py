@@ -1,5 +1,10 @@
 """
-schwab529plan.py: Schwab529plan broker class
+Schwab529plan broker class.
+
+BrokerLoader discovers this package by the presence of this file and imports it by
+path, reading the module-level ``Broker`` alias at the bottom. Imports here must be
+absolute: the module is executed under the synthetic name "broker" with no package,
+so relative imports would fail.
 """
 
 from bs4 import BeautifulSoup
@@ -139,3 +144,8 @@ class Schwab529plan(Connection):
         has_known_login_marker: bool = "struts.token.name" in body_lc
 
         return has_known_dashboard_marker and not has_known_login_marker
+
+
+#: BrokerLoader reads this off the path-loaded module, so the class name is free to
+#: diverge from the directory name (e.g. TSP, Schwab529Plan).
+Broker = Schwab529plan

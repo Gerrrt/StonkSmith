@@ -1,5 +1,10 @@
 """
-fidelity.py: Fidelity broker class
+Fidelity broker class.
+
+BrokerLoader discovers this package by the presence of this file and imports it by
+path, reading the module-level ``Broker`` alias at the bottom. Imports here must be
+absolute: the module is executed under the synthetic name "broker" with no package,
+so relative imports would fail.
 """
 
 import contextlib
@@ -1024,3 +1029,8 @@ class Fidelity(Connection):
         except RuntimeError as e:
             self.logger.fail(msg=f"2FA step failed: {e}")
             return False
+
+
+#: BrokerLoader reads this off the path-loaded module, so the class name is free to
+#: diverge from the directory name (e.g. TSP, Schwab529Plan).
+Broker = Fidelity
