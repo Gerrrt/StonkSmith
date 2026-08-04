@@ -156,11 +156,11 @@ class StonkSmithDBMenu(cmd.Cmd):
 
     def do_broker(self, broker: str) -> None:
         """
-        Switch to a broker's database navigator.
+        Enter a broker's database navigator, or list the brokers if given none.
 
         A sub-shell can ask to switch straight to another broker, so this loops
         rather than recursing: hopping between brokers must not grow the stack.
-        :param broker:
+        :param broker: Broker to enter, or "" to list what is available
         :return:
         """
 

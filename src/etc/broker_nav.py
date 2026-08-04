@@ -71,6 +71,7 @@ class BrokerNavigator(cmd.Cmd):
             "    export creds <file>      write a CSV (never includes secrets)\n"
             "    delete creds <id>        remove a credential\n"
             "    broker <name>            switch straight to another broker\n"
+            "    brokers                  leave and list the available brokers\n"
             "    back                     return to the broker list\n"
         )
 
@@ -108,8 +109,9 @@ class BrokerNavigator(cmd.Cmd):
 
     def do_broker(self, line: str) -> typing.NoReturn:
         """
-        Switch straight to another broker, no `back` required.
-        Usage: broker <name>
+        Switch straight to another broker, no `back` required. With no name,
+        leaves this broker and lists the available ones.
+        Usage: broker [<name>]
         :param line:
         """
 
