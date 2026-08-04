@@ -12,10 +12,14 @@ The balance element is written for screen readers and reads
 import unittest
 from unittest.mock import MagicMock
 
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
 from modules.fidelity_module import (
     ACCOUNT_BALANCE_SELECTORS,
     ACCOUNT_NAME_SELECTORS,
     ACCOUNT_NUMBER_SELECTORS,
+    ACCOUNT_RENDER_TIMEOUT_MS,
     ACCOUNT_ROW_SELECTORS,
     FidelityModule,
     clean_money,
@@ -76,6 +80,50 @@ def _row(name: str, number: str, balance: str) -> MagicMock:
     row = MagicMock()
     row.locator.side_effect = locator
     return row
+
+
+class RenderWaitTests(unittest.TestCase):
+    """The account list hydrates after the spinner clears.
+
+    Observed live: immediately after wait_for_loading_sign() the page reports
+    0 account rows; a moment later there are 5. Scraping in that window
+    produced "No accounts found" from a fully authenticated page.
+    """
+
+    def test_waits_for_the_component_before_reading(self) -> None:
+        page = MagicMock()
+        page.locator.return_value.all.return_value = []
+
+        FidelityModule().scrape_accounts(page=page, context=MagicMock())
+
+        page.wait_for_selector.assert_any_call(
+            ".acct-selector__acct-wrapper",
+            timeout=ACCOUNT_RENDER_TIMEOUT_MS,
+            state="attached",
+        )
+
+    def test_a_selector_that_never_appears_moves_to_the_next(self) -> None:
+        page = MagicMock()
+        # The real exception the production code sees.
+        page.wait_for_selector.side_effect = PlaywrightTimeout("Timeout 20000ms")
+        page.locator.return_value.all.return_value = []
+
+        # Must not raise: the caller reports and captures instead.
+        self.assertEqual(
+            FidelityModule().scrape_accounts(page=page, context=MagicMock()), []
+        )
+        self.assertEqual(page.wait_for_selector.call_count, len(ACCOUNT_ROW_SELECTORS))
+
+    def test_a_real_failure_is_not_swallowed_as_no_accounts(self) -> None:
+        # A closed page reported as "no accounts found" would send debugging
+        # after selectors that were never the problem.
+        page = MagicMock()
+        page.wait_for_selector.side_effect = PlaywrightError(
+            "Target page, context or browser has been closed"
+        )
+
+        with self.assertRaises(PlaywrightError):
+            FidelityModule().scrape_accounts(page=page, context=MagicMock())
 
 
 class ScrapeAccountsTests(unittest.TestCase):

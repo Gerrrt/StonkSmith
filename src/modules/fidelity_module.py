@@ -7,6 +7,8 @@ import datetime
 import re
 from typing import Any, ClassVar
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
 from brokers.fidelity.saver import Saver
 from etc.connection import Connection
 from etc.context import BrokerDbProtocol, Context
@@ -23,6 +25,11 @@ ACCOUNT_ROW_SELECTORS: tuple[str, ...] = (
 ACCOUNT_NAME_SELECTORS: tuple[str, ...] = (".acct-selector__acct-name",)
 ACCOUNT_BALANCE_SELECTORS: tuple[str, ...] = (".acct-selector__acct-balance",)
 ACCOUNT_NUMBER_SELECTORS: tuple[str, ...] = (".acct-selector__acct-num",)
+
+#: The account list is a Stencil web component that hydrates after the loading
+#: spinner clears, so the page can look "done" while the markup is still absent.
+#: Waiting for the component itself is the only reliable signal.
+ACCOUNT_RENDER_TIMEOUT_MS = 20000
 
 #: The balance element is written for screen readers and reads
 #: ", balance:  $1,234.56", so the amount has to be pulled out of the sentence.
@@ -200,6 +207,20 @@ class FidelityModule:
         rows: list[Any] = []
 
         for selector in ACCOUNT_ROW_SELECTORS:
+            # Wait for the component rather than assuming it has rendered: the
+            # spinner clears well before the account list exists, and scraping
+            # in that window returns nothing from a page that looks loaded.
+            try:
+                page.wait_for_selector(
+                    selector, timeout=ACCOUNT_RENDER_TIMEOUT_MS, state="attached"
+                )
+
+            except PlaywrightTimeout:
+                # This selector never appeared; try the next one. Anything else
+                # -- a closed page or context, a protocol error -- is a real
+                # failure and must not be reported as "no accounts found".
+                continue
+
             found: list[Any] = page.locator(selector).all()
             if found:
                 context.log.display(msg=f"Matched account rows via '{selector}'")
