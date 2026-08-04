@@ -106,9 +106,10 @@ class SnapTradeBroker(ApiConnection):
             if not value
         ]
         if missing:
+            verb: str = "is" if len(missing) == 1 else "are"
             self.logger.fail(
                 msg=(
-                    f"[SNAPTRADE] {' and '.join(missing)} is not set in "
+                    f"[SNAPTRADE] {' and '.join(missing)} {verb} not set in "
                     f"~/.stonksmith/stonksmith.conf. {SETUP_HINT}"
                 ),
             )

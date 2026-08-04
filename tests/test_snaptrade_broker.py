@@ -187,8 +187,14 @@ class SnapTradeBrokerTests(unittest.TestCase):
         self.broker.create_conn_obj()
 
         logged = self._logged()
-        self.assertIn("clientId", logged)
-        self.assertIn("userId", logged)
+        self.assertIn("clientId and userId are not set", logged)
+
+    def test_a_single_missing_identifier_reads_as_singular(self) -> None:
+        self._configure(client_id="PERS-TEST", user_id="")
+
+        self.broker.create_conn_obj()
+
+        self.assertIn("userId is not set", self._logged())
 
     def test_missing_consumer_key_is_reported(self) -> None:
         self._store("garrett", "user-secret")
