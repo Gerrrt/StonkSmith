@@ -18,12 +18,13 @@ and a test that fails on that would be noise. Every path StonkSmith writes to is
 listed in etc.paths, and all of them are checked here.
 """
 
-import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+from home_isolation import isolated_home_env
 
 REPO = Path(__file__).resolve().parents[1]
 SELF = Path(__file__)
@@ -75,7 +76,7 @@ class SuiteLeavesHomeAloneTests(unittest.TestCase):
                     "no:cacheprovider",
                     str(REPO / "tests"),
                 ],
-                env=dict(os.environ, HOME=home),
+                env=isolated_home_env(home=home),
                 capture_output=True,
                 text=True,
                 check=False,
