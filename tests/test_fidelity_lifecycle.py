@@ -5,6 +5,7 @@ total credential failure still walked into the 2FA path with an empty code.
 """
 
 import importlib.util
+import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
@@ -24,6 +25,30 @@ def _load_fidelity():
 
 
 fidelity_mod = _load_fidelity()
+
+
+_profile_home: tempfile.TemporaryDirectory | None = None
+
+
+def setUpModule() -> None:
+    """
+    Keep the saved browser profile out of the developer's home directory.
+
+    save_session() mkdirs the profile's parent -- ~/.stonksmith/playwright --
+    before writing storage state, so driving it with a mock context creates that
+    directory for real. The broker reads the path off its own module global at
+    construction, so redirecting it here covers every broker built below.
+    """
+
+    global _profile_home
+
+    _profile_home = tempfile.TemporaryDirectory()
+    fidelity_mod.playwright_path = Path(_profile_home.name)
+
+
+def tearDownModule() -> None:
+    if _profile_home is not None:
+        _profile_home.cleanup()
 
 
 class FidelityLifecycleTests(unittest.TestCase):
