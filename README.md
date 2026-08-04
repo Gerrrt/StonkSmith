@@ -126,8 +126,14 @@ Chrome you started yourself:
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
   --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.stonksmith/playwright/cdp-profile"
+  --user-data-dir="$HOME/.stonksmith/playwright/cdp-profile" \
+  "https://digital.fidelity.com/prgw/digital/signin/retail"
 ```
+
+Chrome opens the sign-in page itself; StonkSmith deliberately never drives an
+attached browser before you are signed in. Doing so trips Fidelity's bot sensor
+and flags that Chrome profile, after which even a manual sign-in is refused --
+the fix then is a fresh `--user-data-dir`, since the flag is per profile.
 
 Sign in to Fidelity in that window, then:
 
