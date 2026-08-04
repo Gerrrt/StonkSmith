@@ -397,6 +397,35 @@ class SilentConnectionTests(unittest.TestCase):
         self.assertEqual(len(warnings), 2)
         self.assertIn("Alpha", warnings[0], "sorted, so output is stable")
 
+    def test_an_unattributable_account_earns_a_caveat_not_silence(self) -> None:
+        # An account with no brokerage_authorization cannot be credited to any
+        # connection, so its own connection looks silent. Dropping the warning
+        # entirely would trade a cosmetic false alarm for a real one going
+        # unreported -- the blind spot this function exists to close.
+        connections = {
+            "c1": {"id": "c1", "disabled": False, "brokerage": {"name": "Schwab"}}
+        }
+        accounts = [account(brokerage_authorization=None)]
+
+        warnings = silent_connections(accounts, connections)
+
+        self.assertEqual(len(warnings), 1, "the warning is kept")
+        self.assertIn("without a connection id", warnings[0], "and qualified")
+
+    def test_no_caveat_when_every_account_is_attributable(self) -> None:
+        connections = {
+            LIVE_CONNECTION: CONNECTIONS[LIVE_CONNECTION],
+            "conn-ibkr": {
+                "id": "conn-ibkr",
+                "disabled": False,
+                "brokerage": {"name": "Interactive Brokers"},
+            },
+        }
+
+        warnings = silent_connections([account()], connections)
+
+        self.assertNotIn("without a connection id", warnings[0])
+
     def test_a_connection_with_no_brokerage_name_falls_back_to_its_id(self) -> None:
         connections = {"conn-x": {"id": "conn-x", "disabled": False}}
 

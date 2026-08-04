@@ -144,15 +144,36 @@ def silent_connections(
     Disabled connections are excluded: the broker already names those, and
     saying it twice for one problem is the noise that guard was written to
     avoid.
+
+    An account that arrives without a ``brokerage_authorization`` cannot be
+    attributed to anything, so its connection can look silent when it is not.
+    That earns a caveat rather than silence of its own: dropping every warning
+    whenever one account is unattributable would restore the exact blind spot
+    this function exists to close, trading a cosmetic false alarm for the real
+    one going unreported.
     :param accounts: Accounts as returned by SnapTrade
     :param connections: Connections indexed by id, from the broker
     :return: One description per connection that contributed nothing
     :rtype: list[str]
     """
 
-    seen: set[str] = {
-        str(object=account.get("brokerage_authorization") or "") for account in accounts
-    }
+    seen: set[str] = set()
+    unattributable: bool = False
+
+    for account in accounts:
+        conn_id = str(object=account.get("brokerage_authorization") or "")
+
+        if conn_id:
+            seen.add(conn_id)
+        else:
+            unattributable = True
+
+    caveat: str = (
+        " Note that at least one account arrived without a connection id, so it "
+        "could belong to this one."
+        if unattributable
+        else ""
+    )
 
     silent: list[str] = []
 
@@ -166,7 +187,7 @@ def silent_connections(
         silent.append(
             f"{name} is connected and enabled but returned no accounts. Nothing "
             "from it was synced. Check that the brokerage side of the connection "
-            "still covers the accounts you expect."
+            f"still covers the accounts you expect.{caveat}"
         )
 
     return sorted(silent)
