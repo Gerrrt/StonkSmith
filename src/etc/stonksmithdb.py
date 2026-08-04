@@ -10,7 +10,7 @@ from types import ModuleType
 
 from sqlalchemy import Engine
 
-from etc.exceptions import UserExitedProto
+from etc.exceptions import SwitchBroker, UserExitedProto
 from etc.infrastructure import create_db_engine
 from etc.logger import StonkSmithAdapter
 from etc.paths import config_path, workspace_dir, ws_path
@@ -156,33 +156,49 @@ class StonkSmithDBMenu(cmd.Cmd):
 
     def do_broker(self, broker: str) -> None:
         """
-        Switches context to specific broker's database navigator.
+        Switch to a broker's database navigator.
+
+        A sub-shell can ask to switch straight to another broker, so this loops
+        rather than recursing: hopping between brokers must not grow the stack.
         :param broker:
         :return:
         """
 
-        broker = broker.strip()
+        # None means finished; "" means the user asked for the listing; a name
+        # means switch to it. Collapsing the first two would make `brokers`
+        # from inside a sub-shell exit silently.
+        pending: str | None = broker.strip()
 
-        if not broker:
-            self.list_brokers()
-            return
+        while pending is not None:
+            if not pending:
+                self.list_brokers()
+                return
+
+            pending = self.enter_broker(broker=pending)
+
+    def enter_broker(self, broker: str) -> str | None:
+        """
+        Open one broker's navigator and run it until the user leaves.
+        :param broker: Broker to enter
+        :return: Another broker to switch to, or None when finished
+        """
 
         if broker not in self.brokers:
             print(f"[-] Unknown broker: {broker}")
             self.list_brokers()
-            return
+            return None
 
         info: dict[str, str] = self.brokers[broker]
         missing: list[str] = [key for key in ("nvpath", "dbpath") if key not in info]
         if missing:
             print(f"[-] Broker '{broker}' is incomplete; missing {', '.join(missing)}")
-            return
+            return None
 
         db_file: Path = Path(workspace_dir) / self.workspace / f"{broker}.db"
 
         if not db_file.exists():
             print(f"[-] Database file missing: {db_file}")
-            return
+            return None
 
         nav_mod: ModuleType | None = self.broker_loader.load_broker(
             broker_path=info["nvpath"]
@@ -193,13 +209,13 @@ class StonkSmithDBMenu(cmd.Cmd):
 
         if nav_mod is None or db_mod is None:
             print(f"[-] Failed to load broker modules for: {broker}")
-            return
+            return None
 
         db_class = getattr(db_mod, "Database", None)
         nav_class = getattr(nav_mod, "DatabaseNavigator", None)
         if db_class is None or nav_class is None:
             print(f"[-] Broker '{broker}' is missing Database or DatabaseNavigator")
-            return
+            return None
 
         engine: Engine = create_db_engine(db_path=db_file)
         db_instance = db_class(engine, broker)
@@ -211,8 +227,15 @@ class StonkSmithDBMenu(cmd.Cmd):
             broker_menu = nav_class(self, db_instance, broker)
             broker_menu.cmdloop()
 
+        except SwitchBroker as switch:
+            # `broker <name>` typed inside the sub-shell: leave this one and
+            # go straight there, no explicit `back` required.
+            return switch.broker
+
         except UserExitedProto:
             pass
+
+        return None
 
     def do_workspace(self, line: str) -> None:
         """
