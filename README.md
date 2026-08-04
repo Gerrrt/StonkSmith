@@ -193,21 +193,23 @@ read -rs SNAPTRADE_CONSUMER_KEY && export SNAPTRADE_CONSUMER_KEY
 ```
 
 ```bash
-uv run python scripts/snaptrade_register.py users
+read -rs SNAPTRADE_USER_SECRET && export SNAPTRADE_USER_SECRET
 ```
-
-A userId is not issued by SnapTrade — you choose it. `users` lists the ones that
-already exist under your key, and flags which have a secret in your keyring. A
-userSecret is shown once, at registration, and cannot be read back, so a user
-whose secret you do not hold cannot be adopted: register a new one and re-link.
 
 ```bash
-uv run python scripts/snaptrade_register.py register --user-id <name>
+uv run python scripts/snaptrade_register.py store --user-id <dashboard userId>
 ```
 
-That creates a SnapTrade user, writes both secrets to the OS keyring, and prints
-the two lines to paste into the `[SNAPTRADE]` section of
-`~/.stonksmith/stonksmith.conf`. Then link a brokerage:
+The `userId` and `userSecret` come from the SnapTrade dashboard, alongside the
+client id and consumer key. They cannot be created from the API on this tier:
+`registerUser` and `listUsers` accept only commercial keys, and a personal key
+gets a 403 reading *"Authentication credentials were not provided"*. Everything
+StonkSmith itself calls — connections, accounts, the connection portal — works
+with a personal key.
+
+`store` writes both secrets to the OS keyring and prints the two lines to paste
+into the `[SNAPTRADE]` section of `~/.stonksmith/stonksmith.conf`. Then link a
+brokerage, if you have not already:
 
 ```bash
 uv run python scripts/snaptrade_register.py link

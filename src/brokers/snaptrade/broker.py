@@ -31,10 +31,9 @@ BROKER_NAME = "snaptrade"
 CONSUMER_KEY_ACCOUNT = "consumerKey"
 
 SETUP_HINT = (
-    "Run `uv run python scripts/snaptrade_register.py register --user-id <name>` "
-    "to create a SnapTrade user and store its secrets in the keyring, then set "
-    "clientId and userId in the [SNAPTRADE] section of "
-    "~/.stonksmith/stonksmith.conf."
+    "Run `uv run python scripts/snaptrade_register.py store --user-id <name>` to "
+    "put your SnapTrade key material in the keyring, then set clientId and "
+    "userId in the [SNAPTRADE] section of ~/.stonksmith/stonksmith.conf."
 )
 
 

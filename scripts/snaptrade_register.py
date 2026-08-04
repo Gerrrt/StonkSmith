@@ -1,10 +1,17 @@
-"""One-time SnapTrade setup: create a user, link a brokerage, check health.
+"""One-time SnapTrade setup: store your key, link a brokerage, check health.
 
-Registering a SnapTrade user and linking a brokerage are both interactive and
-happen once, so they live here rather than in the broker. `register` in
-particular is a *state-changing* call that mints a user under your client id --
-a broker that ran it automatically on a missing config would create a new user
-and orphan every existing connection on the first misconfigured run.
+Storing key material and linking a brokerage happen once and are interactive, so
+they live here rather than in the broker.
+
+Note what this does *not* do. Creating a SnapTrade user is a commercial-tier
+call: /snapTrade/registerUser and /snapTrade/listUsers advertise only the
+commercialApiKey auth mode, so a personal key gets a 403 reading "Authentication
+credentials were not provided" -- the SDK sends no auth at all for a mode the
+endpoint does not offer. On the personal tier the userId and userSecret come
+from the SnapTrade dashboard, and `store` puts them where the broker looks.
+
+The three endpoints the broker itself depends on -- listBrokerageAuthorizations,
+listUserAccounts and the connection portal login -- all accept a personal key.
 
 Secrets are written straight to the OS keyring through the same helpers the
 broker reads them with. They are never printed, and never passed as arguments:
@@ -12,10 +19,11 @@ argv is readable by every process on the machine.
 
     export SNAPTRADE_CLIENT_ID='PERS-...'
     read -rs SNAPTRADE_CONSUMER_KEY && export SNAPTRADE_CONSUMER_KEY
+    read -rs SNAPTRADE_USER_SECRET && export SNAPTRADE_USER_SECRET
 
-    uv run python scripts/snaptrade_register.py register --user-id garrett
-    uv run python scripts/snaptrade_register.py link
+    uv run python scripts/snaptrade_register.py store --user-id <dashboard id>
     uv run python scripts/snaptrade_register.py status
+    uv run python scripts/snaptrade_register.py link
 
 Verified against snaptrade-python-sdk 12.0.4.
 """
@@ -90,85 +98,44 @@ def _resolve_user(user_id: str) -> tuple[str, str]:
     return resolved, secret
 
 
-def users(client: Any) -> int:
-    """List the SnapTrade users that already exist under this client id.
+def store(user_id: str, consumer_key: str, client_id: str) -> int:
+    """Put the SnapTrade key material into the OS keyring.
 
-    A userId is not issued by SnapTrade -- you choose it at registration. This
-    exists to answer the other question: which ones have already been created,
-    and therefore already own the linked brokerages.
-
-    Only ids are returned. A userSecret is shown once, at registration, and
-    cannot be read back afterwards.
+    Creating a user is a commercial-tier call: /snapTrade/registerUser and
+    /snapTrade/listUsers both advertise only the commercialApiKey auth mode, so
+    a personal key gets a 403 with "Authentication credentials were not
+    provided" -- the SDK sends no auth for a mode the endpoint does not offer.
+    On the personal tier the userId and userSecret come from the SnapTrade
+    dashboard instead, and this stores them.
     """
 
-    existing = list(_body(client.authentication.list_snap_trade_users()))
-
-    if not existing:
-        print("No SnapTrade users exist yet under this client id.")
-        print(f"Create one with:\n  {sys.argv[0]} register --user-id <name>")
-        return 0
-
-    print(f"{len(existing)} SnapTrade user(s) under this client id:\n")
-
-    for entry in existing:
-        held = get_secret(key=keyring_key(broker=BROKER_NAME, username=str(entry)))
-        print(f"  {entry}{'   (secret in your keyring)' if held else ''}")
-
-    print(
-        "\nA userSecret is only ever shown at registration. If none of these has\n"
-        "a secret in your keyring, you cannot adopt that user: register a new one\n"
-        "and re-link its brokerages through the Connection Portal."
-    )
-
-    return 0
-
-
-def register(client: Any, user_id: str, consumer_key: str) -> int:
-    """Create a SnapTrade user and store both secrets in the keyring."""
-
     if not user_id:
-        sys.exit("register needs --user-id <name>.")
+        sys.exit("store needs --user-id <name from the SnapTrade dashboard>.")
+
+    user_secret: str = _env("SNAPTRADE_USER_SECRET")
 
     existing: str | None = get_secret(
         key=keyring_key(broker=BROKER_NAME, username=user_id)
     )
 
-    if existing:
-        sys.exit(
-            f"A secret for SnapTrade user '{user_id}' is already in the keyring. "
-            "Registering again would mint a different user and orphan its "
-            "connections. Delete the keyring entry first if that is really wanted."
-        )
-
-    body: Any = _body(
-        client.authentication.register_snap_trade_user(body={"userId": user_id})
-    )
-
-    returned_id = str(object=dict(body).get("userId") or user_id)
-    user_secret = str(object=dict(body).get("userSecret") or "")
-
-    if not user_secret:
-        sys.exit("SnapTrade returned no userSecret; nothing stored.")
-
     set_secret(
-        key=keyring_key(broker=BROKER_NAME, username=returned_id), secret=user_secret
+        key=keyring_key(broker=BROKER_NAME, username=user_id), secret=user_secret
     )
     set_secret(
         key=keyring_key(broker=BROKER_NAME, username=CONSUMER_KEY_ACCOUNT),
         secret=consumer_key,
     )
 
-    client_id: str = _env("SNAPTRADE_CLIENT_ID")
-
-    print(f"Registered SnapTrade user '{returned_id}'.")
-    print("\nStored in the OS keyring (service 'stonksmith'):")
-    print(f"  {keyring_key(broker=BROKER_NAME, username=returned_id)}")
+    verb = "Replaced" if existing else "Stored"
+    print(f"{verb} the key material for SnapTrade user '{user_id}'.")
+    print("\nIn the OS keyring (service 'stonksmith'):")
+    print(f"  {keyring_key(broker=BROKER_NAME, username=user_id)}")
     print(f"  {keyring_key(broker=BROKER_NAME, username=CONSUMER_KEY_ACCOUNT)}")
     print("\nAdd this to ~/.stonksmith/stonksmith.conf:")
     print("\n[SNAPTRADE]")
     print(f"clientid = {client_id}")
-    print(f"userid = {returned_id}")
-    print(f"\nThen link a brokerage:\n  {sys.argv[0]} link")
+    print(f"userid = {user_id}")
+    print(f"\nThen check what is linked:\n  {sys.argv[0]} status")
 
     return 0
 
@@ -256,10 +223,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("users", help="list SnapTrade users that already exist")
-
-    register_parser = sub.add_parser("register", help="create a SnapTrade user")
-    register_parser.add_argument("--user-id", default="", help="a name you choose")
+    store_parser = sub.add_parser(
+        "store", help="put dashboard key material into the keyring"
+    )
+    store_parser.add_argument(
+        "--user-id", default="", help="the userId from the SnapTrade dashboard"
+    )
 
     for name, help_text in (
         ("link", "print a Connection Portal URL"),
@@ -272,13 +241,13 @@ def main() -> int:
 
     client_id: str = _env("SNAPTRADE_CLIENT_ID")
     consumer_key: str = _env("SNAPTRADE_CONSUMER_KEY")
+
+    # store is purely local -- it writes the keyring and prints config lines --
+    # so it must not need a working client to run.
+    if args.command == "store":
+        return store(args.user_id, consumer_key, client_id)
+
     client: Any = _client(client_id, consumer_key)
-
-    if args.command == "users":
-        return users(client)
-
-    if args.command == "register":
-        return register(client, args.user_id, consumer_key)
 
     if args.command == "link":
         return link(client, args.user_id)
