@@ -325,14 +325,24 @@ class Fidelity(Connection):
         :return: True if already signed in
         """
 
-        try:
-            self.active_page.goto(url=self.summary_url)
+        # Never navigate an attached browser before the operator has signed in.
+        # Driving an unauthenticated page over CDP is what trips Akamai's sensor
+        # and flags `_abck` for that profile; every later attempt in the same
+        # profile is then refused, including the operator's own manual sign-in.
+        # Judge from whatever is already on screen instead.
+        if self.attached:
+            if not self.on_summary_page():
+                return False
 
-        except PlaywrightError:
-            return False
+        else:
+            try:
+                self.active_page.goto(url=self.summary_url)
 
-        if not self.on_summary_page():
-            return False
+            except PlaywrightError:
+                return False
+
+            if not self.on_summary_page():
+                return False
 
         # Read once and judge from that: three separate content() calls could
         # each see a different page, and an unreadable one must not read as
@@ -368,21 +378,33 @@ class Fidelity(Connection):
             self.username = self.username or MANUAL_SESSION_LABEL
             return True
 
-        where: str = (
-            "the Chrome window StonkSmith is attached to"
-            if self.attached
-            else "the browser window that just opened"
-        )
+        if self.attached:
+            message = (
+                "Sign in to Fidelity in the Chrome window and open your "
+                "portfolio summary. StonkSmith is waiting and will not touch "
+                "the page until you are in -- driving it beforehand is what "
+                "gets the profile blocked."
+            )
+        else:
+            message = (
+                "Sign in to Fidelity in the browser window that just opened, "
+                "including any 2FA."
+            )
+
         self.logger.highlight(
             msg=(
-                f"Sign in to Fidelity in {where}, including any 2FA. StonkSmith "
-                "takes over once the portfolio summary loads (waiting up to "
-                f"{MANUAL_LOGIN_TIMEOUT_MS // 60000} minutes)."
+                f"{message} Taking over once the portfolio summary loads "
+                f"(waiting up to {MANUAL_LOGIN_TIMEOUT_MS // 60000} minutes)."
             )
         )
 
         try:
-            self.active_page.goto(url=self.login_url)
+            # Attached: do not navigate. Chrome was told to open the sign-in
+            # page itself; touching it from here before the operator signs in
+            # is the poisoning step described in session_is_live().
+            if not self.attached:
+                self.active_page.goto(url=self.login_url)
+
             # A predicate on the path, not a glob over the whole URL: the
             # sign-in URL embeds the summary URL in AuthRedUrl, so "**summary**"
             # matches immediately and the wait returns before any sign-in.
@@ -666,7 +688,8 @@ class Fidelity(Connection):
         return (
             '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" '
             f"--remote-debugging-port={port} "
-            f'--user-data-dir="{profile}"'
+            f'--user-data-dir="{profile}" '
+            f'"{self.login_url}"'
         )
 
     def chrome_profile_dir(self) -> Path:
