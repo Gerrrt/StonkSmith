@@ -19,6 +19,10 @@ The hazards, in the order they bite:
 * A brand new connection reports its accounts before the first sync finishes,
   with no balance or a zero one. Writing that records a false datapoint that
   looks exactly like a real one forever after.
+* A connection can be enabled, unbroken, and still return nothing. Every other
+  message here is derived from an account, so a brokerage that contributes none
+  produces no output whatsoever and the run looks completely healthy while
+  covering one brokerage fewer than it should.
 
 Every exclusion is reported. Silently dropping an account is the one outcome
 worse than any of the above.
@@ -122,6 +126,50 @@ def staleness(
         return f"its holdings last synced {age} days ago"
 
     return ""
+
+
+def silent_connections(
+    accounts: list[dict[str, Any]], connections: dict[str, dict[str, Any]]
+) -> list[str]:
+    """
+    Enabled connections that returned no accounts at all.
+
+    Observed in the field: an Interactive Brokers connection authenticated,
+    reported ``disabled: false`` with no error anywhere, and returned zero
+    accounts because the Flex Query behind it covered none. The sync quietly
+    covered three brokerages instead of four and said nothing, because every
+    other message this module prints is derived from an account -- and there
+    were no accounts to derive one from.
+
+    Disabled connections are excluded: the broker already names those, and
+    saying it twice for one problem is the noise that guard was written to
+    avoid.
+    :param accounts: Accounts as returned by SnapTrade
+    :param connections: Connections indexed by id, from the broker
+    :return: One description per connection that contributed nothing
+    :rtype: list[str]
+    """
+
+    seen: set[str] = {
+        str(object=account.get("brokerage_authorization") or "") for account in accounts
+    }
+
+    silent: list[str] = []
+
+    for conn_id, connection in connections.items():
+        if conn_id in seen or connection.get("disabled"):
+            continue
+
+        name = str(
+            object=dict(connection.get("brokerage") or {}).get("name") or conn_id
+        )
+        silent.append(
+            f"{name} is connected and enabled but returned no accounts. Nothing "
+            "from it was synced. Check that the brokerage side of the connection "
+            "still covers the accounts you expect."
+        )
+
+    return sorted(silent)
 
 
 def select_accounts(
@@ -282,9 +330,16 @@ class SnapTradeModule:
             context.log.fail(msg=f"Could not list SnapTrade accounts: {e}")
             return
 
+        connections: dict[str, dict[str, Any]] = getattr(connection, "connections", {})
+
+        # Before anything derived from accounts, because a connection that
+        # returned none produces no other message at all.
+        for warning in silent_connections(accounts, connections):
+            context.log.fail(msg=warning)
+
         rows, skipped = select_accounts(
             accounts,
-            getattr(connection, "connections", {}),
+            connections,
             now=datetime.datetime.now(tz=datetime.UTC),
             max_age_days=getattr(context.args, "max_age_days", 3),
             include_liabilities=getattr(context.args, "include_liabilities", False),
