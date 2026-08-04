@@ -1,11 +1,16 @@
 """
-This module contains the broker implementations for the various brokers that are
-supported by this package. Each broker implementation is contained in its own
-subpackage, which includes the necessary modules for parsing, saving, and navigating the
-broker's data. The `__init__.py` file in this module imports the subpackages and makes
-them available for use in the rest of the project. The brokers currently supported
-include:
-- `schwab529plan`: A broker implementation for the Schwab 529 Plan, which includes
-  modules for parsing the broker's data, saving it to a database, and navigating the
-  data for analysis and reporting purposes.
+Broker implementations.
+
+Each broker is a subpackage containing ``broker.py`` -- the login class, exported as
+``Broker`` -- plus whichever of ``database.py``, ``db_navigator.py``,
+``broker_args.py``, ``parser.py`` and ``saver.py`` it needs. Currently ``fidelity``
+and ``schwab529plan``.
+
+This file deliberately imports nothing. ``loaders.brokerloader`` finds brokers by
+scanning for directories containing ``broker.py`` and loads each file by path, so
+importing them here would only add startup cost to every run.
+
+Note that BrokerLoader does not register what it loads in ``sys.modules``: a class
+imported from one of these subpackages is a distinct object from the one the loader
+returns for the same source file, so ``isinstance`` across that boundary is False.
 """

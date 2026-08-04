@@ -33,7 +33,7 @@ SUMMARY_BODY = "<html><div>holdings</div></html>"
 
 def _load_fidelity():
     spec = importlib.util.spec_from_file_location(
-        "fidelity_broker_summary", SRC / "brokers/fidelity.py"
+        "fidelity_broker_summary", SRC / "brokers/fidelity/broker.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

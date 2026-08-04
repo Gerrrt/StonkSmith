@@ -4,7 +4,11 @@ from pathlib import Path
 from typing import Any
 
 _BROKER_FILE = (
-    Path(__file__).resolve().parents[1] / "src" / "brokers" / "schwab529plan.py"
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "brokers"
+    / "schwab529plan"
+    / "broker.py"
 )
 _SPEC = spec_from_file_location("brokers_schwab529plan_file", _BROKER_FILE)
 if _SPEC is None or _SPEC.loader is None:

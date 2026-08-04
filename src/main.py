@@ -85,13 +85,18 @@ def main(args: Namespace) -> int:
         )
         return 1
 
-    broker_class_name: str = broker_name.capitalize()
-    broker_class: Any = getattr(broker_module, broker_class_name, None)
+    # Brokers publish a module-level 'Broker' alias so the class name is free to
+    # diverge from the directory name (TSP, Schwab529Plan). Fall back to the
+    # capitalized directory name for brokers that predate the alias.
+    broker_class: Any = getattr(broker_module, "Broker", None)
+    if broker_class is None:
+        broker_class = getattr(broker_module, broker_name.capitalize(), None)
+
     if broker_class is None:
         stonksmith_logger.error(
             msg=(
                 f"Broker module '{broker_info['path']}' does not define a "
-                f"'{broker_class_name}' class."
+                f"'Broker' alias or a '{broker_name.capitalize()}' class."
             ),
         )
         return 1

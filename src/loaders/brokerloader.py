@@ -7,6 +7,7 @@ from importlib.machinery import ModuleSpec
 from os.path import expanduser
 from pathlib import Path
 from types import ModuleType
+from typing import ClassVar
 
 from etc.paths import package_root
 
@@ -15,6 +16,15 @@ class BrokerLoader:
     """
     Load assistant brokers
     """
+
+    #: Files a broker package may provide alongside broker.py, and the key each is
+    #: published under. broker.py itself is mandatory: its presence is what makes a
+    #: directory a broker.
+    _OPTIONAL_FILES: ClassVar[dict[str, str]] = {
+        "dbpath": "database.py",
+        "nvpath": "db_navigator.py",
+        "argspath": "broker_args.py",
+    }
 
     def __init__(self) -> None:
         self.stonksmith_path = Path(expanduser(path="~/.stonksmith"))
@@ -42,6 +52,11 @@ class BrokerLoader:
     def get_brokers(self) -> dict[str, dict[str, str]]:
         """
         Scan directories and return a mapping of available brokers.
+
+        A broker is a *directory* containing ``broker.py``. There is no flat-file
+        form: a ``brokers/<name>.py`` beside a ``brokers/<name>/`` package made
+        ``import brokers.<name>`` resolve to the package while BrokerLoader resolved
+        the file, so the two silently disagreed.
         :return:
         :rtype:
         """
@@ -61,26 +76,31 @@ class BrokerLoader:
         )
 
         for base_path in search_dirs:
-            if not base_path.exists():
+            if not base_path.is_dir():
                 continue
 
-            for broker_file in base_path.glob(pattern="[!_]*.py"):
-                name: str = broker_file.stem
+            # sorted() so broker subparsers register in a stable order across
+            # machines; iterdir() order is filesystem-dependent.
+            for broker_dir in sorted(base_path.iterdir()):
+                name: str = broker_dir.name
+
+                if name.startswith((".", "_")) or not broker_dir.is_dir():
+                    continue
+
+                broker_file: Path = broker_dir / "broker.py"
+                if not broker_file.is_file():
+                    continue
+
+                # First root wins: a user broker never shadows a bundled one.
                 if name in brokers:
                     continue
 
-                info: dict[str, str] = {"path": str(object=Path(broker_file))}
-                broker_dir: Path = base_path / name
+                info: dict[str, str] = {"path": str(object=broker_file)}
 
-                if broker_dir.is_dir():
-                    sub_files: dict[str, Path] = {
-                        "dbpath": broker_dir / "database.py",
-                        "nvpath": broker_dir / "db_navigator.py",
-                        "argspath": broker_dir / "broker_args.py",
-                    }
-                    for key, p in sub_files.items():
-                        if p.exists():
-                            info[key] = str(object=p)
+                for key, filename in self._OPTIONAL_FILES.items():
+                    candidate: Path = broker_dir / filename
+                    if candidate.is_file():
+                        info[key] = str(object=candidate)
 
                 brokers[name] = info
 
