@@ -105,10 +105,29 @@ def store(consumer_key: str, client_id: str) -> int:
     return 0
 
 
-def link(client: Any) -> int:
-    """Print a Connection Portal URL for linking or repairing a brokerage."""
+def link(client: Any, reconnect: str = "", broker: str = "") -> int:
+    """Print a Connection Portal URL for linking or repairing a brokerage.
 
-    body: Any = _body(client.authentication.login_snap_trade_user())
+    Without --reconnect the portal creates a connection, and SnapTrade de-dupes:
+    "if the user has an existing connection with the brokerage ... SnapTrade will
+    return the existing connection instead of creating a new one". So supplying
+    fresh credentials for a brokerage already connected can silently do nothing --
+    observed with an Interactive Brokers connection whose updated_date never
+    moved across a reconnect attempt.
+
+    --reconnect points the portal at one specific connection and re-authorizes
+    that one, which is the documented way to repair a connection rather than
+    replace it.
+    """
+
+    kwargs: dict[str, str] = {}
+
+    if reconnect:
+        kwargs["reconnect"] = reconnect
+    if broker:
+        kwargs["broker"] = broker
+
+    body: Any = _body(client.authentication.login_snap_trade_user(**kwargs))
 
     url = str(object=dict(body).get("redirectURI") or "")
 
@@ -172,8 +191,23 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("store", help="put the consumer key into the keyring")
-    sub.add_parser("link", help="print a Connection Portal URL")
     sub.add_parser("status", help="connection health and account names")
+
+    link_parser = sub.add_parser("link", help="print a Connection Portal URL")
+    link_parser.add_argument(
+        "--reconnect",
+        default="",
+        help=(
+            "connection id to re-authorize instead of creating a new connection; "
+            "required when the brokerage is already connected, because SnapTrade "
+            "de-dupes and would otherwise return the existing one unchanged"
+        ),
+    )
+    link_parser.add_argument(
+        "--broker",
+        default="",
+        help="brokerage slug to preselect, e.g. INTERACTIVE-BROKERS-FLEX",
+    )
 
     args = parser.parse_args()
 
@@ -186,7 +220,7 @@ def main() -> int:
     client: Any = _client(client_id, consumer_key)
 
     if args.command == "link":
-        return link(client)
+        return link(client, args.reconnect, args.broker)
 
     return status(client)
 
