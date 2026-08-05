@@ -9,21 +9,66 @@ lives here and each broker subclasses it with its own default broker name.
 
 Secrets are never stored in SQLite. The credentials table holds a keyring
 reference; the secret itself lives in the OS credential store (see etc.secrets).
+
+Account data is four tables, not one. ``accounts`` is identity and holds one row
+per account ever seen; ``account_snapshots`` holds one row per account per run
+with a *numeric* value beside the text the source actually printed; ``holdings``
+holds the positions behind a snapshot; ``transactions`` holds movements, keyed so
+that re-scraping an overlapping window does not duplicate history. A daily
+change is the difference between consecutive snapshots, which is why the value
+has to be a number and the as-of date has to come from the source rather than
+from the clock.
+
+Databases written before that schema existed carry a single ``accounts`` table
+of per-run rows with a text balance. They are migrated on open, and the original
+table is renamed aside rather than dropped -- see migrate_legacy_accounts.
 """
+
+import datetime
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from typing import Any
 
 from sqlalchemy import (
     Column,
+    Connection,
     Engine,
+    ForeignKey,
+    Index,
     Insert,
     Integer,
     MetaData,
+    Numeric,
     String,
     Table,
+    UniqueConstraint,
+    func,
     text,
 )
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 
+from etc.logger import stonksmith_logger
+from etc.records import AccountIdentity, Holding, Transaction
 from etc.secrets import delete_secret, get_secret, keyring_key, set_secret
+from helpers.normalize import format_amount, to_amount, to_currency
+
+#: Where a legacy ``accounts`` table is moved so its rows survive the migration.
+#: Never dropped: if the replay misreads a balance format, this is the only copy
+#: of what the scrape originally recorded.
+LEGACY_ACCOUNTS_TABLE = "accounts_legacy_v1"
+
+#: What an account with no usable name is called. Matches what the pre-history
+#: ``save_account_data`` path produced, so migrated rows stay stitched to the
+#: rows written after the upgrade.
+UNKNOWN_ACCOUNT = "Unknown account"
+
+#: Money columns. Four decimal places is more than any broker reports and leaves
+#: room for a currency that does not use two.
+_MONEY = Numeric(precision=18, scale=4, asdecimal=False)
+
+#: Quantity columns. Six places, because fractional shares are routine.
+_QUANTITY = Numeric(precision=18, scale=6, asdecimal=False)
 
 
 class BrokerDatabase:
@@ -51,18 +96,298 @@ class BrokerDatabase:
             "accounts",
             self.metadata,
             Column("id", Integer, primary_key=True),
-            Column("account_name", String),
-            Column("balance", String),
-            Column("last_updated", String),
+            Column("broker", String, nullable=False),
+            # The brokerage an aggregator read this from. Empty for direct
+            # scrapers. Deliberately outside the unique key: account_key already
+            # carries the brokerage for SnapTrade, and a nullable column in a
+            # SQLite UNIQUE lets duplicate identities accumulate forever,
+            # because every NULL is distinct from every other NULL.
+            Column("source", String, nullable=False, server_default=""),
+            Column("account_key", String, nullable=False),
+            Column("external_id", String),
+            Column("display_name", String, nullable=False),
+            Column("beneficiary", String),
+            Column("kind", String),
+            Column("currency", String),
+            Column("first_seen", String, nullable=False),
+            Column("last_seen", String, nullable=False),
+            UniqueConstraint("broker", "account_key", name="uq_accounts_broker_key"),
         )
 
+        self.snapshots_table = Table(
+            "account_snapshots",
+            self.metadata,
+            Column("id", Integer, primary_key=True),
+            Column(
+                "account_id",
+                Integer,
+                ForeignKey("accounts.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            Column("scraped_at", String, nullable=False),
+            # What the source says the value is for, which is not when the
+            # scrape ran. Nullable: several sources never say.
+            Column("as_of", String),
+            # Nullable on purpose. An account can appear in a run with no number
+            # at all, and that is different from a zero and from being absent.
+            Column("value", _MONEY),
+            Column("currency", String, nullable=False, server_default="USD"),
+            Column("raw_value", String),
+            UniqueConstraint(
+                "account_id", "scraped_at", name="uq_snapshot_account_time"
+            ),
+            Index("ix_snapshots_account_time", "account_id", "scraped_at"),
+        )
+
+        self.holdings_table = Table(
+            "holdings",
+            self.metadata,
+            Column("id", Integer, primary_key=True),
+            Column(
+                "snapshot_id",
+                Integer,
+                ForeignKey("account_snapshots.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            # Ordering, not identity by symbol: a source may supply neither a
+            # symbol nor a fund code, and one account can hold two lots of the
+            # same fund. Holdings are replaced wholesale per snapshot, so
+            # position is both sufficient and honest.
+            Column("position", Integer, nullable=False),
+            Column("symbol", String),
+            Column("fund_code", String),
+            Column("name", String),
+            Column("units", _QUANTITY),
+            Column("price", _QUANTITY),
+            Column("value", _MONEY),
+            Column("principal", _MONEY),
+            Column("earnings", _MONEY),
+            Column("cost_basis", _MONEY),
+            Column("currency", String, nullable=False, server_default="USD"),
+            Column("raw_value", String),
+            UniqueConstraint(
+                "snapshot_id", "position", name="uq_holding_snapshot_position"
+            ),
+            Index("ix_holdings_snapshot", "snapshot_id"),
+        )
+
+        self.transactions_table = Table(
+            "transactions",
+            self.metadata,
+            Column("id", Integer, primary_key=True),
+            Column(
+                "account_id",
+                Integer,
+                ForeignKey("accounts.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            Column("external_id", String),
+            Column("processed_on", String, nullable=False, server_default=""),
+            Column("traded_on", String, nullable=False, server_default=""),
+            Column("tx_type", String, nullable=False, server_default=""),
+            Column("symbol", String),
+            Column("description", String),
+            Column("units", _QUANTITY),
+            Column("price", _QUANTITY),
+            Column("value", _MONEY),
+            Column("currency", String, nullable=False, server_default="USD"),
+            Column("natural_key", String, nullable=False),
+            Column("first_seen", String, nullable=False),
+            Column("raw", String),
+            UniqueConstraint(
+                "account_id", "natural_key", name="uq_transaction_account_key"
+            ),
+            Index("ix_transactions_account_date", "account_id", "processed_on"),
+        )
+
+        # Order matters. create_all leaves an existing table alone, so a legacy
+        # ``accounts`` has to be renamed out of the way before the new one can
+        # be created in its place.
+        renamed: bool = self.migrate_legacy_accounts()
         self.metadata.create_all(bind=self.db_engine)
+        self.backfill_legacy_accounts(force=renamed)
         self.migrate_plaintext_secrets()
 
         session_factory: sessionmaker[Session] = sessionmaker(
             bind=self.db_engine, expire_on_commit=True
         )
         self.sess: Session = scoped_session(session_factory=session_factory)()
+
+    @contextmanager
+    def _write(self) -> Iterator[Connection]:
+        """
+        A connection with real transaction semantics.
+
+        The engine is built with isolation_level="AUTOCOMMIT" (see
+        etc.infrastructure), under which every statement commits as it runs:
+        conn.commit() is a no-op and `with conn.begin():` rolls nothing back.
+        Anything that writes more than one row -- a snapshot and its holdings,
+        the legacy backfill -- has to override it, or a failure halfway through
+        leaves the database holding half a scrape.
+        :return: A connection inside a transaction that actually rolls back
+        """
+
+        with (
+            self.db_engine.connect().execution_options(
+                isolation_level="SERIALIZABLE"
+            ) as conn,
+            conn.begin(),
+        ):
+            yield conn
+
+    def _table_columns(self, conn: Connection, table: str) -> set[str]:
+        """
+        The column names of an existing table, or an empty set if there is none.
+        :param conn: An open connection
+        :param table: The table name
+        :return: Column names
+        :rtype: set[str]
+        """
+
+        return {
+            str(object=row[1])
+            for row in conn.execute(text(f"PRAGMA table_info({table})"))
+        }
+
+    def migrate_legacy_accounts(self) -> bool:
+        """
+        Move a pre-history ``accounts`` table aside so the new one can be built.
+
+        The old table was named for identity but held one row per account per
+        run -- it was a snapshot table wearing the wrong name. Renaming rather
+        than dropping keeps every scrape the user has ever taken, and keeps it
+        readable if the replay in backfill_legacy_accounts turns out to have
+        misread a balance format.
+
+        Idempotent: a fresh database, an already-migrated one and a table that
+        is not the legacy shape are all left untouched.
+        :return: True when a rename happened
+        :rtype: bool
+        """
+
+        with self.db_engine.connect() as conn:
+            columns: set[str] = self._table_columns(conn=conn, table="accounts")
+
+            if not columns:
+                # Fresh database; create_all will make the new shape.
+                return False
+
+            if "account_key" in columns:
+                # Already the new shape.
+                return False
+
+            if "balance" not in columns:
+                # Something else entirely. Hands off.
+                return False
+
+            if self._table_columns(conn=conn, table=LEGACY_ACCOUNTS_TABLE):
+                # A previous run renamed but did not finish the backfill.
+                return False
+
+            conn.execute(
+                text(f"ALTER TABLE accounts RENAME TO {LEGACY_ACCOUNTS_TABLE}")
+            )
+            conn.commit()
+
+        return True
+
+    def backfill_legacy_accounts(self, force: bool = False) -> int:
+        """
+        Replay pre-history balance rows into the new tables.
+
+        Each distinct ``account_name`` becomes one identity, keyed on the very
+        string the old save_account_data passed -- which is what stitches a
+        user's existing history to everything written after the upgrade. Each
+        row becomes a snapshot, with the text balance parsed into a number and
+        the original kept beside it.
+
+        ``as_of`` stays NULL: the source's own date was never captured by the
+        old schema and cannot be invented now.
+        :param force: Replay even when a snapshot table already has rows,
+            because the rename just happened in this same open
+        :return: The number of snapshots written
+        :rtype: int
+        """
+
+        with self.db_engine.connect() as conn:
+            if not self._table_columns(conn=conn, table=LEGACY_ACCOUNTS_TABLE):
+                return 0
+
+            if not force:
+                already: Any = conn.execute(
+                    self.snapshots_table.select().limit(1)
+                ).fetchone()
+
+                if already is not None:
+                    return 0
+
+            legacy = conn.execute(
+                text(
+                    "SELECT account_name, balance, last_updated "
+                    f"FROM {LEGACY_ACCOUNTS_TABLE} ORDER BY id"
+                )
+            ).fetchall()
+
+        if not legacy:
+            return 0
+
+        seen: dict[str, dict[str, str]] = {}
+        rows: list[tuple[str, str | None, str]] = []
+
+        for account_name, balance, last_updated in legacy:
+            name: str = str(object=account_name or "").strip() or UNKNOWN_ACCOUNT
+            stamp: str = str(object=last_updated or "").strip() or _utc_now()
+
+            span: dict[str, str] | None = seen.get(name)
+            if span is None:
+                seen[name] = {"first": stamp, "last": stamp}
+            else:
+                span["first"] = min(span["first"], stamp)
+                span["last"] = max(span["last"], stamp)
+
+            rows.append((name, balance, stamp))
+
+        with self._write() as conn:
+            ids: dict[str, int] = {
+                name: self._upsert_account(
+                    conn=conn,
+                    account=AccountIdentity(account_key=name, display_name=name),
+                    timestamp=span["last"],
+                    first_seen=span["first"],
+                )
+                for name, span in seen.items()
+            }
+
+            payload: list[dict[str, Any]] = [
+                {
+                    "account_id": ids[name],
+                    "scraped_at": stamp,
+                    "as_of": None,
+                    "value": to_amount(balance),
+                    "currency": to_currency(balance),
+                    "raw_value": balance,
+                }
+                for name, balance, stamp in rows
+            ]
+
+            conn.execute(
+                sqlite_insert(self.snapshots_table).on_conflict_do_nothing(
+                    index_elements=["account_id", "scraped_at"]
+                ),
+                payload,
+            )
+
+        # A migration of thousands of rows that happens in total silence is not
+        # something a user should have to discover from a schema dump.
+        stonksmith_logger.success(
+            msg=(
+                f"Migrated {len(payload)} legacy balance row(s) for "
+                f"{self.broker} into account_snapshots. The original table is "
+                f"kept as {LEGACY_ACCOUNTS_TABLE}."
+            )
+        )
+
+        return len(payload)
 
     def migrate_plaintext_secrets(self) -> int:
         """
@@ -216,34 +541,443 @@ class BrokerDatabase:
 
         return resolved
 
+    def _upsert_account(
+        self,
+        conn: Connection,
+        account: AccountIdentity,
+        timestamp: str,
+        first_seen: str | None = None,
+    ) -> int:
+        """
+        Find or create an account identity, refreshing what the source now says.
+
+        Everything except the key is updated on conflict, so metadata that only
+        a later run learns -- a brokerage name, an external id, a beneficiary --
+        backfills onto identities the legacy migration created with nothing but
+        a name. COALESCE keeps a previously-known value rather than letting a
+        source that has gone quiet blank it out.
+        :param conn: An open connection inside a transaction
+        :param account: The identity to record
+        :param timestamp: This run's timestamp, recorded as last_seen
+        :param first_seen: Overrides first_seen on insert, for the backfill
+        :return: The accounts.id
+        :rtype: int
+        """
+
+        table = self.accounts_table
+        key: str = account.account_key.strip() or UNKNOWN_ACCOUNT
+
+        stmt = sqlite_insert(table).values(
+            broker=self.broker,
+            source=account.source or "",
+            account_key=key,
+            external_id=account.external_id,
+            display_name=account.display_name.strip() or key,
+            beneficiary=account.beneficiary,
+            kind=account.kind,
+            currency=account.currency,
+            first_seen=first_seen or timestamp,
+            last_seen=timestamp,
+        )
+
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["broker", "account_key"],
+            set_={
+                "source": stmt.excluded.source,
+                "display_name": stmt.excluded.display_name,
+                "external_id": _keep_known(
+                    stmt.excluded.external_id, table.c.external_id
+                ),
+                "beneficiary": _keep_known(
+                    stmt.excluded.beneficiary, table.c.beneficiary
+                ),
+                "kind": _keep_known(stmt.excluded.kind, table.c.kind),
+                "currency": _keep_known(stmt.excluded.currency, table.c.currency),
+                "last_seen": stmt.excluded.last_seen,
+            },
+        ).returning(table.c.id)
+
+        account_id: Any = conn.execute(statement=stmt).scalar_one()
+
+        return int(account_id)
+
+    def save_snapshot(
+        self,
+        account: AccountIdentity,
+        scraped_at: str,
+        value: float | None,
+        currency: str = "USD",
+        as_of: str | None = None,
+        raw_value: str | None = None,
+        holdings: Sequence[Holding] = (),
+        transactions: Sequence[Transaction] = (),
+    ) -> int:
+        """
+        Write one account's entire run: identity, value, positions, movements.
+
+        All of it in one transaction. A snapshot holding half its positions is
+        worse than no snapshot at all, because nothing downstream can tell the
+        difference between "this account holds three funds" and "the scrape died
+        after three funds".
+
+        Re-running the same scrape is a no-op rather than a duplicate: the
+        snapshot is keyed on (account, scraped_at), holdings are replaced
+        wholesale, and transactions are keyed so an overlapping window
+        contributes only what is new.
+        :param account: Who the account is
+        :param scraped_at: This run's UTC timestamp
+        :param value: The balance as a number, or None if it could not be read
+        :param currency: ISO currency code
+        :param as_of: The date the source says the value is for
+        :param raw_value: The balance exactly as the source printed it
+        :param holdings: Positions behind this value, in source order
+        :param transactions: Movements to record against the account
+        :return: The account_snapshots.id
+        :rtype: int
+        """
+
+        with self._write() as conn:
+            account_id: int = self._upsert_account(
+                conn=conn, account=account, timestamp=scraped_at
+            )
+
+            snapshot = sqlite_insert(self.snapshots_table).values(
+                account_id=account_id,
+                scraped_at=scraped_at,
+                as_of=as_of,
+                value=value,
+                currency=currency or "USD",
+                raw_value=raw_value,
+            )
+            snapshot = snapshot.on_conflict_do_update(
+                index_elements=["account_id", "scraped_at"],
+                set_={
+                    "as_of": snapshot.excluded.as_of,
+                    "value": snapshot.excluded.value,
+                    "currency": snapshot.excluded.currency,
+                    "raw_value": snapshot.excluded.raw_value,
+                },
+            ).returning(self.snapshots_table.c.id)
+
+            snapshot_id = int(conn.execute(statement=snapshot).scalar_one())
+
+            # Full replace. A re-run that found fewer positions must not leave
+            # the ones it no longer sees lying around looking current.
+            conn.execute(
+                self.holdings_table.delete().where(
+                    self.holdings_table.c.snapshot_id == snapshot_id
+                )
+            )
+
+            if holdings:
+                conn.execute(
+                    self.holdings_table.insert(),
+                    [
+                        {
+                            "snapshot_id": snapshot_id,
+                            "position": index,
+                            "symbol": holding.symbol,
+                            "fund_code": holding.fund_code,
+                            "name": holding.name,
+                            "units": holding.units,
+                            "price": holding.price,
+                            "value": holding.value,
+                            "principal": holding.principal,
+                            "earnings": holding.earnings,
+                            "cost_basis": holding.cost_basis,
+                            "currency": holding.currency or "USD",
+                            "raw_value": holding.raw_value,
+                        }
+                        for index, holding in enumerate(holdings)
+                    ],
+                )
+
+            if transactions:
+                self._insert_transactions(
+                    conn=conn,
+                    account_id=account_id,
+                    rows=transactions,
+                    first_seen=scraped_at,
+                )
+
+        return snapshot_id
+
+    def _insert_transactions(
+        self,
+        conn: Connection,
+        account_id: int,
+        rows: Sequence[Transaction],
+        first_seen: str,
+    ) -> None:
+        """
+        Insert movements, skipping any already recorded.
+        :param conn: An open connection inside a transaction
+        :param account_id: The account they belong to
+        :param rows: The movements
+        :param first_seen: This run's timestamp
+        """
+
+        keys: list[str] = natural_keys(rows=rows)
+
+        conn.execute(
+            sqlite_insert(self.transactions_table).on_conflict_do_nothing(
+                index_elements=["account_id", "natural_key"]
+            ),
+            [
+                {
+                    "account_id": account_id,
+                    "external_id": row.external_id,
+                    "processed_on": row.processed_on or "",
+                    "traded_on": row.traded_on or "",
+                    "tx_type": row.tx_type or "",
+                    "symbol": row.symbol,
+                    "description": row.description,
+                    "units": row.units,
+                    "price": row.price,
+                    "value": row.value,
+                    "currency": row.currency or "USD",
+                    "natural_key": key,
+                    "first_seen": first_seen,
+                    "raw": row.raw,
+                }
+                for row, key in zip(rows, keys, strict=True)
+            ],
+        )
+
+    def save_transactions(
+        self, account: AccountIdentity, timestamp: str, rows: Sequence[Transaction]
+    ) -> int:
+        """
+        Record movements against an account without writing a snapshot.
+        :param account: Who the account is
+        :param timestamp: This run's UTC timestamp
+        :param rows: The movements
+        :return: The number of rows now stored for this account
+        :rtype: int
+        """
+
+        if not rows:
+            return 0
+
+        with self._write() as conn:
+            account_id: int = self._upsert_account(
+                conn=conn, account=account, timestamp=timestamp
+            )
+            self._insert_transactions(
+                conn=conn, account_id=account_id, rows=rows, first_seen=timestamp
+            )
+
+            stored: Any = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM transactions WHERE account_id = :account_id"
+                ),
+                {"account_id": account_id},
+            ).scalar_one()
+
+        return int(stored)
+
     def save_account_data(
         self, account_name: str | None, balance: str | None, timestamp: str
     ) -> None:
         """
         Record a point-in-time account balance.
+
+        Kept for modules written against the pre-history schema, including any
+        under ~/.stonksmith/modules. Their data lands in the new tables all the
+        same, because the identity key is exactly the ``account_name`` string
+        this has always been passed.
         :param account_name: Human-readable account name
         :param balance: Balance as scraped, kept as text
         :param timestamp: UTC timestamp string
         """
 
-        ins: Insert = self.accounts_table.insert().values(
-            account_name=account_name, balance=balance, last_updated=timestamp
-        )
+        name: str = str(object=account_name or "").strip() or UNKNOWN_ACCOUNT
 
-        with self.db_engine.connect() as conn:
-            conn.execute(statement=ins)
-            conn.commit()
+        self.save_snapshot(
+            account=AccountIdentity(account_key=name, display_name=name),
+            scraped_at=timestamp,
+            value=to_amount(balance),
+            currency=to_currency(balance),
+            raw_value=balance,
+        )
 
     def get_account_data(self) -> list[tuple[str, ...]]:
         """
         List saved account snapshots, newest last.
+
+        The shape predates account history and is kept verbatim, so navigators
+        and any third-party caller see no change.
         :return: Rows of (id, account_name, balance, last_updated)
         :rtype: list[tuple[str, ...]]
         """
 
-        c = self.accounts_table.c
-        query = self.sess.query(c.id, c.account_name, c.balance, c.last_updated)
-        return [tuple(row) for row in query.all()]
+        rows = self._select(
+            "SELECT s.id, a.account_key, s.raw_value, s.value, s.currency, "
+            "s.scraped_at FROM account_snapshots s "
+            "JOIN accounts a ON a.id = s.account_id "
+            "ORDER BY s.scraped_at, s.id"
+        )
+
+        return [
+            (
+                row[0],
+                row[1],
+                # The text the source printed, when there is any. A migrated row
+                # whose balance could not be parsed still has its original
+                # string; a row written from a number renders one.
+                row[2] if row[2] is not None else format_amount(row[3], row[4]),
+                row[5],
+            )
+            for row in rows
+        ]
+
+    def _select(
+        self, query: str, params: Mapping[str, Any] | None = None
+    ) -> list[tuple[Any, ...]]:
+        """
+        Run a read query and return plain tuples.
+        :param query: The SQL
+        :param params: Bound parameters
+        :return: Rows
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        with self.db_engine.connect() as conn:
+            return [tuple(row) for row in conn.execute(text(query), dict(params or {}))]
+
+    def get_accounts(self) -> list[tuple[Any, ...]]:
+        """
+        List account identities.
+        :return: Rows of (id, source, display_name, beneficiary, kind, last_seen)
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        return self._select(
+            "SELECT id, source, display_name, beneficiary, kind, last_seen "
+            "FROM accounts ORDER BY source, display_name"
+        )
+
+    def get_snapshots(
+        self, account_id: int | None = None, limit: int = 100
+    ) -> list[tuple[Any, ...]]:
+        """
+        List account values over time, newest first.
+        :param account_id: Restrict to one account
+        :param limit: How many rows at most
+        :return: Rows of (id, account, as_of, scraped_at, value, currency)
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        where: str = "WHERE s.account_id = :account_id" if account_id else ""
+
+        return self._select(
+            "SELECT s.id, a.display_name, s.as_of, s.scraped_at, s.value, "
+            f"s.currency FROM account_snapshots s "
+            f"JOIN accounts a ON a.id = s.account_id {where} "
+            "ORDER BY s.scraped_at DESC, s.id DESC LIMIT :limit",
+            {"account_id": account_id, "limit": limit},
+        )
+
+    def get_latest_snapshots(self) -> list[tuple[Any, ...]]:
+        """
+        The newest value for each account, one row apiece.
+
+        This is what a dashboard shows: current state, not history.
+        :return: Rows of (snapshot_id, source, display_name, value, currency,
+            as_of, scraped_at, kind)
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        return self._select(
+            "SELECT s.id, a.source, a.display_name, s.value, s.currency, "
+            "s.as_of, s.scraped_at, a.kind FROM account_snapshots s "
+            "JOIN accounts a ON a.id = s.account_id "
+            "WHERE s.id = ("
+            "  SELECT id FROM account_snapshots "
+            "  WHERE account_id = a.id ORDER BY scraped_at DESC, id DESC LIMIT 1"
+            ") ORDER BY a.source, a.display_name"
+        )
+
+    def get_holdings(
+        self, snapshot_id: int | None = None, limit: int = 500
+    ) -> list[tuple[Any, ...]]:
+        """
+        List positions. With no snapshot id, the positions behind each account's
+        newest snapshot -- which is what a dashboard wants.
+        :param snapshot_id: Restrict to one snapshot
+        :param limit: How many rows at most
+        :return: Rows of (account, symbol_or_fund, name, units, price, value,
+            principal, earnings, cost_basis, currency)
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        where: str = (
+            "WHERE h.snapshot_id = :snapshot_id"
+            if snapshot_id
+            else "WHERE s.id = ("
+            "  SELECT id FROM account_snapshots "
+            "  WHERE account_id = a.id ORDER BY scraped_at DESC, id DESC LIMIT 1"
+            ")"
+        )
+
+        return self._select(
+            "SELECT a.display_name, COALESCE(h.symbol, h.fund_code), h.name, "
+            "h.units, h.price, h.value, h.principal, h.earnings, h.cost_basis, "
+            "h.currency FROM holdings h "
+            "JOIN account_snapshots s ON s.id = h.snapshot_id "
+            f"JOIN accounts a ON a.id = s.account_id {where} "
+            "ORDER BY a.display_name, h.position LIMIT :limit",
+            {"snapshot_id": snapshot_id, "limit": limit},
+        )
+
+    def get_transactions(
+        self, account_id: int | None = None, limit: int = 500
+    ) -> list[tuple[Any, ...]]:
+        """
+        List movements, newest first.
+        :param account_id: Restrict to one account
+        :param limit: How many rows at most
+        :return: Rows of (id, account, processed_on, traded_on, tx_type, symbol,
+            units, price, value, currency)
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        where: str = "WHERE t.account_id = :account_id" if account_id else ""
+
+        return self._select(
+            "SELECT t.id, a.display_name, t.processed_on, t.traded_on, "
+            "t.tx_type, t.symbol, t.units, t.price, t.value, t.currency "
+            f"FROM transactions t JOIN accounts a ON a.id = t.account_id {where} "
+            "ORDER BY t.processed_on DESC, t.id DESC LIMIT :limit",
+            {"account_id": account_id, "limit": limit},
+        )
+
+    def get_daily_change(self, limit: int = 100) -> list[tuple[Any, ...]]:
+        """
+        The move between each snapshot and the one before it.
+
+        This is the whole point of storing a number rather than "$1,234.56":
+        the daily +/- is not a field any broker reports, it is a difference
+        between two consecutive snapshots of the same account.
+        :param limit: How many rows at most
+        :return: Rows of (account, as_of, scraped_at, value, previous, delta,
+            currency), newest first
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        return self._select(
+            "SELECT display_name, as_of, scraped_at, value, previous, "
+            "CASE WHEN previous IS NULL OR value IS NULL THEN NULL "
+            "     ELSE value - previous END, currency "
+            "FROM ("
+            "  SELECT a.display_name, s.as_of, s.scraped_at, s.value, s.currency,"
+            "    LAG(s.value) OVER ("
+            "      PARTITION BY s.account_id ORDER BY s.scraped_at, s.id"
+            "    ) AS previous"
+            "  FROM account_snapshots s JOIN accounts a ON a.id = s.account_id"
+            ") ORDER BY scraped_at DESC LIMIT :limit",
+            {"limit": limit},
+        )
 
     def shutdown_db(self) -> None:
         """
@@ -251,3 +985,81 @@ class BrokerDatabase:
         """
 
         self.sess.close()
+
+
+def _utc_now() -> str:
+    """
+    The current UTC time in the format every module stamps its runs with.
+    :return: "YYYY-MM-DD HH:MM:SS"
+    :rtype: str
+    """
+
+    return datetime.datetime.now(tz=datetime.UTC).strftime(format="%Y-%m-%d %H:%M:%S")
+
+
+def _keep_known(incoming: Any, existing: Any) -> Any:
+    """
+    Prefer what this run learned, but never blank out what an earlier one knew.
+
+    Sources drop fields. SnapTrade can stop returning an account's category, a
+    529 page can render without the beneficiary block. Overwriting a known value
+    with the NULL that produced would lose information the database already had.
+    :param incoming: The value from this run
+    :param existing: The column holding what is already stored
+    :return: A COALESCE expression
+    """
+
+    return func.coalesce(incoming, existing)
+
+
+def natural_keys(rows: Sequence[Transaction]) -> list[str]:
+    """
+    Derive a stable, per-account-unique key for each movement.
+
+    A scraped transaction table has no ids, so the key is the row's own content.
+    That alone is not enough: two identical $50 contributions on the same day are
+    indistinguishable field by field, and collapsing them into one row loses half
+    the money permanently. So repeats within a batch are numbered -- the first
+    "#0", the second "#1" -- which re-scraping the same page reproduces exactly,
+    while genuinely new rows get keys nothing has yet.
+
+    The key is built from the source's own text rather than the parsed numbers,
+    so improving a parser never makes old rows look new. It is stored readable
+    rather than hashed: when a source changes its date format, a key you can read
+    is worth more than sixteen saved bytes.
+
+    The caveat this rests on: a source's same-day duplicates always appear
+    together in its window. Every broker seen so far returns transactions in date
+    order, so they do.
+    :param rows: Movements in the order the source returned them
+    :return: One key per row, in the same order
+    :rtype: list[str]
+    """
+
+    counts: dict[str, int] = {}
+    keys: list[str] = []
+
+    for row in rows:
+        if row.external_id:
+            # The source has its own identifier. Nothing to derive.
+            keys.append(f"id:{row.external_id}")
+            continue
+
+        body: str = "|".join(
+            " ".join(str(object=part or "").split())
+            for part in (
+                row.processed_on,
+                row.traded_on,
+                row.tx_type,
+                row.symbol,
+                row.units,
+                row.price,
+                row.raw if row.raw is not None else row.value,
+            )
+        )
+
+        ordinal: int = counts.get(body, 0)
+        counts[body] = ordinal + 1
+        keys.append(f"{body}#{ordinal}")
+
+    return keys

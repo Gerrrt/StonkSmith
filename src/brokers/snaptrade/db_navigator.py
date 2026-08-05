@@ -35,9 +35,15 @@ class DatabaseNavigator(BrokerNavigator):
         # The inherited intro advertises `add creds`, which does nothing here.
         self.intro = (
             f"\n[*] {broker_name}:\n"
-            "    show accounts            saved balances\n"
+            "    show accounts            the accounts across every connection\n"
+            "    show snapshots [<acct>]  what each account was worth, over time\n"
+            "    show holdings [<snap>]   the positions behind a snapshot\n"
+            "    show transactions [<acct>]  recorded movements\n"
+            "    show deltas              the change between consecutive snapshots\n"
             "    show creds               credentials (there are none; see below)\n"
             "    export creds <file>      write a CSV (never includes secrets)\n"
+            "    export <category> <file> also accounts, snapshots, holdings,\n"
+            "                             transactions or deltas\n"
             "    broker <name>            switch straight to another broker\n"
             "    brokers                  leave and list the available brokers\n"
             "    back                     return to the broker list\n"

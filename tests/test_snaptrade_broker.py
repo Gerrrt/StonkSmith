@@ -11,6 +11,7 @@ user from the key, so there is no userId or userSecret anywhere in this broker.
 Nothing here touches the network, the real keyring, or the real config file.
 """
 
+import datetime
 import importlib.util
 import logging
 import unittest
@@ -88,6 +89,11 @@ class _FakeClient:
         self._connections = connections or []
         self._error = error
         self.accounts: list[dict[str, Any]] = []
+        self.positions: list[dict[str, Any]] = []
+        self.positions_error: Exception | None = None
+        self.activities: list[dict[str, Any]] = []
+        self.activity_calls: list[dict[str, Any]] = []
+        self.page_size = 2
         self.connections = self._Connections(self)
         self.account_information = self._Accounts(self)
 
@@ -108,6 +114,23 @@ class _FakeClient:
         def list_user_accounts(self, **kwargs: Any) -> list[dict[str, Any]]:
             del kwargs
             return self.outer.accounts
+
+        def get_all_account_positions(self, **kwargs: Any) -> list[dict[str, Any]]:
+            del kwargs
+            if self.outer.positions_error is not None:
+                raise self.outer.positions_error
+            return self.outer.positions
+
+        def get_account_activities(self, **kwargs: Any) -> dict[str, Any]:
+            # Paginated, like the real endpoint: the records are under "data"
+            # and the envelope says how many there are in total.
+            self.outer.activity_calls.append(dict(kwargs))
+            offset = int(kwargs.get("offset") or 0)
+            page = self.outer.activities[offset : offset + self.outer.page_size]
+            return {
+                "data": page,
+                "pagination": {"offset": offset, "total": len(self.outer.activities)},
+            }
 
 
 def _connection(
@@ -274,6 +297,138 @@ class AsRowsTests(unittest.TestCase):
 
     def test_a_plain_list_passes_through(self) -> None:
         self.assertEqual(self.module.as_rows([{"id": "1"}]), [{"id": "1"}])
+
+
+class AsPageRowsTests(unittest.TestCase):
+    """Activities arrive wrapped in a pagination envelope; accounts do not.
+
+    Handing the envelope to as_rows iterates its two keys instead of the
+    records, which yields two meaningless rows rather than an error -- so the
+    two shapes need two functions.
+    """
+
+    def setUp(self) -> None:
+        self.module = _load_broker_module()
+
+    def test_the_records_come_out_of_the_data_key(self) -> None:
+        class _Response:
+            def __init__(self) -> None:
+                self.body = {
+                    "data": [{"id": "a"}, {"id": "b"}],
+                    "pagination": {"total": 2},
+                }
+
+        rows, pagination = self.module.as_page_rows(_Response())
+
+        self.assertEqual(rows, [{"id": "a"}, {"id": "b"}])
+        self.assertEqual(pagination, {"total": 2})
+
+    def test_an_already_unwrapped_list_is_tolerated(self) -> None:
+        rows, pagination = self.module.as_page_rows([{"id": "a"}])
+
+        self.assertEqual(rows, [{"id": "a"}])
+        self.assertEqual(pagination, {})
+
+    def test_an_empty_page_is_not_an_error(self) -> None:
+        rows, _ = self.module.as_page_rows({"data": [], "pagination": {"total": 0}})
+
+        self.assertEqual(rows, [])
+
+
+class FetchPositionsTests(unittest.TestCase):
+    """Per-account positions, including the account that has none."""
+
+    def setUp(self) -> None:
+        module = _load_broker_module()
+        self.broker = module.SnapTradeBroker()
+        self.client = _FakeClient()
+        self.broker.client = self.client
+
+    def test_positions_come_back_as_plain_dictionaries(self) -> None:
+        self.client.positions = [{"units": 3, "price": 250}]
+
+        self.assertEqual(
+            self.broker.fetch_positions(account_id="acct-1"),
+            [{"units": 3, "price": 250}],
+        )
+
+    def test_an_account_with_no_positions_returns_nothing_rather_than_failing(
+        self,
+    ) -> None:
+        # A brokerage that pre-aggregates -- a Schwab-held 529 -- reports a
+        # balance and zero positions. That is a fact about the account.
+        self.assertEqual(self.broker.fetch_positions(account_id="acct-1"), [])
+
+
+class FetchActivitiesTests(unittest.TestCase):
+    """Transactions are paginated, and stopping early loses history silently."""
+
+    def setUp(self) -> None:
+        module = _load_broker_module()
+        self.broker = module.SnapTradeBroker()
+        self.client = _FakeClient()
+        self.broker.client = self.client
+
+    def _fetch(self) -> list[dict[str, Any]]:
+        return self.broker.fetch_activities(
+            account_id="acct-1",
+            start_date=datetime.date(2025, 10, 1),
+            end_date=datetime.date(2025, 12, 31),
+        )
+
+    def test_every_page_is_followed(self) -> None:
+        self.client.activities = [{"id": str(object=n)} for n in range(5)]
+        self.client.page_size = 2
+
+        self.assertEqual(
+            [row["id"] for row in self._fetch()], ["0", "1", "2", "3", "4"]
+        )
+
+    def test_the_offset_advances_between_pages(self) -> None:
+        self.client.activities = [{"id": str(object=n)} for n in range(5)]
+        self.client.page_size = 2
+
+        self._fetch()
+
+        self.assertEqual(
+            [call["offset"] for call in self.client.activity_calls], [0, 2, 4]
+        )
+
+    def test_a_single_page_makes_a_single_call(self) -> None:
+        self.client.activities = [{"id": "0"}]
+
+        self._fetch()
+
+        self.assertEqual(len(self.client.activity_calls), 1)
+
+    def test_no_activities_is_one_call_and_no_rows(self) -> None:
+        self.assertEqual(self._fetch(), [])
+        self.assertEqual(len(self.client.activity_calls), 1)
+
+    def test_the_window_is_passed_through(self) -> None:
+        self._fetch()
+
+        call = self.client.activity_calls[0]
+        self.assertEqual(call["start_date"], datetime.date(2025, 10, 1))
+        self.assertEqual(call["end_date"], datetime.date(2025, 12, 31))
+
+    def test_a_pagination_block_that_never_ends_is_capped(self) -> None:
+        # An infinite loop against a paid API is worse than a short read.
+        class _Endless:
+            def get_account_activities(self, **kwargs: Any) -> dict[str, Any]:
+                del kwargs
+                return {"data": [{"id": "x"}], "pagination": {"total": 10**9}}
+
+        self.broker.client = type("C", (), {"account_information": _Endless()})()
+
+        rows = self.broker.fetch_activities(
+            account_id="acct-1",
+            start_date=datetime.date(2025, 10, 1),
+            end_date=datetime.date(2025, 12, 31),
+            page_limit=3,
+        )
+
+        self.assertEqual(len(rows), 3)
 
 
 if __name__ == "__main__":

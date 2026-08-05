@@ -86,6 +86,57 @@ class SaverWritesTests(unittest.TestCase):
         self.assertIn("50", written_row, "the Value column must not be blank")
         self.assertEqual(rows_call.args[1], "B10:I10")
 
+    def test_transactions_are_rewritten_rather_than_appended(self) -> None:
+        # append_rows added the same transactions again on every run, so the
+        # block grew by a full copy of the history each sync. The database
+        # deduplicates them now and this tab is rendered from it, so the honest
+        # operation is to write exactly what is stored.
+        saver, worksheet = self._saver()
+
+        saver.save_transactions(
+            data=[
+                {
+                    "Processed": "2025-12-30",
+                    "Traded": "2025-12-29",
+                    "Type": "Contribution",
+                    "Units": "1",
+                    "Price": "$50.00",
+                    "Value": "$50.00",
+                }
+            ]
+        )
+
+        worksheet.append_rows.assert_not_called()
+
+        rows_call = worksheet.update.call_args_list[-1]
+        self.assertEqual(rows_call.args[1], "C17:H17")
+
+    def test_the_transaction_range_grows_with_the_data(self) -> None:
+        saver, worksheet = self._saver()
+
+        saver.save_transactions(
+            data=[
+                {
+                    "Processed": "a",
+                    "Traded": "b",
+                    "Type": "c",
+                    "Units": "1",
+                    "Price": "2",
+                    "Value": "3",
+                },
+                {
+                    "Processed": "d",
+                    "Traded": "e",
+                    "Type": "f",
+                    "Units": "4",
+                    "Price": "5",
+                    "Value": "6",
+                },
+            ]
+        )
+
+        self.assertEqual(worksheet.update.call_args_list[-1].args[1], "C17:H18")
+
 
 class ParserSaverContractTests(unittest.TestCase):
     def test_investment_keys_cover_every_key_the_saver_reads(self) -> None:

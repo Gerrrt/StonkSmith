@@ -21,6 +21,75 @@ from etc.config import process_secret
 from etc.exceptions import SwitchBroker, UserExitedProto
 from etc.logger import stonksmith_logger
 from helpers import db as helper_db
+from helpers.normalize import format_amount
+
+#: Column headers for each thing the shell can show or export, in the order the
+#: corresponding read method returns them. One place, so `show` and `export`
+#: cannot drift apart.
+CATEGORY_HEADERS: dict[str, tuple[str, ...]] = {
+    "creds": ("ID", "User", "Pass", "Type", "Source"),
+    "accounts": ("ID", "Source", "Account", "Beneficiary", "Kind", "Last Seen"),
+    "snapshots": ("ID", "Account", "As Of", "Scraped", "Value", "Currency"),
+    "holdings": (
+        "Account",
+        "Symbol",
+        "Name",
+        "Units",
+        "Price",
+        "Value",
+        "Principal",
+        "Earnings",
+        "Cost Basis",
+        "Currency",
+    ),
+    "transactions": (
+        "ID",
+        "Account",
+        "Processed",
+        "Traded",
+        "Type",
+        "Symbol",
+        "Units",
+        "Price",
+        "Value",
+        "Currency",
+    ),
+    "deltas": (
+        "Account",
+        "As Of",
+        "Scraped",
+        "Value",
+        "Previous",
+        "Change",
+        "Currency",
+    ),
+}
+
+#: Which read method backs each history category.
+HISTORY_READERS: dict[str, str] = {
+    "accounts": "get_accounts",
+    "snapshots": "get_snapshots",
+    "holdings": "get_holdings",
+    "transactions": "get_transactions",
+    "deltas": "get_daily_change",
+}
+
+#: Column positions holding money, per category, so a stored number is shown as
+#: currency rather than as a bare float.
+MONEY_COLUMNS: dict[str, tuple[int, ...]] = {
+    "snapshots": (4,),
+    "holdings": (4, 5, 6, 7, 8),
+    "transactions": (7, 8),
+    "deltas": (3, 4, 5),
+}
+
+#: Where the currency code sits, so a CAD balance is not rendered with a "$".
+CURRENCY_COLUMN: dict[str, int] = {
+    "snapshots": 5,
+    "holdings": 9,
+    "transactions": 9,
+    "deltas": 6,
+}
 
 
 class DatabaseLike(typing.Protocol):
@@ -68,8 +137,15 @@ class BrokerNavigator(cmd.Cmd):
             f"\n[*] {broker_name}:\n"
             "    add creds <username>     store a credential "
             "(the secret goes to the OS keyring)\n"
-            "    show creds | accounts    credentials (masked) or saved balances\n"
+            "    show creds               credentials, masked\n"
+            "    show accounts            the accounts this broker knows\n"
+            "    show snapshots [<acct>]  what each account was worth, over time\n"
+            "    show holdings [<snap>]   the positions behind a snapshot\n"
+            "    show transactions [<acct>]  recorded movements\n"
+            "    show deltas              the change between consecutive snapshots\n"
             "    export creds <file>      write a CSV (never includes secrets)\n"
+            "    export <category> <file> also accounts, snapshots, holdings,\n"
+            "                             transactions or deltas\n"
             "    delete creds <id>        remove a credential\n"
             "    broker <name>            switch straight to another broker\n"
             "    brokers                  leave and list the available brokers\n"
@@ -195,17 +271,103 @@ class BrokerNavigator(cmd.Cmd):
         else:
             stonksmith_logger.fail(msg=f"No credential with id {cred_id}")
 
+    def history_rows(
+        self, category: str, argument: str = ""
+    ) -> list[tuple[object, ...]] | None:
+        """
+        Read one of the history tables, or explain why it cannot be read.
+
+        Probed rather than assumed, the way every other optional capability
+        here is: a database written against the older contract has no snapshot
+        tables, and saying so beats an AttributeError.
+        :param category: One of HISTORY_READERS
+        :param argument: An optional account or snapshot id to filter on
+        :return: The rows, or None when this database cannot answer
+        :rtype: list[tuple[object, ...]] | None
+        """
+
+        reader = getattr(self.db, HISTORY_READERS[category], None)
+
+        if not callable(reader):
+            stonksmith_logger.fail(
+                msg=(
+                    f"This broker's database predates account history, so there "
+                    f"are no {category} to show. Re-run a sync to build them."
+                )
+            )
+            return None
+
+        if not argument:
+            return list(reader())
+
+        try:
+            target: int = int(argument)
+
+        except ValueError:
+            stonksmith_logger.fail(msg=f"Not an id: {argument}")
+            return None
+
+        if category == "holdings":
+            return list(reader(snapshot_id=target))
+
+        if category == "deltas":
+            # No per-account form; the whole table is small and already ordered.
+            return list(reader())
+
+        return list(reader(account_id=target))
+
+    @staticmethod
+    def render(category: str, rows: Sequence[Sequence[object]]) -> list[list[str]]:
+        """
+        Turn stored rows into display cells, money included.
+
+        A stored value is a number. Printing it raw shows "1234.56" where every
+        other surface in StonkSmith shows "$1,234.56", and shows a CAD balance
+        wearing a dollar sign if the currency column is ignored.
+        :param category: Which table these rows came from
+        :param rows: The rows
+        :return: One list of cells per row
+        :rtype: list[list[str]]
+        """
+
+        money_at: tuple[int, ...] = MONEY_COLUMNS.get(category, ())
+        currency_at: int | None = CURRENCY_COLUMN.get(category)
+
+        rendered: list[list[str]] = []
+
+        for row in rows:
+            currency: object = (
+                row[currency_at]
+                if currency_at is not None and currency_at < len(row)
+                else "USD"
+            )
+
+            cells: list[str] = [
+                format_amount(value, currency)
+                if index in money_at and value is not None
+                else ("" if value is None else str(object=value))
+                for index, value in enumerate(row)
+            ]
+            rendered.append(cells)
+
+        return rendered
+
     def do_export(self, line: str) -> None:
         """
         Export data to CSV. Secrets are never written; the keyring reference is
         exported instead.
-        Usage: export creds <file> | export accounts <file>
+        Usage: export creds|accounts|snapshots|holdings|transactions|deltas <file>
         :param line:
         """
 
         args: list[str] = line.split()
         if len(args) < 2:
-            stonksmith_logger.fail(msg="Usage: export creds|accounts <file>")
+            stonksmith_logger.fail(
+                msg=(
+                    "Usage: export creds|accounts|snapshots|holdings|"
+                    "transactions|deltas <file>"
+                )
+            )
             return
 
         category: str = args[0].lower()
@@ -215,9 +377,14 @@ class BrokerNavigator(cmd.Cmd):
             rows: list[tuple[object, ...]] = self.db.get_credential_refs()
             headers: Sequence[str] = ("ID", "User", "KeyringRef", "Type", "Source")
 
-        elif category == "accounts":
-            rows = self.db.get_account_data()
-            headers = ("ID", "Account", "Balance", "Updated")
+        elif category in HISTORY_READERS:
+            found = self.history_rows(category=category)
+
+            if found is None:
+                return
+
+            rows = found
+            headers = CATEGORY_HEADERS[category]
 
         else:
             stonksmith_logger.fail(msg=f"Unknown category {category}")
@@ -229,15 +396,17 @@ class BrokerNavigator(cmd.Cmd):
     def do_show(self, line: str) -> None:
         """
         Show data in a table. Secrets are masked unless audit_mode is enabled.
-        Usage: show creds | show accounts
+        Usage: show creds | accounts | snapshots | holdings | transactions | deltas
         :param line:
         """
 
-        category: str = line.strip().lower()
+        parts: list[str] = line.strip().lower().split()
+        category: str = parts[0] if parts else ""
+        argument: str = parts[1] if len(parts) > 1 else ""
 
         if category == "creds":
             data: list[tuple[object, ...]] = self.db.get_credentials()
-            table_data: list[list[str]] = [["ID", "User", "Pass", "Type", "Source"]]
+            table_data: list[list[str]] = [list(CATEGORY_HEADERS["creds"])]
 
             for row in data:
                 cells: list[str] = [str(object=value) for value in row]
@@ -248,13 +417,22 @@ class BrokerNavigator(cmd.Cmd):
 
             helper_db.print_table(data=table_data, title=f"{self.broker} Credentials")
 
-        elif category == "accounts":
-            accounts: list[tuple[object, ...]] = self.db.get_account_data()
-            account_table: list[list[str]] = [["ID", "Account", "Balance", "Updated"]]
-            account_table.extend(
-                [str(object=value) for value in row] for row in accounts
+        elif category in HISTORY_READERS:
+            rows = self.history_rows(category=category, argument=argument)
+
+            if rows is None:
+                return
+
+            table: list[list[str]] = [list(CATEGORY_HEADERS[category])]
+            table.extend(self.render(category=category, rows=rows))
+
+            helper_db.print_table(
+                data=table, title=f"{self.broker} {category.capitalize()}"
             )
-            helper_db.print_table(data=account_table, title=f"{self.broker} Accounts")
 
         else:
-            stonksmith_logger.fail(msg="Usage: show creds|accounts")
+            stonksmith_logger.fail(
+                msg=(
+                    "Usage: show creds|accounts|snapshots|holdings|transactions|deltas"
+                )
+            )

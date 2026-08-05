@@ -12,6 +12,7 @@ alias at the bottom, so imports here must be absolute: the module is executed
 under the synthetic name "broker" with no package.
 """
 
+import datetime
 from typing import Any
 
 from etc.api_connection import ApiConnection
@@ -53,6 +54,32 @@ def as_rows(response: Any) -> list[dict[str, Any]]:
     body: Any = getattr(response, "body", response)
 
     return [dict(entry) for entry in body]
+
+
+def as_page_rows(response: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """
+    Normalize a *paginated* SDK response.
+
+    Activities do not come back as a bare list like accounts and positions do:
+    the body is ``{"data": [...], "pagination": {...}}``. Handing that to
+    as_rows iterates the envelope's two keys instead of the records, which
+    yields two meaningless rows rather than an error -- so this is a separate
+    function rather than a flag on the other one.
+    :param response: The SDK response
+    :return: The records, and the pagination block
+    :rtype: tuple[list[dict[str, Any]], dict[str, Any]]
+    """
+
+    body: Any = getattr(response, "body", response)
+
+    if isinstance(body, list):
+        # Some SDK versions unwrap it. Tolerate both rather than betting.
+        return [dict(entry) for entry in body], {}
+
+    data: Any = body.get("data") if hasattr(body, "get") else None
+    pagination: Any = body.get("pagination") if hasattr(body, "get") else None
+
+    return [dict(entry) for entry in (data or [])], dict(pagination or {})
 
 
 class SnapTradeBroker(ApiConnection):
@@ -220,6 +247,75 @@ class SnapTradeBroker(ApiConnection):
         """
 
         return as_rows(self.client.account_information.list_user_accounts())
+
+    def fetch_positions(self, account_id: str) -> list[dict[str, Any]]:
+        """
+        Every position held in one account.
+
+        An empty list is a legitimate answer, not a failure: a brokerage that
+        reports an account pre-aggregated -- a Schwab-held 529, for instance --
+        gives SnapTrade a balance and no positions at all. The caller records the
+        balance either way.
+        :param account_id: The SnapTrade account id
+        :return: One dictionary per position
+        :rtype: list[dict[str, Any]]
+        """
+
+        return as_rows(
+            self.client.account_information.get_all_account_positions(
+                account_id=account_id
+            )
+        )
+
+    def fetch_activities(
+        self,
+        account_id: str,
+        start_date: datetime.date,
+        end_date: datetime.date,
+        page_limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """
+        Transactions for one account over a bounded window.
+
+        Paginated, and followed to the end: stopping at the first page would
+        silently record whichever movements happened to sort first and drop the
+        rest, which is the failure mode this broker's whole module is written to
+        avoid. ``page_limit`` is a backstop against a pagination block that never
+        reports itself exhausted -- an infinite loop against a paid API is worse
+        than a short read that says so.
+        :param account_id: The SnapTrade account id
+        :param start_date: Oldest date to ask for
+        :param end_date: Newest date to ask for
+        :param page_limit: How many pages to follow at most
+        :return: One dictionary per activity
+        :rtype: list[dict[str, Any]]
+        """
+
+        collected: list[dict[str, Any]] = []
+        offset: int = 0
+
+        for _ in range(page_limit):
+            rows, pagination = as_page_rows(
+                self.client.account_information.get_account_activities(
+                    account_id=account_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    offset=offset,
+                )
+            )
+
+            collected.extend(rows)
+
+            if not rows:
+                break
+
+            total: Any = pagination.get("total")
+            offset += len(rows)
+
+            if total is None or offset >= int(total):
+                break
+
+        return collected
 
 
 #: BrokerLoader reads this off the path-loaded module, so the class name is free
