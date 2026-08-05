@@ -14,6 +14,13 @@ from argparse import (
 #: connection is skipped regardless of this flag.
 DEFAULT_MAX_AGE_DAYS = 3
 
+#: How far back to ask for transactions. Bounded rather than "everything",
+#: because the activities endpoint is per account and paginated: an unbounded
+#: window means N accounts times however many pages of history each has, on
+#: every run, to re-fetch movements the database already deduplicated. Ninety
+#: days comfortably covers the gap left by any realistic missed run.
+DEFAULT_HISTORY_DAYS = 90
+
 
 def broker_args(
     subparsers: _SubParsersAction[ArgumentParser],
@@ -60,6 +67,22 @@ def broker_args(
         action="store_true",
         help="Also sync credit cards and other lines of credit, which carry "
         "negative balances",
+    )
+
+    group.add_argument(
+        "--history-days",
+        type=int,
+        default=DEFAULT_HISTORY_DAYS,
+        help=(
+            "How far back to fetch transactions for each account "
+            f"(default: {DEFAULT_HISTORY_DAYS}). 0 skips transactions entirely."
+        ),
+    )
+
+    group.add_argument(
+        "--no-positions",
+        action="store_true",
+        help="Skip the per-account positions call, syncing balances only",
     )
 
     return subparsers

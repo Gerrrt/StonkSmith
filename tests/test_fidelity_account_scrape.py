@@ -146,7 +146,18 @@ class ScrapeAccountsTests(unittest.TestCase):
         accounts = FidelityModule().scrape_accounts(page=page, context=MagicMock())
 
         self.assertEqual(
-            accounts, [{"Account": "ROTH IRA (123456789)", "Balance": "$1.00"}]
+            accounts,
+            [
+                {
+                    "Account": "ROTH IRA (123456789)",
+                    "Balance": "$1.00",
+                    # Kept apart as well as combined: the composite label stays
+                    # the identity the database keys on, and the number is
+                    # recorded beside it as the account's own identifier.
+                    "Name": "ROTH IRA",
+                    "Number": "123456789",
+                }
+            ],
         )
 
     def test_account_number_disambiguates_shared_nicknames(self) -> None:

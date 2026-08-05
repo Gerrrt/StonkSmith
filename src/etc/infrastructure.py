@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import sqlalchemy
+import sqlalchemy.event
 
 from etc.logger import stonksmith_logger
 
@@ -21,11 +22,33 @@ def create_db_engine(db_path: Path) -> sqlalchemy.Engine:
     :rtype: sqlalchemy.engine.Engine
     """
 
-    return sqlalchemy.create_engine(
+    engine: sqlalchemy.Engine = sqlalchemy.create_engine(
         url=f"sqlite:///{db_path}",
         isolation_level="AUTOCOMMIT",
         future=True,
     )
+
+    @sqlalchemy.event.listens_for(target=engine, identifier="connect")
+    def _enforce_foreign_keys(dbapi_connection: Any, connection_record: Any) -> None:
+        """
+        Turn on foreign key enforcement, which SQLite leaves off.
+
+        Without this every FOREIGN KEY and ON DELETE CASCADE in the schema is
+        decoration: SQLite parses them, records them, and never checks them. A
+        snapshot could outlive the account it belongs to and nothing would say
+        so.
+        """
+
+        del connection_record
+
+        cursor: Any = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+
+        finally:
+            cursor.close()
+
+    return engine
 
 
 def set_logging_level(args: Namespace) -> None:

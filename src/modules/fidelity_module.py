@@ -11,7 +11,9 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from brokers.fidelity.saver import Saver
 from etc.connection import Connection
-from etc.context import BrokerDbProtocol, Context
+from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from etc.records import AccountIdentity
+from helpers.normalize import format_amount, to_amount, to_currency
 from helpers.sheets import SheetsUnavailable
 
 # Verified against a signed-in portfolio summary. The account list is Fidelity's
@@ -48,6 +50,44 @@ def clean_money(text: str) -> str:
     """
     found = MONEY_PATTERN.search(text)
     return found.group(0).replace(" ", "") if found else text.strip()
+
+
+def account_rows(
+    db: BrokerDbProtocol, scraped: list[dict[str, str]]
+) -> list[dict[str, Any]]:
+    """Build the worksheet rows from what the database now holds.
+
+    The tab is cleared and rewritten every run, so sourcing it from the database
+    rather than from this run's scrape means it shows the stored truth -- the
+    same numbers `stonksmithdb` reports, formatted the same way.
+
+    Args:
+        db (BrokerDbProtocol): The broker database.
+        scraped (list[dict[str, str]]): This run's accounts, used only when the
+        database predates snapshot history and cannot answer.
+
+    Returns:
+        list[dict[str, Any]]: One {"Account", "Balance"} dict per account.
+
+    """
+    read = getattr(db, "get_latest_snapshots", None)
+
+    if not callable(read):
+        return list(scraped)
+
+    return [
+        {"Account": display_name, "Balance": format_amount(value, currency)}
+        for (
+            _snapshot_id,
+            _source,
+            display_name,
+            value,
+            currency,
+            _as_of,
+            _scraped_at,
+            _kind,
+        ) in read()
+    ]
 
 
 def capture_summary(connection: Connection) -> str | None:
@@ -167,13 +207,32 @@ class FidelityModule:
         db: BrokerDbProtocol = context.db
         db_ok: bool = True
 
-        if not callable(getattr(db, "save_account_data", None)):
-            context.log.fail(
-                msg="DB contract violation: context.db does not implement "
-                "save_account_data. Skipping DB save.",
-            )
-            db_ok = False
-        else:
+        if isinstance(db, SnapshotDbProtocol):
+            for account in accounts:
+                label: str = account.get("Account") or ""
+                balance: str = account.get("Balance") or ""
+
+                # No holdings and no as-of date: the portfolio summary carries
+                # neither. The numeric balance and its history are the win here.
+                db.save_snapshot(
+                    account=AccountIdentity(
+                        # Both the key and the display name are the composite
+                        # "NICKNAME (NUMBER)" label. Several Fidelity accounts
+                        # can share a nickname, so dropping the number here
+                        # would make two of them indistinguishable on the
+                        # dashboard the moment it reads from the database.
+                        account_key=label,
+                        display_name=label,
+                        external_id=account.get("Number") or None,
+                        kind="INVESTMENT",
+                    ),
+                    scraped_at=timestamp,
+                    value=to_amount(balance),
+                    currency=to_currency(balance),
+                    raw_value=balance,
+                )
+
+        elif callable(getattr(db, "save_account_data", None)):
             for account in accounts:
                 db.save_account_data(
                     account_name=account.get("Account"),
@@ -181,12 +240,19 @@ class FidelityModule:
                     timestamp=timestamp,
                 )
 
+        else:
+            context.log.fail(
+                msg="DB contract violation: context.db does not implement "
+                "save_account_data. Skipping DB save.",
+            )
+            db_ok = False
+
         # 3. Sync to Google Sheets
         sheets_ok: bool = True
 
         try:
             context.log.highlight(msg="Syncing data to Google Sheets...")
-            Saver().save_accounts(data=list(accounts))
+            Saver().save_accounts(data=account_rows(db=db, scraped=accounts))
             context.log.success(msg="Google Sheets updated successfully!")
 
         except SheetsUnavailable as e:
@@ -223,7 +289,11 @@ class FidelityModule:
             context (Context): Used for logging.
 
         Returns:
-            list[dict[str, str]]: One {"Account", "Balance"} dict per account.
+            list[dict[str, str]]: One dict per account, with "Account" and
+            "Balance" as the dashboard shows them plus the "Name" and "Number"
+            they were built from. The composite label stays the database's
+            identity key -- it is what previous runs stored -- while the number
+            is recorded alongside it as the account's own identifier.
 
         """
         rows: list[Any] = []
@@ -263,7 +333,14 @@ class FidelityModule:
             label: str = f"{name} ({number})" if name and number else name or number
 
             if label or balance:
-                accounts.append({"Account": label, "Balance": balance})
+                accounts.append(
+                    {
+                        "Account": label,
+                        "Balance": balance,
+                        "Name": name,
+                        "Number": number,
+                    }
+                )
 
         return accounts
 

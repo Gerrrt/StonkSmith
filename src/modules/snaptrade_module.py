@@ -33,7 +33,9 @@ from typing import Any, ClassVar
 
 from brokers.snaptrade.saver import Saver
 from etc.connection import Connection
-from etc.context import BrokerDbProtocol, Context
+from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from etc.records import AccountIdentity, Holding, Transaction
+from helpers.normalize import format_amount, to_amount, to_iso_date
 from helpers.sheets import SheetsUnavailable
 
 #: Account categories that are debts rather than holdings. Excluded by default
@@ -62,25 +64,120 @@ def holdings_status(account: dict[str, Any]) -> dict[str, Any]:
     return dict(sync_status.get("holdings") or {})
 
 
-def money(amount: Any, currency: Any) -> str:
-    """
-    Format a balance the way the scraper brokers already store them.
+#: Formatting money is not SnapTrade-specific -- every broker stores balances
+#: the same way -- so it lives in helpers.normalize now. Kept as a name here
+#: because this module is where it was, and callers import it from here.
+money = format_amount
 
-    A dollar sign is only applied to USD. Stamping one onto another currency
-    produces a number that sums cleanly into a USD total and is wrong.
-    :param amount: The balance, a Decimal from the SDK
-    :param currency: The ISO currency code
-    :return: Currency text such as "$1,234.56" or "1,234.56 CAD"
+
+def _mapping(value: Any) -> dict[str, Any]:
+    """
+    Read a nested object, tolerating a source that flattened it to a string.
+    :param value: A mapping, a bare string, or nothing
+    :return: The mapping, or an empty one
+    :rtype: dict[str, Any]
+    """
+
+    if hasattr(value, "keys"):
+        return dict(value)
+
+    return {}
+
+
+def currency_code(currency: Any, default: str = "USD") -> str:
+    """
+    Read an ISO code out of whichever shape SnapTrade used.
+
+    The API returns a currency object -- ``{"code": "USD", "name": ...}`` -- but
+    the field is a bare string in enough places, and in enough of this project's
+    own fixtures, that assuming either one breaks the other. dict("USD") does
+    not raise a KeyError, it raises a ValueError.
+    :param currency: A currency object, an ISO code, or nothing
+    :param default: What to return when there is no code to read
+    :return: An ISO currency code
     :rtype: str
     """
 
-    value = float(amount)
-    code = str(object=currency or "").upper()
+    if isinstance(currency, str):
+        return currency.upper() or default
 
-    if code == "USD":
-        return f"-${abs(value):,.2f}" if value < 0 else f"${value:,.2f}"
+    if hasattr(currency, "get"):
+        code: Any = currency.get("code")
 
-    return f"{value:,.2f} {code}".strip()
+        if code:
+            return str(object=code).upper()
+
+    return default
+
+
+def position_holding(position: dict[str, Any]) -> Holding:
+    """
+    Turn one SnapTrade position into a holding row.
+
+    Pure: plain dictionary in, record out, so the mapping is testable without an
+    SDK. The ticker and description are nested one level down under ``symbol``,
+    which is itself a ``symbol``/``description`` pair.
+
+    Cost basis is derived rather than reported: SnapTrade gives an average
+    purchase price per unit, and what the position cost is that times the units.
+    Missing either leaves it None rather than guessing a zero.
+    :param position: One position as returned by SnapTrade
+    :return: The holding
+    :rtype: Holding
+    """
+
+    # Two levels of nesting, each of which some responses flatten to a bare
+    # string. dict("VTI") does not raise a KeyError, it raises a ValueError, so
+    # an unguarded dict() here turns an odd payload into a dead run.
+    nested: dict[str, Any] = _mapping(position.get("symbol"))
+    inner: dict[str, Any] = _mapping(nested.get("symbol"))
+
+    units: float | None = to_amount(position.get("units"))
+    price: float | None = to_amount(position.get("price"))
+    average: float | None = to_amount(position.get("average_purchase_price"))
+
+    return Holding(
+        symbol=str(object=inner.get("symbol") or nested.get("symbol") or "") or None,
+        name=str(object=inner.get("description") or nested.get("description") or "")
+        or None,
+        units=units,
+        price=price,
+        value=units * price if units is not None and price is not None else None,
+        cost_basis=units * average
+        if units is not None and average is not None
+        else None,
+        currency=currency_code(
+            position.get("currency") or inner.get("currency") or nested.get("currency")
+        ),
+    )
+
+
+def activity_transaction(activity: dict[str, Any]) -> Transaction:
+    """
+    Turn one SnapTrade activity into a transaction row.
+
+    ``external_id`` is carried through because SnapTrade supplies one. That
+    matters for deduplication: with a real id there is nothing to derive, and a
+    derived key would break the moment SnapTrade reordered its window.
+    :param activity: One activity as returned by SnapTrade
+    :return: The transaction
+    :rtype: Transaction
+    """
+
+    symbol: dict[str, Any] = _mapping(activity.get("symbol"))
+
+    return Transaction(
+        processed_on=to_iso_date(activity.get("settlement_date")) or "",
+        traded_on=to_iso_date(activity.get("trade_date")) or "",
+        tx_type=str(object=activity.get("type") or ""),
+        symbol=str(object=symbol.get("symbol") or "") or None,
+        description=str(object=activity.get("description") or "") or None,
+        units=to_amount(activity.get("units")),
+        price=to_amount(activity.get("price")),
+        value=to_amount(activity.get("amount")),
+        currency=currency_code(activity.get("currency")),
+        external_id=str(object=activity.get("id") or "") or None,
+    )
 
 
 def staleness(
@@ -289,6 +386,14 @@ def select_accounts(
                 "Balance": money(amount, total.get("currency")),
                 "Category": category_name,
                 "Synced": f"{synced} (STALE)" if stale else synced or "unknown",
+                # Below here is for the database rather than the sheet. The
+                # formatted "Balance" above is display text; storing a number
+                # means keeping the number that produced it rather than parsing
+                # our own output back.
+                "Id": str(object=account.get("id") or ""),
+                "Amount": amount,
+                "Currency": currency_code(total.get("currency")),
+                "SyncedAt": synced,
             }
         )
 
@@ -325,6 +430,161 @@ class SnapTradeModule:
         del context
 
         self.export_format = (module_options or {}).get("EXPORT", "print")
+
+    @staticmethod
+    def identity(row: dict[str, str]) -> AccountIdentity:
+        """
+        Who an account is, in the terms the database keys on.
+
+        ``account_key`` stays the composite name the pre-history schema stored,
+        because that string is what joins this run to every previous one. The
+        brokerage now also gets a column of its own, which is what the composite
+        was standing in for.
+        :param row: A selected account row
+        :return: The identity
+        :rtype: AccountIdentity
+        """
+
+        return AccountIdentity(
+            account_key=f"{row['Brokerage']} - {row['Account']}",
+            display_name=row["Account"],
+            source=row["Brokerage"],
+            external_id=row["Id"] or None,
+            kind=row["Category"],
+            currency=row["Currency"],
+        )
+
+    def positions(
+        self, connection: Connection, row: dict[str, str], context: Context
+    ) -> list[Holding]:
+        """
+        Fetch one account's positions, reporting rather than raising on failure.
+
+        An account that returns nothing is not an error: a brokerage that
+        pre-aggregates -- a Schwab-held 529 -- reports a balance and no positions
+        at all, and that is a fact worth storing as it stands. A call that
+        *fails*, though, is different from one that returns nothing, so it says
+        so and the balance is still recorded.
+        :param connection: The SnapTrade broker instance
+        :param row: A selected account row
+        :param context: The module context
+        :return: The account's holdings, possibly none
+        :rtype: list[Holding]
+        """
+
+        if getattr(context.args, "no_positions", False):
+            return []
+
+        fetch = getattr(connection, "fetch_positions", None)
+
+        if not callable(fetch) or not row["Id"]:
+            return []
+
+        try:
+            positions: list[dict[str, Any]] = fetch(account_id=row["Id"])
+
+        except Exception as e:
+            # One account's positions failing must not cost the run the other
+            # accounts' balances, which are already selected and about to write.
+            context.log.fail(
+                msg=(
+                    f"Could not read positions for {row['Brokerage']} / "
+                    f"{row['Account']}: {e}. Its balance is still recorded."
+                ),
+            )
+            return []
+
+        return [position_holding(position=position) for position in positions]
+
+    def activities(
+        self, connection: Connection, row: dict[str, str], context: Context
+    ) -> list[Transaction]:
+        """
+        Fetch one account's recent transactions over a bounded window.
+
+        Same failure posture as positions: report and continue. The window is
+        bounded because the endpoint is per account and paginated, and the
+        database deduplicates anyway, so re-fetching all of history every run
+        buys nothing.
+        :param connection: The SnapTrade broker instance
+        :param row: A selected account row
+        :param context: The module context
+        :return: The account's transactions, possibly none
+        :rtype: list[Transaction]
+        """
+
+        days: int = int(getattr(context.args, "history_days", 90) or 0)
+
+        if days <= 0:
+            return []
+
+        fetch = getattr(connection, "fetch_activities", None)
+
+        if not callable(fetch) or not row["Id"]:
+            return []
+
+        end: datetime.date = datetime.datetime.now(tz=datetime.UTC).date()
+
+        try:
+            activities: list[dict[str, Any]] = fetch(
+                account_id=row["Id"],
+                start_date=end - datetime.timedelta(days=days),
+                end_date=end,
+            )
+
+        except Exception as e:
+            context.log.fail(
+                msg=(
+                    f"Could not read transactions for {row['Brokerage']} / "
+                    f"{row['Account']}: {e}. Its balance is still recorded."
+                ),
+            )
+            return []
+
+        return [activity_transaction(activity=activity) for activity in activities]
+
+    @staticmethod
+    def sheet_rows(
+        db: BrokerDbProtocol, rows: list[dict[str, str]]
+    ) -> list[dict[str, Any]]:
+        """
+        What to put on the worksheet: what the database now holds.
+
+        Reading it back rather than reusing the scraped rows is the point of the
+        tab being a view. The sheet is cleared and rewritten every run, so
+        sourcing it from the database means it shows the stored truth -- and
+        would show it even for an account this particular run did not refresh.
+        :param db: The broker database
+        :param rows: This run's selected accounts, used when the database
+            cannot answer
+        :return: Rows in the worksheet's column order
+        :rtype: list[dict[str, Any]]
+        """
+
+        read = getattr(db, "get_latest_snapshots", None)
+
+        if not callable(read):
+            return list(rows)
+
+        return [
+            {
+                "Brokerage": source,
+                "Account": display_name,
+                "Balance": format_amount(value, currency),
+                "Category": kind or "",
+                "Synced": as_of or scraped_at or "",
+            }
+            for (
+                _snapshot_id,
+                source,
+                display_name,
+                value,
+                currency,
+                as_of,
+                scraped_at,
+                kind,
+            ) in read()
+        ]
 
     def on_login(self, context: Context, connection: Connection) -> bool:
         """
@@ -392,13 +652,24 @@ class SnapTradeModule:
         db: BrokerDbProtocol = context.db
         db_ok: bool = True
 
-        if not callable(getattr(db, "save_account_data", None)):
-            context.log.fail(
-                msg="DB contract violation: context.db does not implement "
-                "save_account_data. Skipping DB save.",
-            )
-            db_ok = False
-        else:
+        if isinstance(db, SnapshotDbProtocol):
+            for row in rows:
+                db.save_snapshot(
+                    account=self.identity(row=row),
+                    scraped_at=timestamp,
+                    value=to_amount(row["Amount"]),
+                    currency=row["Currency"],
+                    as_of=to_iso_date(row["SyncedAt"]),
+                    raw_value=row["Balance"],
+                    holdings=self.positions(
+                        connection=connection, row=row, context=context
+                    ),
+                    transactions=self.activities(
+                        connection=connection, row=row, context=context
+                    ),
+                )
+
+        elif callable(getattr(db, "save_account_data", None)):
             for row in rows:
                 # One brokerage's account names are not unique across all of
                 # them -- two can each hold a "MICROSOFT ESPP PLAN" -- and the
@@ -409,11 +680,18 @@ class SnapTradeModule:
                     timestamp=timestamp,
                 )
 
+        else:
+            context.log.fail(
+                msg="DB contract violation: context.db does not implement "
+                "save_account_data. Skipping DB save.",
+            )
+            db_ok = False
+
         sheets_ok: bool = True
 
         try:
             context.log.highlight(msg="Syncing data to Google Sheets...")
-            Saver().save_accounts(data=list(rows))
+            Saver().save_accounts(data=self.sheet_rows(db=db, rows=rows))
             context.log.success(msg="Google Sheets updated successfully!")
 
         except SheetsUnavailable as e:

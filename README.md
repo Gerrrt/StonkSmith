@@ -32,6 +32,7 @@ all the accounts you own.
 - [x] Google Sheets sync
 - [x] CLI commands for automation
 - [x] Credentials stored in the OS keyring
+- [x] Account history: numeric balances, holdings and transactions over time
 - [ ] More brokers (Vanguard, TSP, Ally, ...)
 - [ ] Net worth tracking over time
 - [ ] Asset allocation breakdown
@@ -243,6 +244,15 @@ error), holdings that have not synced in `--max-age-days` (default 3), closed,
 archived or paper accounts, and liabilities such as credit cards. Override with
 `--allow-stale` and `--include-liabilities`.
 
+For each account that survives, StonkSmith also reads its positions and its
+recent transactions. Both calls are per account, so both are bounded and both
+fail soft: `--history-days` (default 90) sets the transaction window,
+`--no-positions` skips the positions call entirely, and an account whose
+positions or transactions cannot be read is reported while its balance is still
+recorded. An account returning zero positions is normal rather than a failure —
+a brokerage that pre-aggregates, such as a Schwab-held 529, gives SnapTrade a
+balance and nothing to break it down with.
+
 Connections expire after a few weeks and re-authorising is a browser step —
 `scripts/snaptrade_register.py link` again. Until then the sync is unattended.
 
@@ -258,6 +268,53 @@ Inside that shell: `broker schwab529plan`, then `add creds <username>`,
 `show creds`, `show accounts`, `export creds <file>`, `back`, `exit`.
 SnapTrade stores no credentials there; its keys live in the config file and the
 keyring, so `add creds` points at the setup script instead.
+
+### What is stored
+
+Each broker gets its own SQLite file at
+`~/.stonksmith/workspaces/<workspace>/<broker>.db`, holding four tables:
+
+| Table | One row per | Holds |
+| --- | --- | --- |
+| `accounts` | account, ever | broker, brokerage, display name, beneficiary, kind |
+| `account_snapshots` | account per run | a **numeric** value, its currency, the source's own as-of date, and the text the source printed |
+| `holdings` | position per snapshot | fund code or ticker, name, units, price, value, principal, earnings, cost basis |
+| `transactions` | movement | processed and traded dates, type, units, price, value |
+
+Two things about that shape are deliberate:
+
+**Money is a number, and the original text is kept beside it.** `daily +/-` is
+not a field any broker reports -- it is the difference between two consecutive
+snapshots, which needs arithmetic. Keeping `raw_value` as well means a source
+that changes its formatting costs you a parse, not the record.
+
+**Sources fill different columns.** A scraped 529 fund table gives a fund code,
+principal and earnings; a SnapTrade position gives a ticker and a cost basis; a
+pre-aggregated account gives a balance and no positions at all. Every column a
+source might not have is nullable, and an account with zero holdings is a fact
+about the account rather than a failed scrape.
+
+Browse it from the shell:
+
+```text
+show accounts                  the accounts this broker knows
+show snapshots [<account id>]  what each was worth, over time
+show holdings [<snapshot id>]  the positions behind a snapshot
+show transactions [<account>]  recorded movements
+show deltas                    the change between consecutive snapshots
+export <category> <file>       any of the above, as CSV
+```
+
+Google Sheets is a view of this, not the other way round. Each tab is cleared
+and rewritten from what the database holds, so what you see there is what
+`stonksmithdb` reports.
+
+**Upgrading an existing database.** Databases written before account history
+have a single `accounts` table of per-run rows with a text balance. Opening one
+migrates it: the old table is renamed to `accounts_legacy_v1` and **kept**, and
+every row is replayed as a snapshot with its balance parsed into a number.
+Accounts keep the same identity they had, so existing history continues rather
+than starting over. It runs once and reports how many rows it moved.
 
 ---
 

@@ -12,8 +12,22 @@ from requests.exceptions import RequestException
 from brokers.schwab529plan.parser import Parser
 from brokers.schwab529plan.saver import Saver
 from etc.connection import Connection
-from etc.context import BrokerDbProtocol, Context
-from helpers.schwab529plan import account_label, clean_up
+from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from etc.records import AccountIdentity, Holding, Transaction
+from helpers.normalize import (
+    format_amount,
+    format_units,
+    to_amount,
+    to_currency,
+    to_iso_date,
+)
+from helpers.schwab529plan import (
+    account_label,
+    beneficiary_field,
+    clean_up,
+    holding_from_row,
+    transaction_from_row,
+)
 from helpers.sheets import SheetsUnavailable
 
 
@@ -45,6 +59,166 @@ class Schwab529Module:
         del context
         options: dict[str, Any] = module_options or {}
         self.export_format: Any = options.get("EXPORT", "print")
+
+    @staticmethod
+    def holdings_for(investments: list[dict[str, Any]], index: int) -> list[Holding]:
+        """Collect the fund rows belonging to one account.
+
+        The page renders one fund table per account in the same order as the
+        balance headings, and the parser stamps each row with the index of the
+        table it came from -- so this is the pairing, not a guess.
+
+        Args:
+            investments (list[dict[str, Any]]): Parsed fund rows.
+            index (int): Position of the account being saved.
+
+        Returns:
+            list[Holding]: That account's holdings, in page order.
+
+        """
+        return [
+            holding_from_row(row=row)
+            for row in investments
+            if row.get("Table") == index
+        ]
+
+    @staticmethod
+    def attribute_transactions(
+        transactions: list[dict[str, Any]],
+        balances: list[dict[str, Any]],
+        context: Context,
+    ) -> list[Transaction]:
+        """Decide whether the scraped transactions can be assigned to an account.
+
+        The dashboard renders one transaction table for the whole page, with
+        nothing in it naming the account a row belongs to. With a single account
+        on the page there is only one answer. With several there is no honest
+        one: attaching them all to the first invents history for it, and copying
+        them to each invents history for every account. Both look completely
+        plausible afterwards, which is what makes them worse than storing
+        nothing and saying so.
+
+        Not fatal. The balances and holdings are the run's main product and they
+        are unaffected.
+
+        Args:
+            transactions (list[dict[str, Any]]): Parsed transaction rows.
+            balances (list[dict[str, Any]]): Parsed balance rows, one per account.
+            context (Context): Used for logging.
+
+        Returns:
+            list[Transaction]: The transactions when they can be attributed,
+            otherwise nothing.
+
+        """
+        if not transactions:
+            return []
+
+        if len(balances) != 1:
+            context.log.fail(
+                msg=(
+                    f"{len(transactions)} transaction(s) were scraped but the "
+                    f"page shows {len(balances)} accounts and the transaction "
+                    "table does not say which account each row belongs to. "
+                    "None were stored. Balances and holdings are unaffected."
+                ),
+            )
+            return []
+
+        return [transaction_from_row(row=row) for row in transactions]
+
+    @staticmethod
+    def holding_rows(
+        db: BrokerDbProtocol, scraped: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Build the holdings block of the worksheet from stored rows.
+
+        Args:
+            db (BrokerDbProtocol): The broker database.
+            scraped (list[dict[str, Any]]): This run's fund rows, used only when
+            the database predates snapshot history.
+
+        Returns:
+            list[dict[str, Any]]: Rows in the worksheet's column order.
+
+        """
+        read = getattr(db, "get_holdings", None)
+
+        if not callable(read):
+            return list(scraped)
+
+        return [
+            {
+                "Fund Code": symbol,
+                "Fund": name,
+                "Units": format_units(units),
+                "Price": format_amount(price, currency),
+                "Value": format_amount(value, currency),
+                "Total Assets": format_amount(
+                    (principal or 0) + (earnings or 0)
+                    if principal is not None or earnings is not None
+                    else None,
+                    currency,
+                ),
+                "Principal": format_amount(principal, currency),
+                "Earnings": format_amount(earnings, currency),
+            }
+            for (
+                _account,
+                symbol,
+                name,
+                units,
+                price,
+                value,
+                principal,
+                earnings,
+                _cost_basis,
+                currency,
+            ) in read()
+        ]
+
+    @staticmethod
+    def transaction_rows(
+        db: BrokerDbProtocol, scraped: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Build the transactions block of the worksheet from stored rows.
+
+        Args:
+            db (BrokerDbProtocol): The broker database.
+            scraped (list[dict[str, Any]]): This run's transaction rows, used
+            only when the database predates snapshot history.
+
+        Returns:
+            list[dict[str, Any]]: Rows in the worksheet's column order.
+
+        """
+        read = getattr(db, "get_transactions", None)
+
+        if not callable(read):
+            return list(scraped)
+
+        return [
+            {
+                "Processed": processed_on,
+                "Traded": traded_on,
+                "Type": tx_type,
+                "Units": format_units(units),
+                "Price": format_amount(price, currency),
+                "Value": format_amount(value, currency),
+            }
+            for (
+                _id,
+                _account,
+                processed_on,
+                traded_on,
+                tx_type,
+                _symbol,
+                units,
+                price,
+                value,
+                currency,
+            ) in read()
+        ]
 
     def on_login(self, context: Context, connection: Connection) -> bool:
         """Perform the login and scraping process for Schwab529Plan.
@@ -117,13 +291,47 @@ class Schwab529Module:
         db: BrokerDbProtocol = context.db
         db_ok: bool = True
 
-        if not callable(getattr(db, "save_account_data", None)):
-            context.log.fail(
-                msg="DB contract violation: context.db does not implement "
-                "save_account_data. Skipping DB save.",
+        if isinstance(db, SnapshotDbProtocol):
+            attributed: list[Transaction] = self.attribute_transactions(
+                transactions=transactions, balances=balances, context=context
             )
-            db_ok = False
-        else:
+
+            for index, item in enumerate(balances):
+                amount: Any = item.get("Amount")
+
+                db.save_snapshot(
+                    account=AccountIdentity(
+                        # The label the pre-history schema stored, unchanged, so
+                        # a user's existing rows and this one are the same
+                        # account rather than two.
+                        account_key=account_label(
+                            beneficiaries=beneficiaries, balance=item, index=index
+                        ),
+                        display_name=account_label(
+                            beneficiaries=beneficiaries, balance=item, index=index
+                        ),
+                        external_id=beneficiary_field(
+                            beneficiaries=beneficiaries, index=index, key="Account"
+                        ),
+                        beneficiary=beneficiary_field(
+                            beneficiaries=beneficiaries, index=index, key="Name"
+                        ),
+                        kind="529",
+                    ),
+                    scraped_at=timestamp,
+                    # The balance heading carries the date the plan struck the
+                    # value, which is not when this run happened to read it.
+                    as_of=to_iso_date(item.get("Date")),
+                    value=to_amount(amount),
+                    currency=to_currency(amount),
+                    raw_value=str(object=amount) if amount is not None else None,
+                    holdings=self.holdings_for(investments=investments, index=index),
+                    # Only the account the transaction table can be attributed
+                    # to receives them; see attribute_transactions.
+                    transactions=attributed if len(balances) == 1 else (),
+                )
+
+        elif callable(getattr(db, "save_account_data", None)):
             for index, item in enumerate(balances):
                 db.save_account_data(
                     account_name=account_label(
@@ -132,6 +340,13 @@ class Schwab529Module:
                     balance=item.get("Amount"),
                     timestamp=timestamp,
                 )
+
+        else:
+            context.log.fail(
+                msg="DB contract violation: context.db does not implement "
+                "save_account_data. Skipping DB save.",
+            )
+            db_ok = False
 
         # 5. Sync: Push clean data to Google Sheets
 
@@ -144,8 +359,10 @@ class Schwab529Module:
 
             saver.save_beneficiary(data=beneficiaries)
             saver.save_balance(data=balances)
-            saver.save_investment(data=investments)
-            saver.save_transactions(data=transactions)
+            saver.save_investment(data=self.holding_rows(db=db, scraped=investments))
+            saver.save_transactions(
+                data=self.transaction_rows(db=db, scraped=transactions)
+            )
 
             context.log.success(msg="Google Sheets updated successfully!")
 

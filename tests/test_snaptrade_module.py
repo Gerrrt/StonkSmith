@@ -13,13 +13,16 @@ network, the keyring or Google Sheets.
 import datetime
 import unittest
 from argparse import Namespace
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import patch
 
 from helpers.sheets import SheetsUnavailable
 from modules.snaptrade_module import (
     SnapTradeModule,
+    activity_transaction,
+    currency_code,
     money,
+    position_holding,
     select_accounts,
     silent_connections,
 )
@@ -97,18 +100,31 @@ class SelectAccountsTests(unittest.TestCase):
         rows, skipped = select([account()])
 
         self.assertEqual(skipped, [])
+        self.assertEqual(len(rows), 1)
+
+        # The worksheet's columns.
         self.assertEqual(
-            rows,
-            [
-                {
-                    "Brokerage": "Schwab",
-                    "Account": "Garrett IRA",
-                    "Balance": "$6,539.67",
-                    "Category": "INVESTMENT",
-                    "Synced": "2026-08-04T11:00:00+00:00",
-                }
-            ],
+            {
+                key: rows[0][key]
+                for key in ("Brokerage", "Account", "Balance", "Category", "Synced")
+            },
+            {
+                "Brokerage": "Schwab",
+                "Account": "Garrett IRA",
+                "Balance": "$6,539.67",
+                "Category": "INVESTMENT",
+                "Synced": "2026-08-04T11:00:00+00:00",
+            },
         )
+
+    def test_a_row_carries_the_unformatted_number_for_the_database(self) -> None:
+        # "Balance" is display text. Storing a number means keeping the number
+        # that produced it, rather than parsing our own output back.
+        rows, _ = select([account()])
+
+        self.assertEqual(rows[0]["Amount"], 6539.67)
+        self.assertEqual(rows[0]["Currency"], "USD")
+        self.assertEqual(rows[0]["Id"], "acct-1")
 
     def test_an_account_on_a_disabled_connection_is_skipped(self) -> None:
         rows, skipped = select([account(brokerage_authorization=DEAD_CONNECTION)])
@@ -617,6 +633,126 @@ class OnLoginTests(unittest.TestCase):
         self.assertTrue(
             any("Could not list SnapTrade accounts" in m for m in context.log.messages)
         )
+
+
+class CurrencyCodeTests(unittest.TestCase):
+    """SnapTrade spells a currency two ways and both have to work.
+
+    The API returns a currency object; the field is a bare string in enough
+    places that assuming either one breaks the other. dict("USD") does not raise
+    a KeyError, it raises a ValueError, so the wrong assumption is a crash
+    rather than a wrong answer.
+    """
+
+    def test_a_currency_object(self) -> None:
+        self.assertEqual(currency_code({"code": "cad", "name": "Canadian"}), "CAD")
+
+    def test_a_bare_code(self) -> None:
+        self.assertEqual(currency_code("usd"), "USD")
+
+    def test_nothing_falls_back(self) -> None:
+        self.assertEqual(currency_code(None), "USD")
+        self.assertEqual(currency_code({}), "USD")
+
+
+class PositionMappingTests(unittest.TestCase):
+    """A SnapTrade position becomes a holding row."""
+
+    POSITION: ClassVar[dict[str, Any]] = {
+        "symbol": {
+            "symbol": {
+                "symbol": "VTI",
+                "description": "Vanguard Total Market",
+                "currency": {"code": "USD"},
+            }
+        },
+        "units": 3,
+        "price": 250,
+        "average_purchase_price": 200,
+    }
+
+    def test_the_ticker_is_pulled_out_of_its_nesting(self) -> None:
+        holding = position_holding(position=self.POSITION)
+
+        self.assertEqual(holding.symbol, "VTI")
+        self.assertEqual(holding.name, "Vanguard Total Market")
+
+    def test_value_is_derived_from_units_and_price(self) -> None:
+        self.assertEqual(position_holding(position=self.POSITION).value, 750.0)
+
+    def test_cost_basis_is_the_average_price_times_the_units(self) -> None:
+        # SnapTrade reports a per-unit average, not a total.
+        self.assertEqual(position_holding(position=self.POSITION).cost_basis, 600.0)
+
+    def test_a_missing_average_leaves_cost_basis_unset_rather_than_zero(self) -> None:
+        position = {
+            key: value
+            for key, value in self.POSITION.items()
+            if key != "average_purchase_price"
+        }
+
+        self.assertIsNone(position_holding(position=position).cost_basis)
+
+    def test_a_flattened_symbol_does_not_crash_the_run(self) -> None:
+        # dict("VTI") raises a ValueError, not a KeyError, so an unguarded
+        # dict() on a response that flattened this would kill the whole sync.
+        holding = position_holding(
+            position={"symbol": {"symbol": "VTI"}, "units": 2, "price": 10}
+        )
+
+        self.assertEqual(holding.symbol, "VTI")
+        self.assertEqual(holding.value, 20.0)
+
+    def test_a_position_with_no_symbol_at_all_is_still_a_holding(self) -> None:
+        holding = position_holding(position={"units": 2, "price": 10})
+
+        self.assertIsNone(holding.symbol)
+        self.assertEqual(holding.value, 20.0)
+
+    def test_a_position_never_borrows_the_scraper_columns(self) -> None:
+        holding = position_holding(position=self.POSITION)
+
+        self.assertIsNone(holding.fund_code)
+        self.assertIsNone(holding.principal)
+        self.assertIsNone(holding.earnings)
+
+
+class ActivityMappingTests(unittest.TestCase):
+    """A SnapTrade activity becomes a transaction row."""
+
+    ACTIVITY: ClassVar[dict[str, Any]] = {
+        "id": "act-1",
+        "type": "DIVIDEND",
+        "trade_date": "2025-12-29T00:00:00Z",
+        "settlement_date": "2025-12-31T00:00:00Z",
+        "units": 0,
+        "price": 0,
+        "amount": 12.34,
+        "currency": {"code": "USD"},
+        "symbol": {"symbol": "VTI"},
+        "description": "Dividend received",
+    }
+
+    def test_dates_are_normalised(self) -> None:
+        transaction = activity_transaction(activity=self.ACTIVITY)
+
+        self.assertEqual(transaction.traded_on, "2025-12-29")
+        self.assertEqual(transaction.processed_on, "2025-12-31")
+
+    def test_the_source_id_is_carried_through(self) -> None:
+        # With a real id there is nothing to derive, and a derived key would
+        # break the moment SnapTrade reordered its window.
+        self.assertEqual(
+            activity_transaction(activity=self.ACTIVITY).external_id, "act-1"
+        )
+
+    def test_the_amount_becomes_the_value(self) -> None:
+        self.assertEqual(activity_transaction(activity=self.ACTIVITY).value, 12.34)
+
+    def test_a_zero_amount_is_not_dropped(self) -> None:
+        activity = {**self.ACTIVITY, "amount": 0}
+
+        self.assertEqual(activity_transaction(activity=activity).value, 0.0)
 
 
 if __name__ == "__main__":

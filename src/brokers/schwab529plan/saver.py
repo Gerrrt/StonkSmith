@@ -141,4 +141,14 @@ class Saver:
                 for a in data
             ]
             if rows:
-                self.worksheet.append_rows(rows, table_range="C17:H17")
+                # A rewrite, not an append. append_rows added the same
+                # transactions again on every run, so the block grew by a full
+                # copy of the history each sync. Now that the database
+                # deduplicates them and this tab is rendered from it, the honest
+                # operation is to write what is stored.
+                self.worksheet.update(
+                    rows,
+                    _a1_range(
+                        first_col="C", last_col="H", first_row=17, row_count=len(rows)
+                    ),
+                )
