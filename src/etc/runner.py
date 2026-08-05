@@ -13,9 +13,14 @@ from etc.context import BrokerDbProtocol
 from etc.logger import stonksmith_logger
 
 
-def _collect(future: Future[bool]) -> bool:
+def _collect(future: Future[bool | None]) -> bool:
     """
     Read one broker's outcome, turning a crash into a failed run.
+
+    Typed ``Future[bool | None]`` rather than ``Future[bool]`` because None is
+    a legitimate result: a broker under ~/.stonksmith/brokers may still declare
+    ``broker_flow() -> None``, where None has always meant "finished". Narrowing
+    it to bool would contradict the ``is not False`` test two lines down.
 
     ``future.result()`` was never called before, so anything escaping
     ``Connection.__call__`` vanished with the Future. That method catches
@@ -59,7 +64,9 @@ async def start_run(broker_obj: Any, db: BrokerDbProtocol, args: Namespace) -> b
     if no_progress:
         with ThreadPoolExecutor(max_workers=threads + 1) as executor:
             stonksmith_logger.highlight(msg=f"Executing {broker_obj}")
-            futures: list[Future[bool]] = [executor.submit(broker_obj, args, db, None)]
+            futures: list[Future[bool | None]] = [
+                executor.submit(broker_obj, args, db, None)
+            ]
             for future in as_completed(fs=futures):
                 # Bound first: `ok = _collect(...) and ok` short-circuits once
                 # ok is False, and a second broker would never be read.
