@@ -107,7 +107,7 @@ def to_amount(text: Any) -> float | None:
         try:
             return float(text)
 
-        except ValueError, OverflowError, InvalidOperation:
+        except (ValueError, OverflowError, InvalidOperation):
             return None
 
     if not isinstance(text, str):
@@ -268,7 +268,7 @@ def format_amount(amount: Any, currency: Any) -> str:
     try:
         value = float(amount)
 
-    except TypeError, ValueError, InvalidOperation:
+    except (TypeError, ValueError, InvalidOperation):
         return str(object=amount)
 
     code = str(object=currency or "").upper()
@@ -296,7 +296,7 @@ def format_units(units: Any) -> str:
     try:
         value = float(units)
 
-    except TypeError, ValueError, InvalidOperation:
+    except (TypeError, ValueError, InvalidOperation):
         return str(object=units)
 
     return f"{value:,.6f}".rstrip("0").rstrip(".") or "0"

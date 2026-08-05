@@ -150,7 +150,7 @@ def get_host_info_colors() -> list[str]:
             )
         )
 
-    except ValueError, SyntaxError:
+    except (ValueError, SyntaxError):
         return list(DEFAULT_HOST_INFO_COLORS)
 
     if len(colors) != 4:

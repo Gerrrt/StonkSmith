@@ -98,7 +98,7 @@ class _FakeClient:
         self.account_information = self._Accounts(self)
 
     class _Connections:
-        def __init__(self, outer: _FakeClient) -> None:
+        def __init__(self, outer: "_FakeClient") -> None:
             self.outer = outer
 
         def list_brokerage_authorizations(self, **kwargs: Any) -> list[dict[str, Any]]:
@@ -108,7 +108,7 @@ class _FakeClient:
             return self.outer._connections
 
     class _Accounts:
-        def __init__(self, outer: _FakeClient) -> None:
+        def __init__(self, outer: "_FakeClient") -> None:
             self.outer = outer
 
         def list_user_accounts(self, **kwargs: Any) -> list[dict[str, Any]]:
