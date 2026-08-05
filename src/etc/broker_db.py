@@ -1023,10 +1023,12 @@ def natural_keys(rows: Sequence[Transaction]) -> list[str]:
     "#0", the second "#1" -- which re-scraping the same page reproduces exactly,
     while genuinely new rows get keys nothing has yet.
 
-    The key is built from the source's own text rather than the parsed numbers,
-    so improving a parser never makes old rows look new. It is stored readable
-    rather than hashed: when a source changes its date format, a key you can read
-    is worth more than sixteen saved bytes.
+    The amount comes from the source's own text where there is any, so improving
+    how a value is parsed does not make old rows look new. The dates, type and
+    quantities are normalized -- a change to how *those* are read does shift the
+    key, which is why the raw text is stored alongside every row and the key is
+    kept readable rather than hashed. When a source changes its date format, a
+    key you can read is worth more than sixteen saved bytes.
 
     The caveat this rests on: a source's same-day duplicates always appear
     together in its window. Every broker seen so far returns transactions in date
