@@ -13,7 +13,31 @@ from etc.context import BrokerDbProtocol
 from etc.logger import stonksmith_logger
 
 
-async def start_run(broker_obj: Any, db: BrokerDbProtocol, args: Namespace) -> None:
+def _collect(future: Future[bool]) -> bool:
+    """
+    Read one broker's outcome, turning a crash into a failed run.
+
+    ``future.result()`` was never called before, so anything escaping
+    ``Connection.__call__`` vanished with the Future. That method catches
+    everything ``broker_flow()`` raises, so this only fires for something
+    outside it -- ``session.close()``, or a broker overriding ``__call__``.
+    Re-raising would surface as a traceback out of ``asyncio.run()`` in main();
+    the run has already failed, and one logged line plus a non-zero exit is
+    more use to a scheduled job.
+    :param future: A submitted broker call
+    :return: False when the broker reported failure or the call raised
+    :rtype: bool
+    """
+
+    try:
+        return future.result() is not False
+
+    except Exception as e:
+        stonksmith_logger.exception(msg=f"Broker run failed: {e}")
+        return False
+
+
+async def start_run(broker_obj: Any, db: BrokerDbProtocol, args: Namespace) -> bool:
     """
     Run StonkSmith execution logic
     :param broker_obj:
@@ -22,21 +46,25 @@ async def start_run(broker_obj: Any, db: BrokerDbProtocol, args: Namespace) -> N
     :type db:
     :param args:
     :type args:
-    :return:
-    :rtype:
+    :return: True when every broker reported it did its work
+    :rtype: bool
     """
 
     stonksmith_logger.display(msg="Creating ThreadPoolExecutor")
 
     no_progress: bool = getattr(args, "no_progress", False)
     threads: int = getattr(args, "threads", 0)
+    ok: bool = True
 
     if no_progress:
         with ThreadPoolExecutor(max_workers=threads + 1) as executor:
             stonksmith_logger.highlight(msg=f"Executing {broker_obj}")
-            futures: list[Future[None]] = [executor.submit(broker_obj, args, db, None)]
-            for _ in as_completed(fs=futures):
-                pass
+            futures: list[Future[bool]] = [executor.submit(broker_obj, args, db, None)]
+            for future in as_completed(fs=futures):
+                # Bound first: `ok = _collect(...) and ok` short-circuits once
+                # ok is False, and a second broker would never be read.
+                broker_ok: bool = _collect(future=future)
+                ok = ok and broker_ok
 
     else:
         with (
@@ -48,5 +76,9 @@ async def start_run(broker_obj: Any, db: BrokerDbProtocol, args: Namespace) -> N
                 total=1,
             )
             futures = [executor.submit(broker_obj, args, db, None)]
-            for _ in as_completed(fs=futures):
+            for future in as_completed(fs=futures):
+                broker_ok = _collect(future=future)
+                ok = ok and broker_ok
                 progress.update(task_id=task_id, advance=1)
+
+    return ok

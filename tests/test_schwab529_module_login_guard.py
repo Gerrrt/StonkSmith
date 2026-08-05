@@ -122,8 +122,9 @@ class Schwab529ModuleDbContractTests(unittest.TestCase):
         ctx = _make_on_login_context(db=db)
         conn = _make_connection(session_response=self._dashboard_response())
 
-        Schwab529Module().on_login(ctx, conn)
+        result = Schwab529Module().on_login(ctx, conn)
 
+        self.assertIsNot(result, False, "a working sync must not fail the run")
         self.assertEqual(len(db.calls), 1)
         account_name, balance, _ = db.calls[0]
         self.assertEqual(account_name, "529 Balance")
@@ -151,8 +152,9 @@ class Schwab529ModuleDbContractTests(unittest.TestCase):
         ctx = _make_on_login_context(db=db)
         conn = _make_connection(session_response=self._dashboard_response())
 
-        Schwab529Module().on_login(ctx, conn)
+        result = Schwab529Module().on_login(ctx, conn)
 
+        self.assertFalse(result, "nothing reached the database")
         ctx.log.fail.assert_called_once()
         fail_msg: str = ctx.log.fail.call_args.kwargs.get(
             "msg", ctx.log.fail.call_args[0][0] if ctx.log.fail.call_args[0] else ""

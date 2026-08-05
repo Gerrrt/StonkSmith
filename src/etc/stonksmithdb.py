@@ -349,7 +349,9 @@ def main() -> None:
 
     if not Path(config_path).exists():
         print("[-] Unable to find config file")
-        raise SystemExit
+        # SystemExit with no argument is SystemExit(None), which Python maps to
+        # exit status 0 -- so this hard failure used to report success.
+        raise SystemExit(1)
     try:
         shell = StonkSmithDBMenu(config_file_path=config_path)
         shell.cmdloop()

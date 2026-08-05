@@ -120,23 +120,55 @@ def main(args: Namespace) -> int:
     elif args.module and args.show_module_options:
         loader.show_options()
     elif args.module is None:
+        # This was a bare `exit_code = 1` with no message. A run that exits
+        # non-zero and says nothing is as hard to schedule around as one that
+        # exits zero and lies.
+        stonksmith_logger.error(
+            msg="No module specified. Provide one with --module <MODULE_NAME>",
+        )
         exit_code = 1
     else:
         # 7. Broker Object Preparation
+        requested: list[str] = list(args.module)
         modules: list[Any] = loader.prepare()
         if not modules:
             stonksmith_logger.error(msg="No modules could be loaded. Nothing to run.")
             db_engine.dispose()
             return 1
 
+        if len(modules) != len(requested):
+            # prepare() logs each miss and drops it; the requested-vs-prepared
+            # count was the only signal left, and it was discarded. The run
+            # still does what it can -- partial data beats none, and refusing
+            # would turn one typo into a wholly missed sync -- but it must not
+            # report success.
+            stonksmith_logger.error(
+                msg=(
+                    f"Only {len(modules)} of {len(requested)} requested module(s) "
+                    "loaded; this run is incomplete."
+                ),
+            )
+            exit_code = 1
+
         broker_instance: Any = broker_class()
         broker_instance.module = modules
 
         # 8. Execution
         try:
-            asyncio.run(main=start_run(broker_obj=broker_instance, db=db, args=args))
+            run_ok: bool = asyncio.run(
+                main=start_run(broker_obj=broker_instance, db=db, args=args)
+            )
+            if not run_ok:
+                exit_code = 1
+
         except KeyboardInterrupt:
-            stonksmith_logger.highlight(msg="Keyboard interrupt.")
+            # 128 + SIGINT, the shell convention, and distinguishable from the 1
+            # a real failure returns: a scheduler should page on 1 and shrug at
+            # 130. Reported at fail level because highlight is INFO, which the
+            # default level hides -- a cancelled run used to leave no trace at
+            # all and still exit 0.
+            stonksmith_logger.fail(msg="Keyboard interrupt: the run was cancelled.")
+            exit_code = 130
 
     db_engine.dispose()
     return exit_code
