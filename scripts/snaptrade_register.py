@@ -105,7 +105,12 @@ def store(consumer_key: str, client_id: str) -> int:
     return 0
 
 
-def link(client: Any, reconnect: str = "", broker: str = "") -> int:
+def link(
+    client: Any,
+    reconnect: str = "",
+    broker: str = "",
+    connection_type: str = "read",
+) -> int:
     """Print a Connection Portal URL for linking or repairing a brokerage.
 
     Without --reconnect the portal creates a connection, and SnapTrade de-dupes:
@@ -118,6 +123,14 @@ def link(client: Any, reconnect: str = "", broker: str = "") -> int:
     --reconnect points the portal at one specific connection and re-authorizes
     that one, which is the documented way to repair a connection rather than
     replace it.
+
+    connection_type defaults to read because a connection is a standing
+    authorization against the brokerage, and StonkSmith only ever reads balances,
+    positions and activities. Some brokerages -- Schwab among them -- will happily
+    grant trading, which is a permission nothing here uses and every future bug
+    could. It is decided when the connection is *created*: re-authorizing through
+    --reconnect does not necessarily narrow a connection that was already granted
+    trade, so downgrading one means deleting it and linking it again.
     """
 
     kwargs: dict[str, str] = {}
@@ -126,6 +139,11 @@ def link(client: Any, reconnect: str = "", broker: str = "") -> int:
         kwargs["reconnect"] = reconnect
     if broker:
         kwargs["broker"] = broker
+    if connection_type:
+        # Omitted entirely when empty rather than sent blank: SnapTrade validates
+        # this against an enum, so "" is a 400 rather than a fall back to its own
+        # default.
+        kwargs["connection_type"] = connection_type
 
     body: Any = _body(client.authentication.login_snap_trade_user(**kwargs))
 
@@ -206,7 +224,19 @@ def main() -> int:
     link_parser.add_argument(
         "--broker",
         default="",
-        help="brokerage slug to preselect, e.g. INTERACTIVE-BROKERS-FLEX",
+        help="brokerage slug to preselect, e.g. SCHWAB or INTERACTIVE-BROKERS-FLEX",
+    )
+    link_parser.add_argument(
+        "--connection-type",
+        default="read",
+        choices=("read", "trade", "trade-if-available"),
+        help=(
+            "how much access the connection grants (default: read). StonkSmith "
+            "only reads balances, positions and activities, so a trade "
+            "connection grants a permission nothing here uses; "
+            "'trade-if-available' is the escape hatch for a brokerage that "
+            "offers nothing narrower"
+        ),
     )
 
     args = parser.parse_args()
@@ -220,7 +250,12 @@ def main() -> int:
     client: Any = _client(client_id, consumer_key)
 
     if args.command == "link":
-        return link(client, args.reconnect, args.broker)
+        return link(
+            client=client,
+            reconnect=args.reconnect,
+            broker=args.broker,
+            connection_type=args.connection_type,
+        )
 
     return status(client)
 

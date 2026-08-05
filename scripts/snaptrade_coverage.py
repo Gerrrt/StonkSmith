@@ -2,8 +2,14 @@
 
 Answers the coverage question in issue #21 from the authoritative /brokerages
 endpoint rather than from SnapTrade's paginated marketing pages, which disagree
-with it. The 2026-08-04 run found Schwab read-only (the issue had claimed
-read+trade), no Ally Invest at all, and Vanguard supported as a bonus.
+with it. The 2026-08-05 run found Schwab supporting read *and* trade (and
+currently flagged degraded), no Ally Invest at all, and Vanguard supported as a
+bonus.
+
+An earlier version of this docstring reported Schwab as read-only. That came
+from allows_trading, which SnapTrade contradicts across its own endpoints --
+the trap _flags() below exists to explain. authorization_types is the field
+that decides it, and it reads read/trade.
 
 Read-only: it lists integrations. It never touches an account, a balance or a
 trade, and it needs no connected brokerage.
