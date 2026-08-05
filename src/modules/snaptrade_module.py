@@ -114,7 +114,8 @@ def brokerage_name(
     account: dict[str, Any], connection: dict[str, Any] | None, conn_id: str
 ) -> str:
     """
-    Name the brokerage an account came from, distinctly from any other one.
+    Name the brokerage an account came from, distinctly from every other
+    brokerage.
 
     This is identity, not decoration. ``SnapTradeModule.identity()`` builds
     ``account_key`` as "<brokerage> - <account>", and ``account_key`` is what
@@ -136,12 +137,15 @@ def brokerage_name(
     the holdings replace deletes the first's rows. One account, one balance, no
     error anywhere.
 
-    So the chain ends on something that cannot collide across connections. A
-    connection id is unique per connection and stable across runs, which means
-    two accounts behind two different connections can never produce the same
-    string no matter how little SnapTrade is willing to say about either of
-    them. Two accounts behind the *same* connection still land on the same
-    label, which is the correct answer -- they are at the same brokerage.
+    So the last rung is one that cannot collide: a connection id is unique per
+    connection and stable across runs, so two accounts that fall all the way
+    through to it, behind different connections, can never produce the same
+    string no matter how little SnapTrade is willing to say about either.
+
+    The earlier rungs repeat, on purpose. Two accounts behind one connection
+    both answer "Fidelity", and so do two separate connections to Fidelity.
+    Both are right: those accounts really are at the same brokerage, and it is
+    the account's own name that separates them.
 
     ``institution_name`` stays first, and unconditionally. Every account_key in
     every existing database was built from it; preferring the connection's name
