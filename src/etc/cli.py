@@ -4,6 +4,7 @@ Cli module for arguments
 
 import sys
 from argparse import (
+    SUPPRESS,
     ArgumentParser,
     Namespace,
     RawTextHelpFormatter,
@@ -108,6 +109,28 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         action="store_true",
         help="Show start/finish markers around module execution",
     )
+
+    # --verbose and --debug are declared on the top-level parser too, so they
+    # work on either side of the broker name: `stonksmith --verbose fidelity`
+    # and `stonksmith fidelity --verbose` both do the same thing. Only the
+    # former used to parse, which reads as arbitrary next to -M/-u/-p/-id,
+    # which only work after it.
+    #
+    # SUPPRESS is what makes that safe. With a normal `default=False` this
+    # parser would set verbose=False whenever the flag was absent here --
+    # overwriting a --verbose that had already been parsed before the broker
+    # name, and silently turning it off. SUPPRESS leaves the attribute alone
+    # unless the flag is actually given.
+    for flag, flag_help in (
+        ("--verbose", "Enable verbose output"),
+        ("--debug", "Enable debug level information"),
+    ):
+        std_parser.add_argument(
+            flag,
+            action="store_true",
+            default=SUPPRESS,
+            help=flag_help,
+        )
 
     auth_group: _ArgumentGroup = std_parser.add_argument_group(title="Authentication")
     auth_group.add_argument(
