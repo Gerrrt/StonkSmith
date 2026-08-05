@@ -114,11 +114,17 @@ def brokerage_name(
     account: dict[str, Any], connection: dict[str, Any] | None, conn_id: str
 ) -> str:
     """
-    Name the brokerage an account came from, without ever reusing a name.
+    Name the brokerage an account came from, distinctly from every other
+    brokerage.
 
     This is identity, not decoration. ``SnapTradeModule.identity()`` builds
     ``account_key`` as "<brokerage> - <account>", and ``account_key`` is what
     joins this run's snapshot to every previous one.
+
+    Deliberately *not* unique per account. Two Fidelity accounts both answer
+    "Fidelity", and they must: ``account_key`` pairs this with the account's own
+    name, so the brokerage half only has to tell brokerages apart. The one thing
+    it may never do is hand the same answer to two different brokerages.
 
     With one brokerage linked, falling back to a constant was cosmetic. With two
     it destroys data, silently, on every run, and still exits 0. Two accounts
@@ -131,10 +137,15 @@ def brokerage_name(
     the holdings replace deletes the first's rows. One account, one balance, no
     error anywhere.
 
-    So the chain ends on something that cannot repeat. A connection id is unique
-    per connection and stable across runs, which means two accounts behind two
-    connections can never produce the same string no matter how little SnapTrade
-    is willing to say about either of them.
+    So the last rung is one that cannot collide: a connection id is unique per
+    connection and stable across runs, so two accounts that fall all the way
+    through to it, behind different connections, can never produce the same
+    string no matter how little SnapTrade is willing to say about either.
+
+    The earlier rungs repeat, on purpose. Two accounts behind one connection
+    both answer "Fidelity", and so do two separate connections to Fidelity.
+    Both are right: those accounts really are at the same brokerage, and it is
+    the account's own name that separates them.
 
     ``institution_name`` stays first, and unconditionally. Every account_key in
     every existing database was built from it; preferring the connection's name
