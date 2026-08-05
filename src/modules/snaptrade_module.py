@@ -114,11 +114,16 @@ def brokerage_name(
     account: dict[str, Any], connection: dict[str, Any] | None, conn_id: str
 ) -> str:
     """
-    Name the brokerage an account came from, without ever reusing a name.
+    Name the brokerage an account came from, distinctly from any other one.
 
     This is identity, not decoration. ``SnapTradeModule.identity()`` builds
     ``account_key`` as "<brokerage> - <account>", and ``account_key`` is what
     joins this run's snapshot to every previous one.
+
+    Deliberately *not* unique per account. Two Fidelity accounts both answer
+    "Fidelity", and they must: ``account_key`` pairs this with the account's own
+    name, so the brokerage half only has to tell brokerages apart. The one thing
+    it may never do is hand the same answer to two different brokerages.
 
     With one brokerage linked, falling back to a constant was cosmetic. With two
     it destroys data, silently, on every run, and still exits 0. Two accounts
@@ -131,10 +136,12 @@ def brokerage_name(
     the holdings replace deletes the first's rows. One account, one balance, no
     error anywhere.
 
-    So the chain ends on something that cannot repeat. A connection id is unique
-    per connection and stable across runs, which means two accounts behind two
-    connections can never produce the same string no matter how little SnapTrade
-    is willing to say about either of them.
+    So the chain ends on something that cannot collide across connections. A
+    connection id is unique per connection and stable across runs, which means
+    two accounts behind two different connections can never produce the same
+    string no matter how little SnapTrade is willing to say about either of
+    them. Two accounts behind the *same* connection still land on the same
+    label, which is the correct answer -- they are at the same brokerage.
 
     ``institution_name`` stays first, and unconditionally. Every account_key in
     every existing database was built from it; preferring the connection's name
