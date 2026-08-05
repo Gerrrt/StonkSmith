@@ -14,13 +14,36 @@ given, which is what makes the pre-broker position keep working.
 
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from etc.cli import gen_cli_args
+from loaders.brokerloader import BrokerLoader
+
+REPO = Path(__file__).resolve().parents[1]
+
+
+class _RepoOnlyLoader(BrokerLoader):
+    """A loader that ignores ~/.stonksmith/brokers.
+
+    gen_cli_args() builds a BrokerLoader to register one subparser per broker,
+    and BrokerLoader scans the user's home as well as the repo. Without this,
+    a half-finished broker under ~/.stonksmith/brokers -- one whose
+    broker_args.py raises on import, say -- would fail these tests on the
+    developer's machine over something entirely unrelated to CLI parsing.
+    Same seam tests/test_broker_discovery.py uses.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.stonksmith_path = REPO / "absent"
 
 
 def _parse(*argv: str):
-    with patch.object(sys, "argv", ["stonksmith", *argv]):
+    with (
+        patch.object(sys, "argv", ["stonksmith", *argv]),
+        patch("etc.cli.BrokerLoader", _RepoOnlyLoader),
+    ):
         return gen_cli_args()
 
 
