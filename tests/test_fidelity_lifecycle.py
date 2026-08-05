@@ -106,9 +106,11 @@ class FidelityLifecycleTests(unittest.TestCase):
         broker.broker_flow = MagicMock(side_effect=RuntimeError("boom"))
         broker.logger = MagicMock()
 
-        broker(args=MagicMock(), db=MagicMock(), host=None)
+        result = broker(args=MagicMock(), db=MagicMock(), host=None)
 
         broker.teardown.assert_called_once()
+        # ...and the crash now reaches the exit code instead of vanishing.
+        self.assertFalse(result)
 
 
 class FidelityHeadedFlagTests(unittest.TestCase):

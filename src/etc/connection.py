@@ -44,24 +44,37 @@ class Connection:
 
     def __call__(
         self, args: Namespace, db: BrokerDbProtocol, host: str | None = None
-    ) -> None:
+    ) -> bool:
         """
         Entry point for ThreadPoolExecutor.
+
+        Reports an outcome rather than raising. This is a thread-pool target, so
+        an exception is only ever seen by whoever calls ``future.result()`` --
+        and the commonest failures, ``create_conn_obj()`` and ``login()``
+        returning False, are not exceptions and never will be. Splitting the
+        signal across returns and raises would make every caller handle both.
         :param args:
         :param db:
         :param host:
-        :return:
+        :return: False when the run produced nothing -- could not connect, could
+                 not log in, raised, or a module reported it did no work
+        :rtype: bool
         """
 
         self.args = args
         self.db = db
         self.hostname = host
+        ok: bool = True
 
         try:
-            self.broker_flow()
+            # `is not False`, not `bool(...)`: a broker installed under
+            # ~/.stonksmith/brokers may still override broker_flow() with the
+            # older `-> None` signature, where None has always meant "finished".
+            ok = self.broker_flow() is not False
 
         except Exception as e:
             self.logger.exception(msg=f"Exception on {host or 'local'}: {e}")
+            ok = False
 
         finally:
             try:
@@ -71,6 +84,8 @@ class Connection:
                 self.logger.exception(msg=f"Teardown failed for {self.broker!r}: {e}")
 
             self.session.close()
+
+        return ok
 
     def teardown(self) -> None:
         """
@@ -128,11 +143,12 @@ class Connection:
 
         return False
 
-    def broker_flow(self) -> None:
+    def broker_flow(self) -> bool:
         """
         Brokerage login flow
-        :return:
-        :rtype:
+        :return: True when the run did its work; False when it could not
+                 connect, could not log in, or a module reported it did nothing
+        :rtype: bool
         """
 
         self.broker_logger()
@@ -147,15 +163,20 @@ class Connection:
         # reporting their own failure, so adding a generic message would print
         # a second, vaguer line for the same problem.
         if not self.create_conn_obj():
-            return
+            return False
 
         if not self.login():
-            return
+            return False
 
         if self.module:
-            self.call_modules()
-        else:
-            self.call_cmd_args()
+            return self.call_modules()
+
+        # call_cmd_args() dispatches broker actions rather than running a sync,
+        # so there is no per-action outcome to report -- and main() cannot reach
+        # this branch anyway, since a run with no --module exits before here.
+        self.call_cmd_args()
+
+        return True
 
     def call_cmd_args(self) -> None:
         """
@@ -183,16 +204,27 @@ class Connection:
                 self.logger.highlight(msg=f"Calling {k}()")
                 method()
 
-    def call_modules(self) -> None:
+    def call_modules(self) -> bool:
         """
-        Pass active session to broker module
-        :return:
-        :rtype:
+        Pass active session to broker module.
+
+        A module says it did nothing by returning ``False``. Anything else --
+        including ``None``, which is what every module written before this
+        contract returns -- counts as success, so modules installed under
+        ~/.stonksmith/modules keep working untouched. Only the exact value
+        False is read as failure: a module returning a count of 0 is reporting
+        success, not emptiness.
+        :return: True when every module did its work
+        :rtype: bool
         """
+
+        ok: bool = True
 
         for module in self.module:
             if self.db is None or self.args is None:
-                return
+                # Nothing ran, and nothing was said about it. That is a failed
+                # run rather than a successful empty one.
+                return False
 
             module_logger = StonkSmithAdapter(
                 extra={
@@ -222,8 +254,10 @@ class Connection:
                 )
 
             if hasattr(module, "on_login"):
+                module_ok: bool = True
+
                 try:
-                    module.on_login(context, self)
+                    module_ok = module.on_login(context, self) is not False
                 except Exception as e:
                     module_logger.exception(
                         msg=(
@@ -231,14 +265,23 @@ class Connection:
                             f"for {self.username or 'unknown user'}: {e}"
                         )
                     )
+                    module_ok = False
+
+                # Recorded, not short-circuited: the remaining modules still run.
+                ok = ok and module_ok
+
                 if show_module_markers:
+                    # This said "[+] Completed" even for a module that had just
+                    # raised two lines above it.
                     module_logger.highlight(
                         msg=(
-                            "[+] Completed module "
-                            f"{getattr(module, 'name', 'unknown')} "
+                            f"{'[+] Completed' if module_ok else '[-] Gave up on'} "
+                            f"module {getattr(module, 'name', 'unknown')} "
                             f"for {self.username or 'unknown user'}"
                         )
                     )
+
+        return ok
 
     def inc_failed_logins(self, username: str) -> None:
         """

@@ -326,11 +326,13 @@ class SnapTradeModule:
 
         self.export_format = (module_options or {}).get("EXPORT", "print")
 
-    def on_login(self, context: Context, connection: Connection) -> None:
+    def on_login(self, context: Context, connection: Connection) -> bool:
         """
         Fetch, filter and persist every connected brokerage's balances.
         :param context: The module context
         :param connection: The SnapTrade broker instance
+        :return: False when nothing reached the database
+        :rtype: bool
         """
 
         fetch = getattr(connection, "fetch_accounts", None)
@@ -342,14 +344,14 @@ class SnapTradeModule:
                     f"{connection.broker} cannot list SnapTrade accounts."
                 ),
             )
-            return
+            return False
 
         try:
             accounts: list[dict[str, Any]] = fetch()
 
         except Exception as e:
             context.log.fail(msg=f"Could not list SnapTrade accounts: {e}")
-            return
+            return False
 
         connections: dict[str, dict[str, Any]] = getattr(connection, "connections", {})
 
@@ -377,7 +379,7 @@ class SnapTradeModule:
                     "SnapTrade. Nothing was written."
                 ),
             )
-            return
+            return False
 
         context.log.success(msg=f"Syncing {len(rows)} account(s)")
 
@@ -388,12 +390,14 @@ class SnapTradeModule:
         )
 
         db: BrokerDbProtocol = context.db
+        db_ok: bool = True
 
         if not callable(getattr(db, "save_account_data", None)):
             context.log.fail(
                 msg="DB contract violation: context.db does not implement "
                 "save_account_data. Skipping DB save.",
             )
+            db_ok = False
         else:
             for row in rows:
                 # One brokerage's account names are not unique across all of
@@ -405,6 +409,8 @@ class SnapTradeModule:
                     timestamp=timestamp,
                 )
 
+        sheets_ok: bool = True
+
         try:
             context.log.highlight(msg="Syncing data to Google Sheets...")
             Saver().save_accounts(data=list(rows))
@@ -412,9 +418,23 @@ class SnapTradeModule:
 
         except SheetsUnavailable as e:
             context.log.fail(msg=f"Google Sheets sync skipped: {e}")
+            sheets_ok = False
 
         except Exception as e:
             # Broad on purpose: the balances are already in the broker database.
             context.log.fail(msg=f"Google Sheets sync failed: {e}")
+            sheets_ok = False
 
-        context.log.success(msg="SnapTrade sync complete.")
+        if db_ok and sheets_ok:
+            context.log.success(msg="SnapTrade sync complete.")
+        elif db_ok:
+            # Still success level: the balances landed, so the run succeeded and
+            # exits 0. Only the wording changes -- claiming "complete" directly
+            # after "Google Sheets sync failed" was the lie.
+            context.log.success(
+                msg="SnapTrade balances saved locally; the dashboard was not updated."
+            )
+
+        # A DB contract violation already reported itself at fail level; a
+        # summary line here would only restate it more vaguely.
+        return db_ok

@@ -34,7 +34,7 @@ class StonkSmithModule:
         :param module_options:
         """
 
-    def on_login(self, context: Context, connection: Connection) -> None:
+    def on_login(self, context: Context, connection: Connection) -> bool | None:
         """Concurrent.
         Required if on_admin_login is not present. This gets called on each
         authenticated connection.
@@ -42,6 +42,17 @@ class StonkSmithModule:
         Connection.call_modules() invokes this as on_login(context, connection),
         so both parameters are required. `connection` carries the authenticated
         session (connection.session, connection.username) for the live broker.
+
+        Return False if the module did no work -- it could not reach the
+        service, found nothing to sync, or wrote nothing. StonkSmith exits 1
+        when any module returns False, which is how a scheduled run detects a
+        failure instead of reporting success and moving on.
+
+        Returning None or True means the module did its job. None is the
+        original signature and still means success, so a module written before
+        this contract needs no change. Only the exact value False is read as
+        failure -- returning a count of 0, or an empty string, counts as
+        success, so return a real bool if you mean one.
         """
         # Logging best practice
         # Mostly you should use these functions to display information to

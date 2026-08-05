@@ -46,7 +46,7 @@ class Schwab529Module:
         options: dict[str, Any] = module_options or {}
         self.export_format: Any = options.get("EXPORT", "print")
 
-    def on_login(self, context: Context, connection: Connection) -> None:
+    def on_login(self, context: Context, connection: Connection) -> bool:
         """Perform the login and scraping process for Schwab529Plan.
 
         Args:
@@ -54,6 +54,9 @@ class Schwab529Module:
             database, and other shared resources.
             connection (Connection): The connection object containing session and
             authentication details for the broker.
+
+        Returns:
+            bool: False when nothing reached the database.
 
         """
         context.log.highlight(msg=f"Starting Schwab529 sync for: {connection.username}")
@@ -64,7 +67,7 @@ class Schwab529Module:
             response: Response = connection.session.get(url=self.dashboard_url)
             if not response.ok:
                 context.log.fail(msg="Could not access Schwab529plan dashboard")
-                return
+                return False
 
             if self._looks_like_login_page(response=response):
                 context.log.fail(
@@ -73,14 +76,14 @@ class Schwab529Module:
                         f"instead of dashboard (url={response.url})."
                     ),
                 )
-                return
+                return False
 
         except RequestException as e:
             context.log.exception(
                 msg="Exception during Schwab529plan account scrape",
                 extra={"error": str(e)},
             )
-            return
+            return False
 
         # 2. Parse
 
@@ -112,11 +115,14 @@ class Schwab529Module:
         )
 
         db: BrokerDbProtocol = context.db
+        db_ok: bool = True
+
         if not callable(getattr(db, "save_account_data", None)):
             context.log.fail(
                 msg="DB contract violation: context.db does not implement "
                 "save_account_data. Skipping DB save.",
             )
+            db_ok = False
         else:
             for index, item in enumerate(balances):
                 db.save_account_data(
@@ -128,6 +134,8 @@ class Schwab529Module:
                 )
 
         # 5. Sync: Push clean data to Google Sheets
+
+        sheets_ok: bool = True
 
         try:
             context.log.highlight(msg="Syncing data to Google Sheets...")
@@ -143,14 +151,28 @@ class Schwab529Module:
 
         except SheetsUnavailable as e:
             context.log.fail(msg=f"Google Sheets sync skipped: {e}")
+            sheets_ok = False
 
         except Exception as e:
             # Deliberately broad: the scrape is already saved to the broker
             # database above, so a Sheets problem must not fail the run or bury
             # the result under a traceback from gspread/google-auth internals.
             context.log.fail(msg=f"Google Sheets sync failed: {e}")
+            sheets_ok = False
 
-        context.log.success(msg="Schwab529Plan sync complete.")
+        if db_ok and sheets_ok:
+            context.log.success(msg="Schwab529Plan sync complete.")
+        elif db_ok:
+            # Still success level: the data landed, so the run succeeded and
+            # exits 0. Only the wording changes -- claiming "complete" directly
+            # after "Google Sheets sync failed" was the lie.
+            context.log.success(
+                msg="Schwab529Plan data saved locally; the dashboard was not updated."
+            )
+
+        # A DB contract violation already reported itself at fail level; a
+        # summary line here would only restate it more vaguely.
+        return db_ok
 
     @staticmethod
     def _looks_like_login_page(response: Response) -> bool:

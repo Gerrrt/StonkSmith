@@ -153,7 +153,7 @@ class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
             ok=True, url="https://x/viewAggrOverview.cs", text="<html></html>"
         )
 
-        Schwab529Module().on_login(context, connection)
+        result = Schwab529Module().on_login(context, connection)
 
         # The scrape still reached the database...
         self.assertEqual(saved, [("Balance", "$10")])
@@ -161,6 +161,13 @@ class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
         reported = " ".join(str(c) for c in context.log.fail.call_args_list)
         self.assertIn("Google Sheets sync skipped", reported)
         context.log.success.assert_called()
+
+        # Sheets is best-effort: the balances are saved, so the run succeeded
+        # and exits 0. But it must stop claiming it finished the job.
+        self.assertIsNot(result, False, "a Sheets failure must not fail the run")
+        succeeded = " ".join(str(c) for c in context.log.success.call_args_list)
+        self.assertNotIn("sync complete", succeeded)
+        self.assertIn("dashboard was not updated", succeeded)
 
 
 if __name__ == "__main__":

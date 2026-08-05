@@ -113,6 +113,20 @@ command line:
 uv run stonksmith schwab529plan -M schwab529plan -id 1
 ```
 
+### Exit codes
+
+The exit status reflects what the run actually did, so a cron entry, systemd
+timer or CI step can tell whether the sync worked.
+
+| Code | Meaning |
+| --- | --- |
+| `0` | The run did its work. A Google Sheets failure *after* the balances reached the database is still a success — the data is saved, and the log says the dashboard was not updated. |
+| `1` | The run did not complete: unknown broker or module, could not connect or log in, a module reported it did nothing, only some of the requested modules loaded, or nothing reached the database. |
+| `130` | Interrupted (128 + SIGINT). Distinct from `1` so a scheduler can page on a real failure and shrug at a human pressing Ctrl-C. |
+
+A partial module load still runs the modules that did load — partial data beats
+none — but reports `1` rather than claiming success.
+
 ### Fidelity
 
 Fidelity fronts its login with Akamai Bot Manager and ThreatMetrix, which reject
@@ -269,9 +283,22 @@ def on_login(self, context, connection):
     user = context.active_username or connection.username
     if not user:
         context.log.fail("No authenticated user found")
-        return
+        return False
     context.log.success(f"Running module for {user}")
 ```
+
+### What a module returns
+
+Return `False` if the module did no work — it could not reach the service, found
+nothing to sync, or wrote nothing. StonkSmith exits `1` when any module returns
+`False`, which is how a scheduled run detects a failure instead of reporting
+success and moving on.
+
+Returning `None` or `True` means the module did its job. `None` is the original
+signature and still means success, so a module written before this contract
+needs no change. Only the exact value `False` is read as failure — returning a
+count of `0`, or an empty string, counts as success, so return a real `bool` if
+you mean one.
 
 ---
 

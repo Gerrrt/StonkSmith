@@ -497,8 +497,9 @@ class OnLoginTests(unittest.TestCase):
         context = _StubContext(self.db)
 
         with patch("modules.snaptrade_module.Saver"):
-            self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
+            result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
+        self.assertIsNot(result, False, "a working sync must not fail the run")
         self.assertEqual(len(self.db.saved), 1)
         self.assertEqual(self.db.saved[0]["balance"], "$6,539.67")
 
@@ -529,9 +530,10 @@ class OnLoginTests(unittest.TestCase):
 
         with patch("modules.snaptrade_module.Saver") as saver:
             saver.return_value.save_accounts.side_effect = SheetsUnavailable("no tab")
-            self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
+            result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertEqual(len(self.db.saved), 1, "the balance survived")
+        self.assertIsNot(result, False, "Sheets is best-effort; the run succeeded")
         self.assertTrue(any("sync skipped" in m for m in context.log.messages))
 
     def test_a_broken_sheets_client_does_not_lose_balances(self) -> None:
@@ -539,28 +541,31 @@ class OnLoginTests(unittest.TestCase):
 
         with patch("modules.snaptrade_module.Saver") as saver:
             saver.return_value.save_accounts.side_effect = RuntimeError("boom")
-            self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
+            result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertEqual(len(self.db.saved), 1)
+        self.assertIsNot(result, False, "Sheets is best-effort; the run succeeded")
         self.assertTrue(any("sync failed" in m for m in context.log.messages))
 
     def test_a_database_without_save_account_data_is_reported(self) -> None:
         context = _StubContext(_StubDbNoSave())
 
         with patch("modules.snaptrade_module.Saver"):
-            self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
+            result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
+        self.assertFalse(result, "nothing reached the database")
         self.assertTrue(any("DB contract violation" in m for m in context.log.messages))
 
     def test_nothing_syncable_writes_nothing_and_says_so(self) -> None:
         context = _StubContext(self.db)
 
         with patch("modules.snaptrade_module.Saver") as saver:
-            self.module.on_login(
+            result = self.module.on_login(
                 context,
                 _StubBroker([account(brokerage_authorization=DEAD_CONNECTION)]),  # type: ignore[arg-type]
             )
 
+        self.assertFalse(result, "nothing was written")
         self.assertEqual(self.db.saved, [])
         saver.assert_not_called()
         self.assertTrue(any("Nothing was written" in m for m in context.log.messages))
@@ -568,8 +573,9 @@ class OnLoginTests(unittest.TestCase):
     def test_the_wrong_broker_fails_cleanly(self) -> None:
         context = _StubContext(self.db)
 
-        self.module.on_login(context, _WrongBroker())  # type: ignore[arg-type]
+        result = self.module.on_login(context, _WrongBroker())  # type: ignore[arg-type]
 
+        self.assertFalse(result, "the wrong broker means nothing was written")
         self.assertEqual(self.db.saved, [])
         self.assertTrue(
             any("needs the SnapTrade broker" in m for m in context.log.messages)
@@ -605,8 +611,9 @@ class OnLoginTests(unittest.TestCase):
 
         context = _StubContext(self.db)
 
-        self.module.on_login(context, _Exploding([]))  # type: ignore[arg-type]
+        result = self.module.on_login(context, _Exploding([]))  # type: ignore[arg-type]
 
+        self.assertFalse(result, "a failed fetch means nothing was written")
         self.assertTrue(
             any("Could not list SnapTrade accounts" in m for m in context.log.messages)
         )

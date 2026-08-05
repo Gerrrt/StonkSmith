@@ -100,13 +100,16 @@ class FidelityModule:
         options: dict[str, Any] = module_options or {}
         self.export_format = options.get("EXPORT", "print")
 
-    def on_login(self, context: Context, connection: Connection) -> None:
+    def on_login(self, context: Context, connection: Connection) -> bool:
         """Scrape the portfolio summary and persist the balances.
 
         Args:
             context (Context): Logging, database, and shared resources.
             connection (Connection): The authenticated Fidelity broker, whose
             `active_page` holds the logged-in Playwright page.
+
+        Returns:
+            bool: False when nothing reached the database.
 
         """
         context.log.highlight(msg=f"Starting Fidelity sync for: {connection.username}")
@@ -117,7 +120,7 @@ class FidelityModule:
                 msg="Fidelity module requires a browser-backed connection; "
                 "no active page was found."
             )
-            return
+            return False
 
         # 1. Scrape
         try:
@@ -133,7 +136,7 @@ class FidelityModule:
 
         except Exception as e:
             context.log.exception(msg=f"Could not open the portfolio summary: {e}")
-            return
+            return False
 
         accounts: list[dict[str, str]] = self.scrape_accounts(
             page=page, context=context
@@ -152,7 +155,7 @@ class FidelityModule:
                     f"in modules/fidelity_module.py need updating.{where}"
                 )
             )
-            return
+            return False
 
         context.log.success(msg=f"Found {len(accounts)} account(s)")
 
@@ -162,11 +165,14 @@ class FidelityModule:
         )
 
         db: BrokerDbProtocol = context.db
+        db_ok: bool = True
+
         if not callable(getattr(db, "save_account_data", None)):
             context.log.fail(
                 msg="DB contract violation: context.db does not implement "
                 "save_account_data. Skipping DB save.",
             )
+            db_ok = False
         else:
             for account in accounts:
                 db.save_account_data(
@@ -176,6 +182,8 @@ class FidelityModule:
                 )
 
         # 3. Sync to Google Sheets
+        sheets_ok: bool = True
+
         try:
             context.log.highlight(msg="Syncing data to Google Sheets...")
             Saver().save_accounts(data=list(accounts))
@@ -183,12 +191,26 @@ class FidelityModule:
 
         except SheetsUnavailable as e:
             context.log.fail(msg=f"Google Sheets sync skipped: {e}")
+            sheets_ok = False
 
         except Exception as e:
             # Broad on purpose: the balances are already in the broker database.
             context.log.fail(msg=f"Google Sheets sync failed: {e}")
+            sheets_ok = False
 
-        context.log.success(msg="Fidelity sync complete.")
+        if db_ok and sheets_ok:
+            context.log.success(msg="Fidelity sync complete.")
+        elif db_ok:
+            # Still success level: the balances landed, so the run succeeded and
+            # exits 0. Only the wording changes -- claiming "complete" directly
+            # after "Google Sheets sync failed" was the lie.
+            context.log.success(
+                msg="Fidelity balances saved locally; the dashboard was not updated."
+            )
+
+        # A DB contract violation already reported itself at fail level; a
+        # summary line here would only restate it more vaguely.
+        return db_ok
 
     def scrape_accounts(self, page: Any, context: Context) -> list[dict[str, str]]:
         """Pull account names and balances off the rendered summary page.

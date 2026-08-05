@@ -37,7 +37,8 @@ class NoAccountsReportingTests(unittest.TestCase):
         module.scrape_accounts = MagicMock(return_value=[])
         context = MagicMock()
 
-        module.on_login(context, connection)
+        # Scraping nothing is a failed sync, not an empty successful one.
+        assert module.on_login(context, connection) is False
         return context
 
     def test_capture_path_is_named_in_the_failure(self) -> None:
