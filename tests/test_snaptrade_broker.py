@@ -98,7 +98,7 @@ class _FakeClient:
         self.account_information = self._Accounts(self)
 
     class _Connections:
-        def __init__(self, outer: _FakeClient) -> None:
+        def __init__(self, outer: "_FakeClient") -> None:
             self.outer = outer
 
         def list_brokerage_authorizations(self, **kwargs: Any) -> list[dict[str, Any]]:
@@ -108,7 +108,7 @@ class _FakeClient:
             return self.outer._connections
 
     class _Accounts:
-        def __init__(self, outer: _FakeClient) -> None:
+        def __init__(self, outer: "_FakeClient") -> None:
             self.outer = outer
 
         def list_user_accounts(self, **kwargs: Any) -> list[dict[str, Any]]:
@@ -134,13 +134,17 @@ class _FakeClient:
 
 
 def _connection(
-    conn_id: str, *, name: str = "Schwab", disabled: bool = False
+    conn_id: str,
+    *,
+    name: str = "Schwab",
+    disabled: bool = False,
+    degraded: bool = False,
 ) -> dict[str, Any]:
     return {
         "id": conn_id,
         "disabled": disabled,
         "disabled_date": "2026-07-01" if disabled else None,
-        "brokerage": {"name": name, "slug": name.upper()},
+        "brokerage": {"name": name, "slug": name.upper(), "is_degraded": degraded},
     }
 
 
@@ -272,6 +276,36 @@ class SnapTradeBrokerTests(unittest.TestCase):
         self.assertIn("Disabled SnapTrade connection", logged)
         self.assertIn("Fidelity", logged)
         self.assertNotIn("Schwab", logged, "only the disabled one is named")
+
+    def test_a_degraded_brokerage_does_not_produce_a_second_warning(self) -> None:
+        # Deliberate, and easy to "fix" by mistake: `status` prints (degraded),
+        # so the asymmetry here looks like an oversight. It is not.
+        #
+        # is_degraded describes SnapTrade's integration with the brokerage, not
+        # this connection, and it does not move when your accounts sync fine.
+        # Schwab has carried it for days, so warning on it means warning on
+        # every run, indefinitely, with no action attached -- which buries the
+        # warnings that do mean something. The module's staleness check already
+        # catches a degraded connection that has actually stopped updating, per
+        # account and with a number in it, and it qualifies that message with
+        # the degradation. That is where the flag earns its place.
+        self.broker.client = _FakeClient(
+            connections=[_connection("aaa", name="Schwab", degraded=True)]
+        )
+
+        self.assertTrue(self.broker.verify_access())
+        self.assertEqual(self.capture.messages, [])
+
+    def test_a_degraded_and_disabled_connection_is_named_once(self) -> None:
+        self.broker.client = _FakeClient(
+            connections=[
+                _connection("aaa", name="Schwab", disabled=True, degraded=True)
+            ]
+        )
+
+        self.assertTrue(self.broker.verify_access())
+        self.assertEqual(len(self.capture.messages), 1, "one problem, one line")
+        self.assertIn("Disabled SnapTrade connection", self._logged())
 
     def test_fetch_accounts_returns_plain_dictionaries(self) -> None:
         client = _FakeClient(connections=[_connection("aaa")])

@@ -110,6 +110,72 @@ def currency_code(currency: Any, default: str = "USD") -> str:
     return default
 
 
+def brokerage_name(
+    account: dict[str, Any], connection: dict[str, Any] | None, conn_id: str
+) -> str:
+    """
+    Name the brokerage an account came from, without ever reusing a name.
+
+    This is identity, not decoration. ``SnapTradeModule.identity()`` builds
+    ``account_key`` as "<brokerage> - <account>", and ``account_key`` is what
+    joins this run's snapshot to every previous one.
+
+    With one brokerage linked, falling back to a constant was cosmetic. With two
+    it destroys data, silently, on every run, and still exits 0. Two accounts
+    both called "Individual", at two brokerages that both left
+    ``institution_name`` empty, used to key to "unknown - Individual" -- and
+    ``_upsert_account`` upserts on ``(broker, account_key)``, so both resolve to
+    a single accounts row. ``save_snapshot`` then upserts on
+    ``(account_id, scraped_at)``, and every account in a run shares one
+    ``scraped_at``, so the second account's balance overwrites the first's and
+    the holdings replace deletes the first's rows. One account, one balance, no
+    error anywhere.
+
+    So the chain ends on something that cannot repeat. A connection id is unique
+    per connection and stable across runs, which means two accounts behind two
+    connections can never produce the same string no matter how little SnapTrade
+    is willing to say about either of them.
+
+    ``institution_name`` stays first, and unconditionally. Every account_key in
+    every existing database was built from it; preferring the connection's name
+    would rewrite keys for accounts that are perfectly healthy today and split
+    their history in two. That ordering is also why the later rungs are safe: a
+    fallback that later becomes a real ``institution_name`` starts a *new*
+    account rather than corrupting an old one. A split history can be merged by
+    hand. A merged one has already lost the numbers it overwrote.
+    :param account: One account as returned by SnapTrade
+    :param connection: Its connection, or None when it could not be resolved
+    :param conn_id: Its ``brokerage_authorization``, which may be empty
+    :return: A name for the brokerage, unique per connection wherever possible
+    :rtype: str
+    """
+
+    institution: str = str(object=account.get("institution_name") or "")
+
+    if institution:
+        return institution
+
+    # _mapping rather than dict(): some responses flatten this to a bare string,
+    # and dict("Schwab") raises ValueError, not KeyError.
+    brokerage: dict[str, Any] = _mapping(
+        (connection or {}).get("brokerage") if connection else None
+    )
+
+    for field in ("name", "slug"):
+        value: str = str(object=brokerage.get(field) or "")
+
+        if value:
+            return value
+
+    if conn_id:
+        # Ugly in the sheet, and unique, which is the property that matters.
+        return f"connection {conn_id}"
+
+    # Only reachable for an account with no brokerage_authorization at all,
+    # which select_accounts() skips before it can ever reach the database.
+    return "unknown"
+
+
 def position_holding(position: dict[str, Any]) -> Holding:
     """
     Turn one SnapTrade position into a holding row.
@@ -317,8 +383,18 @@ def select_accounts(
     skipped: list[str] = []
 
     for account in accounts:
+        # Resolved up here because the connection now names the brokerage when
+        # the account does not, so the label depends on it -- not only the
+        # freshness checks further down. The checks themselves stay where they
+        # are: moving those would change which reason wins for an account that
+        # fails more than one.
+        conn_id = str(object=account.get("brokerage_authorization") or "")
+        connection: dict[str, Any] | None = connections.get(conn_id)
+
         name = str(object=account.get("name") or account.get("id") or "unnamed")
-        brokerage = str(object=account.get("institution_name") or "unknown")
+        brokerage: str = brokerage_name(
+            account=account, connection=connection, conn_id=conn_id
+        )
         label = f"{brokerage} / {name}"
 
         if account.get("is_paper"):
@@ -329,9 +405,6 @@ def select_accounts(
         if status is not None and str(object=status) not in LIVE_STATUSES:
             skipped.append(f"Skipped {label}: its status is {status}.")
             continue
-
-        conn_id = str(object=account.get("brokerage_authorization") or "")
-        connection: dict[str, Any] | None = connections.get(conn_id)
 
         if connection is None:
             # Fail closed: without its connection there is no way to tell
@@ -372,8 +445,23 @@ def select_accounts(
         stale: str = staleness(account, now=now, max_age_days=max_age_days)
 
         if stale and not allow_stale:
+            # Attribution, not detection. staleness() already caught this; what
+            # is_degraded adds is *whose fault it is*, which changes the action
+            # from "re-link your connection" to "wait for SnapTrade". Said only
+            # here, on a message that is already firing, because the flag
+            # describes SnapTrade's integration rather than this connection and
+            # would otherwise warn on every run of a brokerage that has been
+            # degraded for weeks -- the noise verify_access() deliberately avoids.
+            degraded: str = (
+                " SnapTrade has flagged this brokerage's integration as "
+                "degraded, so this is likely their end rather than yours."
+                if _mapping(connection.get("brokerage")).get("is_degraded")
+                else ""
+            )
+
             skipped.append(
-                f"Skipped {label}: {stale}. Pass --allow-stale to sync it anyway."
+                f"Skipped {label}: {stale}. Pass --allow-stale to sync it "
+                f"anyway.{degraded}"
             )
             continue
 

@@ -20,6 +20,7 @@ from helpers.sheets import SheetsUnavailable
 from modules.snaptrade_module import (
     SnapTradeModule,
     activity_transaction,
+    brokerage_name,
     currency_code,
     money,
     position_holding,
@@ -38,6 +39,26 @@ CONNECTIONS: dict[str, dict[str, Any]] = {
         "id": DEAD_CONNECTION,
         "disabled": True,
         "disabled_date": "2026-06-01",
+    },
+}
+
+SCHWAB_CONNECTION = "conn-schwab"
+FIDELITY_CONNECTION = "conn-fidelity"
+
+#: What linking Schwab alongside Fidelity actually looks like: one key, one
+#: listUserAccounts call, two connections behind it.
+TWO_BROKERAGES: dict[str, dict[str, Any]] = {
+    SCHWAB_CONNECTION: {
+        "id": SCHWAB_CONNECTION,
+        "disabled": False,
+        "disabled_date": None,
+        "brokerage": {"name": "Schwab", "slug": "SCHWAB"},
+    },
+    FIDELITY_CONNECTION: {
+        "id": FIDELITY_CONNECTION,
+        "disabled": False,
+        "disabled_date": None,
+        "brokerage": {"name": "Fidelity", "slug": "FIDELITY"},
     },
 }
 
@@ -66,7 +87,12 @@ def account(**overrides: Any) -> dict[str, Any]:
     return base
 
 
-def select(accounts: list[dict[str, Any]], **overrides: Any):
+def select(
+    accounts: list[dict[str, Any]],
+    *,
+    connections: dict[str, dict[str, Any]] | None = None,
+    **overrides: Any,
+):
     defaults: dict[str, Any] = {
         "now": NOW,
         "max_age_days": 3,
@@ -75,7 +101,9 @@ def select(accounts: list[dict[str, Any]], **overrides: Any):
     }
     defaults.update(overrides)
 
-    return select_accounts(accounts, CONNECTIONS, **defaults)
+    return select_accounts(
+        accounts, CONNECTIONS if connections is None else connections, **defaults
+    )
 
 
 class MoneyTests(unittest.TestCase):
@@ -350,6 +378,230 @@ class SelectAccountsTests(unittest.TestCase):
         self.assertEqual(len(skipped), 3, "no account is dropped silently")
 
 
+class MultipleBrokerageTests(unittest.TestCase):
+    """
+    What linking a second brokerage exposes.
+
+    One StonkSmith broker covers every brokerage SnapTrade connects, so the
+    moment Schwab joins Fidelity these accounts share a database, a worksheet
+    tab and -- unless the brokerage names them apart -- an identity.
+
+    With one brokerage linked, a missing institution_name was cosmetic. With two
+    it is silent data loss: identical account_keys collapse to one accounts row,
+    and because every account in a run shares one scraped_at, the second
+    account's balance overwrites the first's and its holdings are deleted. The
+    run reports success.
+    """
+
+    def schwab(self, **overrides: Any) -> dict[str, Any]:
+        base: dict[str, Any] = account(
+            id="acct-schwab",
+            name="Individual",
+            institution_name="Schwab",
+            brokerage_authorization=SCHWAB_CONNECTION,
+        )
+        base.update(overrides)
+
+        return base
+
+    def fidelity(self, **overrides: Any) -> dict[str, Any]:
+        base: dict[str, Any] = account(
+            id="acct-fidelity",
+            name="Individual",
+            institution_name="Fidelity",
+            brokerage_authorization=FIDELITY_CONNECTION,
+        )
+        base.update(overrides)
+
+        return base
+
+    def keys(self, rows: list[dict[str, str]]) -> set[str]:
+        """The account_key each row would be stored under."""
+
+        return {SnapTradeModule.identity(row).account_key for row in rows}
+
+    def test_two_brokerages_each_get_their_own_row(self) -> None:
+        rows, skipped = select(
+            [self.schwab(), self.fidelity()], connections=TWO_BROKERAGES
+        )
+
+        self.assertEqual(skipped, [])
+        self.assertEqual({row["Brokerage"] for row in rows}, {"Schwab", "Fidelity"})
+
+    def test_identically_named_accounts_at_two_brokerages_stay_distinct(self) -> None:
+        rows, _ = select([self.schwab(), self.fidelity()], connections=TWO_BROKERAGES)
+
+        self.assertEqual(
+            self.keys(rows), {"Schwab - Individual", "Fidelity - Individual"}
+        )
+
+    def test_a_missing_institution_name_falls_back_to_the_connection(self) -> None:
+        rows, _ = select(
+            [self.schwab(institution_name=None)], connections=TWO_BROKERAGES
+        )
+
+        self.assertEqual(rows[0]["Brokerage"], "Schwab")
+
+    def test_two_missing_institution_names_do_not_collide(self) -> None:
+        # The regression this whole helper exists for. Both accounts are called
+        # "Individual" and neither names its institution, so both used to key to
+        # "unknown - Individual" -- one accounts row, one surviving balance.
+        rows, _ = select(
+            [self.schwab(institution_name=None), self.fidelity(institution_name=None)],
+            connections=TWO_BROKERAGES,
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(self.keys(rows)), 2, "two accounts, two identities")
+
+        for key in self.keys(rows):
+            self.assertNotIn("unknown", key)
+
+    def test_the_slug_is_used_when_the_connection_has_no_name(self) -> None:
+        connections = {
+            SCHWAB_CONNECTION: {
+                "id": SCHWAB_CONNECTION,
+                "disabled": False,
+                "brokerage": {"slug": "SCHWAB"},
+            }
+        }
+
+        rows, _ = select([self.schwab(institution_name=None)], connections=connections)
+
+        self.assertEqual(rows[0]["Brokerage"], "SCHWAB")
+
+    def test_a_connection_with_no_brokerage_falls_back_to_its_id(self) -> None:
+        connections = {
+            SCHWAB_CONNECTION: {"id": SCHWAB_CONNECTION, "disabled": False},
+            FIDELITY_CONNECTION: {"id": FIDELITY_CONNECTION, "disabled": False},
+        }
+
+        rows, _ = select(
+            [self.schwab(institution_name=None), self.fidelity(institution_name=None)],
+            connections=connections,
+        )
+
+        self.assertIn(SCHWAB_CONNECTION, rows[0]["Brokerage"])
+        self.assertEqual(len(self.keys(rows)), 2, "connection ids cannot repeat")
+
+    def test_a_flattened_brokerage_object_does_not_crash_the_run(self) -> None:
+        # dict("Schwab") raises ValueError, not KeyError, so an unguarded dict()
+        # here would turn an odd payload into a dead run rather than a fallback.
+        connections = {
+            SCHWAB_CONNECTION: {
+                "id": SCHWAB_CONNECTION,
+                "disabled": False,
+                "brokerage": "Schwab",
+            }
+        }
+
+        rows, _ = select([self.schwab(institution_name=None)], connections=connections)
+
+        self.assertIn(SCHWAB_CONNECTION, rows[0]["Brokerage"])
+
+    def test_the_source_column_follows_the_brokerage_per_row(self) -> None:
+        rows, _ = select([self.schwab(), self.fidelity()], connections=TWO_BROKERAGES)
+
+        for row in rows:
+            self.assertEqual(SnapTradeModule.identity(row).source, row["Brokerage"])
+
+    def test_an_unattributable_account_is_still_named_in_its_skip(self) -> None:
+        rows, skipped = select(
+            [self.schwab(institution_name=None, brokerage_authorization=None)],
+            connections=TWO_BROKERAGES,
+        )
+
+        self.assertEqual(rows, [])
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("Individual", skipped[0])
+
+    def test_a_disabled_schwab_connection_does_not_cost_fidelity_its_row(self) -> None:
+        connections = dict(TWO_BROKERAGES)
+        connections[SCHWAB_CONNECTION] = {
+            **TWO_BROKERAGES[SCHWAB_CONNECTION],
+            "disabled": True,
+            "disabled_date": "2026-07-01",
+        }
+
+        rows, skipped = select(
+            [self.schwab(), self.fidelity()], connections=connections
+        )
+
+        self.assertEqual([row["Brokerage"] for row in rows], ["Fidelity"])
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("Schwab", skipped[0])
+
+    def test_a_stale_account_at_a_degraded_brokerage_says_why(self) -> None:
+        connections = {
+            SCHWAB_CONNECTION: {
+                "id": SCHWAB_CONNECTION,
+                "disabled": False,
+                "brokerage": {"name": "Schwab", "slug": "SCHWAB", "is_degraded": True},
+            }
+        }
+
+        _, skipped = select(
+            [
+                self.schwab(
+                    sync_status={
+                        "holdings": {
+                            "last_successful_sync": "2026-07-01T11:00:00+00:00",
+                            "initial_sync_completed": True,
+                        }
+                    }
+                )
+            ],
+            connections=connections,
+        )
+
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("degraded", skipped[0])
+
+    def test_a_stale_account_at_a_healthy_brokerage_says_nothing_extra(self) -> None:
+        _, skipped = select(
+            [
+                self.schwab(
+                    sync_status={
+                        "holdings": {
+                            "last_successful_sync": "2026-07-01T11:00:00+00:00",
+                            "initial_sync_completed": True,
+                        }
+                    }
+                )
+            ],
+            connections=TWO_BROKERAGES,
+        )
+
+        self.assertEqual(len(skipped), 1)
+        self.assertNotIn("degraded", skipped[0])
+
+
+class BrokerageNameTests(unittest.TestCase):
+    """The fallback chain on its own, without an account payload around it."""
+
+    def test_the_institution_name_wins_over_the_connection(self) -> None:
+        # Never reordered: every account_key in every existing database was
+        # built from institution_name, and preferring the connection would
+        # rewrite keys for accounts that are healthy today.
+        name = brokerage_name(
+            account={"institution_name": "Schwab"},
+            connection={"brokerage": {"name": "Charles Schwab & Co."}},
+            conn_id=SCHWAB_CONNECTION,
+        )
+
+        self.assertEqual(name, "Schwab")
+
+    def test_a_missing_connection_still_yields_the_connection_id(self) -> None:
+        name = brokerage_name(account={}, connection=None, conn_id=SCHWAB_CONNECTION)
+
+        self.assertIn(SCHWAB_CONNECTION, name)
+
+    def test_nothing_at_all_is_the_only_route_to_unknown(self) -> None:
+        self.assertEqual(
+            brokerage_name(account={}, connection=None, conn_id=""), "unknown"
+        )
+
+
 class SilentConnectionTests(unittest.TestCase):
     """A connection that returns nothing produces no other message at all."""
 
@@ -449,6 +701,23 @@ class SilentConnectionTests(unittest.TestCase):
 
         self.assertIn("conn-x", warnings[0])
 
+    def test_a_silent_schwab_is_named_while_fidelity_syncs(self) -> None:
+        # The whole point of two brokerages behind one key: one going quiet must
+        # not be hidden by the other one working.
+        accounts = [
+            account(
+                id="acct-fidelity",
+                institution_name="Fidelity",
+                brokerage_authorization=FIDELITY_CONNECTION,
+            )
+        ]
+
+        warnings = silent_connections(accounts, TWO_BROKERAGES)
+
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Schwab", warnings[0])
+        self.assertNotIn("Fidelity", warnings[0])
+
 
 class _StubLog:
     def __init__(self) -> None:
@@ -492,9 +761,13 @@ class _StubContext:
 class _StubBroker:
     broker = "SnapTrade"
 
-    def __init__(self, accounts: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        accounts: list[dict[str, Any]],
+        connections: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         self._accounts = accounts
-        self.connections = CONNECTIONS
+        self.connections = CONNECTIONS if connections is None else connections
 
     def fetch_accounts(self) -> list[dict[str, Any]]:
         return self._accounts
@@ -528,6 +801,61 @@ class OnLoginTests(unittest.TestCase):
             self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertEqual(self.db.saved[0]["account_name"], "Schwab - Garrett IRA")
+
+    def test_both_brokerages_reach_the_database_with_distinct_labels(self) -> None:
+        accounts = [
+            account(
+                id="acct-schwab",
+                name="Individual",
+                institution_name="Schwab",
+                brokerage_authorization=SCHWAB_CONNECTION,
+            ),
+            account(
+                id="acct-fidelity",
+                name="Individual",
+                institution_name="Fidelity",
+                brokerage_authorization=FIDELITY_CONNECTION,
+            ),
+        ]
+        context = _StubContext(self.db)
+
+        with patch("modules.snaptrade_module.Saver"):
+            self.module.on_login(context, _StubBroker(accounts, TWO_BROKERAGES))  # type: ignore[arg-type]
+
+        self.assertEqual(
+            {row["account_name"] for row in self.db.saved},
+            {"Schwab - Individual", "Fidelity - Individual"},
+        )
+
+    def test_a_second_brokerage_with_no_institution_name_is_not_merged_away(
+        self,
+    ) -> None:
+        # Where the collision actually bit: identical labels mean one accounts
+        # row, and because both accounts share this run's scraped_at, the second
+        # balance overwrites the first and its holdings are deleted.
+        accounts = [
+            account(
+                id="acct-schwab",
+                name="Individual",
+                institution_name=None,
+                brokerage_authorization=SCHWAB_CONNECTION,
+            ),
+            account(
+                id="acct-fidelity",
+                name="Individual",
+                institution_name=None,
+                brokerage_authorization=FIDELITY_CONNECTION,
+            ),
+        ]
+        context = _StubContext(self.db)
+
+        with patch("modules.snaptrade_module.Saver"):
+            self.module.on_login(context, _StubBroker(accounts, TWO_BROKERAGES))  # type: ignore[arg-type]
+
+        labels = [row["account_name"] for row in self.db.saved]
+
+        self.assertEqual(len(labels), 2)
+        self.assertEqual(len(set(labels)), 2, "two accounts must not share a key")
 
     def test_the_timestamp_matches_the_other_brokers(self) -> None:
         context = _StubContext(self.db)

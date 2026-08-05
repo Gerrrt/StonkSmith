@@ -42,7 +42,22 @@ testpaths = [ "tests" ]
 
 [tool.ruff]
 src = [ "src", "tests" ]
-target-version = "py314"
+# py313, not py314, even though requires-python is >=3.14. Under py314 the
+# formatter rewrites `except (A, B):` into `except A, B:` -- Python 2 syntax that
+# CPython refuses to parse. It is not a style preference we can decline: ruff's
+# py314 parser accepts the broken form, so `ruff check`, `ruff format --check`
+# and `ty` all pass on a file that no longer imports, and the whole gate goes
+# green over a package that cannot start. That is how four of these reached main
+# (config.py and normalize.py, fixed in this commit).
+#
+# Reproduce with: ruff format --isolated --target-version py314 on any
+# parenthesized multi-type except. Reproduced on 0.15.11, 0.15.12 and 0.16.0, so
+# upgrading is not the fix today. py310 through py313 are all unaffected.
+#
+# target-version only gates which syntax modernizations ruff considers safe, so
+# holding it one version back costs nothing this codebase uses. Raise it once
+# ruff formats py314 without emitting syntax errors.
+target-version = "py313"
 
 [tool.ruff.lint]
 # Correctness-focused. Docstring (D) and annotation (ANN) rules are deliberately
