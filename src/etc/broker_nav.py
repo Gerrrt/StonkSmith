@@ -91,6 +91,21 @@ CURRENCY_COLUMN: dict[str, int] = {
     "deltas": 6,
 }
 
+#: Which categories accept an id to narrow by, and what that id means. A
+#: category absent from here takes no argument at all -- `accounts` is one row
+#: per account already, and `deltas` spans every account by definition.
+#:
+#: Stated as data rather than as a chain of ifs because the two ways of getting
+#: it wrong are both silent-ish: passing the filter to a reader that does not
+#: take one is a TypeError out of a cmd loop that catches nothing, and dropping
+#: the filter on the floor renders the full table in a way that looks exactly
+#: like a filter that matched everything.
+HISTORY_FILTERS: dict[str, str] = {
+    "snapshots": "account_id",
+    "holdings": "snapshot_id",
+    "transactions": "account_id",
+}
+
 
 class DatabaseLike(typing.Protocol):
     """The database surface the navigator relies on."""
@@ -300,6 +315,19 @@ class BrokerNavigator(cmd.Cmd):
         if not argument:
             return list(reader())
 
+        parameter: str | None = HISTORY_FILTERS.get(category)
+
+        if parameter is None:
+            # Refused rather than dropped. Ignoring it would render the whole
+            # table, which looks exactly like a filter that matched everything.
+            stonksmith_logger.fail(
+                msg=(
+                    f"'show {category}' takes no id. Narrow with "
+                    f"{' or '.join(f'show {name} <id>' for name in HISTORY_FILTERS)}."
+                )
+            )
+            return None
+
         try:
             target: int = int(argument)
 
@@ -307,14 +335,7 @@ class BrokerNavigator(cmd.Cmd):
             stonksmith_logger.fail(msg=f"Not an id: {argument}")
             return None
 
-        if category == "holdings":
-            return list(reader(snapshot_id=target))
-
-        if category == "deltas":
-            # No per-account form; the whole table is small and already ordered.
-            return list(reader())
-
-        return list(reader(account_id=target))
+        return list(reader(**{parameter: target}))
 
     @staticmethod
     def render(category: str, rows: Sequence[Sequence[object]]) -> list[list[str]]:

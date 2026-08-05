@@ -19,7 +19,12 @@ from pathlib import Path
 from typing import Any
 
 from etc.broker_db import BrokerDatabase
-from etc.broker_nav import CATEGORY_HEADERS, HISTORY_READERS, BrokerNavigator
+from etc.broker_nav import (
+    CATEGORY_HEADERS,
+    HISTORY_FILTERS,
+    HISTORY_READERS,
+    BrokerNavigator,
+)
 from etc.infrastructure import create_db_engine
 from etc.records import AccountIdentity, Holding, Transaction
 from keyring_isolation import MemoryKeyringMixin
@@ -64,6 +69,50 @@ class HeaderContractTests(unittest.TestCase):
 
     def test_every_reader_has_headers(self) -> None:
         self.assertEqual(set(HISTORY_READERS), set(CATEGORY_HEADERS) - {"creds"})
+
+    def test_every_declared_filter_is_one_its_reader_actually_accepts(self) -> None:
+        # The bug this pins: `show accounts <id>` passed account_id= to
+        # get_accounts(), which takes none. cmd.Cmd catches nothing, so the
+        # TypeError killed the shell. Checking the signatures means adding a
+        # reader with the wrong filter name fails here rather than in a REPL.
+        import inspect
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = BrokerDatabase(
+                create_db_engine(db_path=Path(tmp) / "b.db"), "schwab529plan"
+            )
+
+            for category, parameter in HISTORY_FILTERS.items():
+                with self.subTest(category=category):
+                    self.assertIn(category, HISTORY_READERS)
+                    signature = inspect.signature(
+                        getattr(db, HISTORY_READERS[category])
+                    )
+                    self.assertIn(
+                        parameter,
+                        signature.parameters,
+                        f"{HISTORY_READERS[category]}() has no {parameter} parameter",
+                    )
+
+            db.shutdown_db()
+
+    def test_a_category_without_a_filter_is_one_whose_reader_takes_none(self) -> None:
+        import inspect
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = BrokerDatabase(
+                create_db_engine(db_path=Path(tmp) / "b.db"), "schwab529plan"
+            )
+
+            for category in set(HISTORY_READERS) - set(HISTORY_FILTERS):
+                with self.subTest(category=category):
+                    signature = inspect.signature(
+                        getattr(db, HISTORY_READERS[category])
+                    )
+                    self.assertNotIn("account_id", signature.parameters)
+                    self.assertNotIn("snapshot_id", signature.parameters)
+
+            db.shutdown_db()
 
     def test_headers_match_what_the_database_returns(self) -> None:
         # A header list one column short silently mislabels every column after
@@ -182,6 +231,38 @@ class HistoryRowsTests(MemoryKeyringMixin, unittest.TestCase):
         self.assertIsNone(
             self.nav.history_rows(category="snapshots", argument="Ezekiel")
         )
+
+    def test_show_accounts_with_an_id_is_refused_rather_than_crashing(self) -> None:
+        # get_accounts() takes no filter. Passing one raised a TypeError out of
+        # a cmd loop that catches nothing, which killed the whole shell.
+        self.assertIsNone(self.nav.history_rows(category="accounts", argument="1"))
+
+    def test_show_deltas_with_an_id_is_refused_rather_than_ignored(self) -> None:
+        # The quieter half of the same bug: this used to drop the argument and
+        # render every account, which reads as a filter that matched everything.
+        self.assertIsNone(self.nav.history_rows(category="deltas", argument="1"))
+
+    def test_no_category_raises_when_given_an_id(self) -> None:
+        for category in HISTORY_READERS:
+            with self.subTest(category=category):
+                try:
+                    self.nav.history_rows(category=category, argument="1")
+
+                except Exception as e:
+                    self.fail(f"show {category} 1 raised {type(e).__name__}: {e}")
+
+    def test_the_categories_that_do_filter_still_filter(self) -> None:
+        snapshot_id = self.db.get_snapshots()[0][0]
+
+        narrowed = self.nav.history_rows(
+            category="holdings", argument=str(object=snapshot_id)
+        )
+        assert narrowed is not None
+        self.assertEqual(len(narrowed), 1)
+
+        missing = self.nav.history_rows(category="holdings", argument="9999")
+        assert missing is not None
+        self.assertEqual(len(missing), 0, "an unknown id must narrow to nothing")
 
     def test_a_legacy_database_explains_itself(self) -> None:
         nav = BrokerNavigator(object(), _LegacyDb(), "fidelity")
