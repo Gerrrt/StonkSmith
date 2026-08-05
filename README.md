@@ -27,13 +27,15 @@ all the accounts you own.
 
 ## :wrench: Features
 
-- [x] Multi-broker support (Schwab 529, Fidelity, and anything via SnapTrade)
+- [x] Multi-broker support (Fidelity, Schwab and anything else via SnapTrade,
+      plus a Schwab 529 scraper for what SnapTrade does not cover)
 - [x] Automatic data scraping (requests + Playwright)
 - [x] Google Sheets sync
 - [x] CLI commands for automation
 - [x] Credentials stored in the OS keyring
 - [x] Account history: numeric balances, holdings and transactions over time
-- [ ] More brokers (Vanguard, TSP, Ally, ...)
+- [ ] More brokers: TSP and Ally both need a scraper — neither is one of the
+      brokerages SnapTrade covers. Vanguard needs no code at all; link it.
 - [ ] Net worth tracking over time
 - [ ] Asset allocation breakdown
 - [ ] Scheduling (cron / background jobs)
@@ -231,6 +233,37 @@ Open the URL it prints — it signs in as you and expires in about five minutes 
 and connect Schwab, Fidelity or anything else SnapTrade supports. Check what is
 linked at any time with `scripts/snaptrade_register.py status`, which prints
 connection health and account names but never balances.
+
+#### Adding a second brokerage
+
+Linking Schwab alongside Fidelity adds **no** broker, **no** module, **no**
+database and **no** worksheet tab. One `snaptrade` broker, one `snaptrade.db`,
+one `SnapTrade` sheet; the `Brokerage` column tells them apart. Anything
+SnapTrade covers is an operator action rather than a code change.
+
+```bash
+uv run python scripts/snaptrade_register.py link --broker SCHWAB
+```
+
+`--broker` preselects the brokerage on the portal screen. It is a convenience,
+not a filter — you can connect anything from the same URL.
+
+Connections are created read-only. StonkSmith reads balances, positions and
+activities and never places an order, so a trade connection would grant a
+permission it never uses; Schwab is one of the brokerages that offers both.
+`--connection-type trade-if-available` is there for a brokerage that offers
+nothing narrower. The grant is fixed when the connection is created, so
+downgrading one that already has trade means deleting it and linking again.
+
+**Adding a brokerage needs no flag beyond `--broker`. Repairing one you already
+have needs `--reconnect <connection-id>`**, from `status`. SnapTrade de-dupes:
+a plain `link` for a brokerage already connected hands back the existing
+connection unchanged, which looks exactly like success.
+
+Right after linking, the first sync may correctly skip the new accounts —
+SnapTrade's initial holdings sync is not instant, and an account with no
+finished sync has no balance worth recording. `status` shows a timestamp
+instead of `never` once it lands. That is the guard working, not a bug.
 
 Then sync, after creating a `SnapTrade` tab in the dashboard spreadsheet:
 
