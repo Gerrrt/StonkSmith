@@ -17,7 +17,7 @@ import logging
 import unittest
 from argparse import Namespace
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import keyring
 import keyring.backend
@@ -92,6 +92,7 @@ class _FakeClient:
         self.positions: list[dict[str, Any]] = []
         self.positions_error: Exception | None = None
         self.wrap_positions = False
+        self.positions_key = "results"
         self.activities: list[dict[str, Any]] = []
         self.activity_calls: list[dict[str, Any]] = []
         self.page_size = 2
@@ -122,8 +123,10 @@ class _FakeClient:
                 raise self.outer.positions_error
             if self.outer.wrap_positions:
                 # What the endpoint actually returns: an envelope, not a list.
+                # The key defaults to what the SDK uses, which is what a real
+                # sync receives.
                 return {
-                    "positions": self.outer.positions,
+                    self.outer.positions_key: self.outer.positions,
                     "data_freshness": {"as_of": "2026-08-06T02:28:23Z"},
                 }
             return self.outer.positions
@@ -400,26 +403,93 @@ class FetchPositionsTests(unittest.TestCase):
         # balance and zero positions. That is a fact about the account.
         self.assertEqual(self.broker.fetch_positions(account_id="acct-1"), [])
 
+    POSITION: ClassVar[dict[str, Any]] = {
+        "instrument": {"symbol": "FSKAX"},
+        "units": "8.93",
+        "price": "213.32",
+    }
+
     def test_the_positions_envelope_is_unwrapped(self) -> None:
-        # The regression. Reading the envelope with as_rows iterates its keys,
-        # so the first row it tries to build is dict("positions") -- which
-        # raises "dictionary update sequence element #0 has length 1; 2 is
-        # required" for every account on every brokerage, since the shape has
-        # nothing to do with the data.
+        # Reading the envelope with as_rows iterates its keys, so the first row
+        # it tries to build is dict("results") -- which raises "dictionary
+        # update sequence element #0 has length 1; 2 is required" for every
+        # account on every brokerage, since the shape has nothing to do with
+        # the data.
         self.client.wrap_positions = True
-        self.client.positions = [
-            {"instrument": {"symbol": "FSKAX"}, "units": "8.93", "price": "213.32"}
-        ]
+        self.client.positions = [self.POSITION]
+
+        self.assertEqual(
+            self.broker.fetch_positions(account_id="acct-1"), [self.POSITION]
+        )
+
+    def test_the_sdks_key_is_read(self) -> None:
+        # The regression that shipped: keying only on the documented name
+        # returned nothing at all from the SDK's envelope. No error, no rows,
+        # no holdings, and a run that reported success -- for 152 snapshots.
+        self.client.wrap_positions = True
+        self.client.positions_key = "results"
+        self.client.positions = [self.POSITION]
 
         self.assertEqual(
             self.broker.fetch_positions(account_id="acct-1"),
-            [{"instrument": {"symbol": "FSKAX"}, "units": "8.93", "price": "213.32"}],
+            [self.POSITION],
+            "snaptrade-python-sdk requires 'results' on this response",
+        )
+
+    def test_the_documented_key_is_read_too(self) -> None:
+        # What SnapTrade's own docs and MCP server call the same list.
+        self.client.wrap_positions = True
+        self.client.positions_key = "positions"
+        self.client.positions = [self.POSITION]
+
+        self.assertEqual(
+            self.broker.fetch_positions(account_id="acct-1"), [self.POSITION]
         )
 
     def test_an_empty_envelope_reads_as_no_positions(self) -> None:
         self.client.wrap_positions = True
 
         self.assertEqual(self.broker.fetch_positions(account_id="acct-1"), [])
+
+    def test_an_unrecognised_envelope_yields_nothing_rather_than_raising(self) -> None:
+        # A third name would be a silent empty again, but it must not take the
+        # run down with it -- the balance is already selected and about to write.
+        self.client.wrap_positions = True
+        self.client.positions_key = "somethingelse"
+        self.client.positions = [self.POSITION]
+
+        self.assertEqual(self.broker.fetch_positions(account_id="acct-1"), [])
+
+
+class PositionKeyMatchesTheSdkTests(unittest.TestCase):
+    """
+    POSITION_KEYS has to keep agreeing with the installed SDK.
+
+    Every other test here builds the envelope from a literal, so all of them
+    would keep passing if the SDK renamed this key -- and the failure is silent:
+    no exception, no rows, no holdings, a run that reports success. That is
+    exactly how it shipped, so the guard is worth the SDK import it costs.
+    """
+
+    def test_the_sdk_required_key_is_one_we_read(self) -> None:
+        try:
+            from snaptrade_client.model.all_account_positions_response import (
+                AllAccountPositionsResponse,
+            )
+
+        except ImportError:  # pragma: no cover - the SDK is a hard dependency
+            self.skipTest("snaptrade-python-sdk is not installed")
+
+        module = _load_broker_module()
+        required = set(AllAccountPositionsResponse.MetaOapg.required)
+        # data_freshness is the envelope's other half, not the records.
+        records = required - {"data_freshness"}
+
+        self.assertTrue(
+            records & set(module.POSITION_KEYS),
+            f"the SDK requires {sorted(records)}; POSITION_KEYS reads "
+            f"{list(module.POSITION_KEYS)} and would return no positions",
+        )
 
 
 class FetchActivitiesTests(unittest.TestCase):
