@@ -297,10 +297,11 @@ exclude_accounts =
     Schwab / Ezekiel 529 Plan
 ```
 
-One `Brokerage / Account` label per line, indented, exactly as the sync prints
-them — case and extra spaces do not matter, but the brokerage half does, so
-excluding one brokerage's account never silently drops another's of the same
-name. Exclusions are per account rather than per brokerage: only one of five
+One `Brokerage / Account` label per line, indented, as the sync prints them.
+Case, extra spaces and the spacing around the `/` do not matter, so
+`Schwab/Ezekiel 529 Plan` works too. The rest of the punctuation does, and so
+does the brokerage half — excluding one brokerage's account never silently
+drops another's of the same name. Exclusions are per account rather than per brokerage: only one of five
 Schwab accounts overlaps here, and dropping the other four to fix it would be
 worse than the double count.
 

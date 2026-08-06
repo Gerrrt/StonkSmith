@@ -29,6 +29,7 @@ worse than any of the above.
 """
 
 import datetime
+import re
 from typing import Any, ClassVar
 
 from brokers.snaptrade.saver import Saver
@@ -49,6 +50,11 @@ LIABILITY_CATEGORIES = frozenset({"LOC"})
 #: Account statuses that still represent money you have. ``None`` is accepted
 #: too -- several brokerages never populate it.
 LIVE_STATUSES = frozenset({"open"})
+
+#: The "Brokerage / Account" separator, with whatever spacing it was written
+#: with. Normalized so a hand-typed "Schwab/Ezekiel 529 Plan" still matches the
+#: "Schwab / Ezekiel 529 Plan" the sync prints.
+_SEPARATOR = re.compile(pattern=r"\s*/\s*")
 
 
 def holdings_status(account: dict[str, Any]) -> dict[str, Any]:
@@ -120,15 +126,22 @@ def normalize_label(label: str) -> str:
     doubled space -- and "silently does nothing" here restores the double count
     the config line was written to stop.
 
-    Case and runs of whitespace are what get normalized, and nothing else.
-    Punctuation stays: "Individual - TOD" and "Individual TOD" are not
-    obviously the same account, and guessing wrong would drop a real one.
+    The separator gets its own rule because it is the one piece of punctuation
+    this format demands and therefore the one a person retypes: "Schwab /
+    Ezekiel 529 Plan" and "Schwab/Ezekiel 529 Plan" are plainly the same
+    account, and collapsing whitespace alone leaves them different strings.
+    Every slash is treated the same way, on both sides, so a name that contains
+    one is not a special case.
+
+    Nothing else is touched. "Individual - TOD" and "Individual TOD" are not
+    obviously the same account, and guessing wrong drops a real one -- the
+    opposite failure, and the worse of the two.
     :param label: A "Brokerage / Account" label, from either side
-    :return: The label, case-folded with whitespace collapsed
+    :return: The label, case-folded, whitespace collapsed, separators evened out
     :rtype: str
     """
 
-    return " ".join(label.split()).casefold()
+    return _SEPARATOR.sub(repl=" / ", string=" ".join(label.split())).casefold()
 
 
 def brokerage_name(

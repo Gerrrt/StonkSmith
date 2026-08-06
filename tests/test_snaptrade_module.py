@@ -641,6 +641,35 @@ class ExcludedAccountTests(unittest.TestCase):
 
         self.assertEqual(rows, [])
 
+    def test_the_separator_may_be_written_without_spaces(self) -> None:
+        # The one piece of punctuation this format demands is the one a person
+        # retypes, so "Schwab/Ezekiel 529 Plan" has to match the spaced form
+        # the sync prints. Collapsing whitespace alone leaves them different.
+        rows, _ = select(
+            [self.account_at("Schwab", "Ezekiel 529 Plan")],
+            excluded=frozenset({normalize_label("Schwab/Ezekiel 529 Plan")}),
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_the_separator_may_be_written_with_extra_spaces(self) -> None:
+        rows, _ = select(
+            [self.account_at("Schwab", "Ezekiel 529 Plan")],
+            excluded=frozenset({normalize_label("Schwab   /   Ezekiel 529 Plan")}),
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_a_name_containing_a_slash_is_not_a_special_case(self) -> None:
+        # Both sides get the same treatment, so an account whose own name has a
+        # slash still matches itself.
+        rows, _ = select(
+            [self.account_at("Fidelity", "Individual/TOD")],
+            excluded=frozenset({normalize_label("Fidelity / Individual / TOD")}),
+        )
+
+        self.assertEqual(rows, [])
+
     def test_a_same_named_account_elsewhere_is_not_caught(self) -> None:
         # The label carries the brokerage precisely so excluding one
         # brokerage's account cannot silently drop another's.
