@@ -9,6 +9,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import ClassVar
 
+from etc.logger import stonksmith_logger
 from etc.paths import package_root
 
 
@@ -31,10 +32,12 @@ class BrokerLoader:
         self._cache = {}
 
     @staticmethod
-    def load_broker(broker_path: str) -> ModuleType | None:
+    def load_broker(broker_path: str, label: str | None = None) -> ModuleType | None:
         """
         Load a broker
         :param broker_path:
+        :param label: How to name this file if it fails to load. Callers that know
+            which broker they are loading pass something friendlier than a path.
         :return:
         """
 
@@ -44,7 +47,24 @@ class BrokerLoader:
 
         if spec and spec.loader:
             broker: ModuleType | None = importlib.util.module_from_spec(spec=spec)
-            spec.loader.exec_module(module=broker)
+
+            # exec_module() runs the broker's own code, and a broker under
+            # ~/.stonksmith/brokers is work in progress as often as not. Whatever
+            # it raises belongs to that one file: callers already treat None as
+            # "unavailable", so a half-finished broker is skipped rather than
+            # taking down the caller -- which, for gen_cli_args(), was every
+            # invocation of the tool including --version and --help.
+            try:
+                spec.loader.exec_module(module=broker)
+            except Exception as e:
+                stonksmith_logger.fail(
+                    msg=(
+                        f"{label or broker_path} failed to load and is "
+                        f"unavailable this run: {type(e).__name__}: {e}"
+                    ),
+                )
+                return None
+
             return broker
 
         return None

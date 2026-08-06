@@ -159,16 +159,29 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
 
     for broker_name, info in brokers.items():
         if "argspath" in info:
+            # Deliberately broad. This loop runs before any command is dispatched,
+            # so anything a broker raises here reaches every invocation of the
+            # tool -- a narrower catch let one half-finished broker under
+            # ~/.stonksmith/brokers take down --version and --help too. A broker
+            # that cannot register its arguments registers no subparser: it is
+            # simply unavailable, and the rest still work.
             try:
                 broker_module: ModuleType | None = broker_loader.load_broker(
-                    broker_path=info["argspath"]
+                    broker_path=info["argspath"],
+                    label=f"Broker '{broker_name}'",
                 )
-                if broker_module is not None:
-                    broker_module.broker_args(subparsers, std_parser, module_parser)
+                if broker_module is None:
+                    # load_broker() has already said which broker and why.
+                    continue
 
-            except (ImportError, AttributeError, TypeError) as e:
-                stonksmith_logger.error(
-                    msg=f"DEBUG: Could not load args for {broker_name}: {e}"
+                broker_module.broker_args(subparsers, std_parser, module_parser)
+
+            except Exception as e:
+                stonksmith_logger.fail(
+                    msg=(
+                        f"Broker '{broker_name}' could not register its arguments "
+                        f"and is unavailable this run: {type(e).__name__}: {e}"
+                    ),
                 )
 
     # Outside the loop: a bare invocation must print help even when no broker
