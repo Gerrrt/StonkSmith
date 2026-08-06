@@ -277,6 +277,39 @@ error), holdings that have not synced in `--max-age-days` (default 3), closed,
 archived or paper accounts, and liabilities such as credit cards. Override with
 `--allow-stale` and `--include-liabilities`.
 
+#### When two brokers can reach the same account
+
+SnapTrade covers whole brokerages, so it will happily report an account a
+dedicated broker already scrapes — a Schwab-held 529 that `schwab529plan`
+covers, or the Fidelity accounts behind the `fidelity` scraper. Both sources
+write, into two databases and two tabs. Nothing here adds the tabs together, so
+no stored data is wrong; a dashboard total that sums them counts that money
+twice and says nothing.
+
+Pick one owner per account. Where SnapTrade is the better source — Fidelity,
+which it takes from attended to unattended — simply stop running the other
+broker. Where the scraper is better, because it captures more than a balance,
+name the account in the `[SNAPTRADE]` section of `~/.stonksmith/stonksmith.conf`:
+
+```ini
+[SNAPTRADE]
+exclude_accounts =
+    Schwab / Ezekiel 529 Plan
+```
+
+One `Brokerage / Account` label per line, indented, as the sync prints them.
+Case, extra spaces and the spacing around the `/` do not matter, so
+`Schwab/Ezekiel 529 Plan` works too. The rest of the punctuation does, and so
+does the brokerage half — excluding one brokerage's account never silently
+drops another's of the same name. Exclusions are per account rather than per brokerage: only one of five
+Schwab accounts overlaps here, and dropping the other four to fix it would be
+worse than the double count.
+
+`--exclude 'Brokerage / Account'` does the same for one run and adds to the
+config rather than replacing it. The config is the right home for a standing
+overlap — a run from cron has nobody to remember the flag. Every excluded
+account is reported, like every other skip.
+
 For each account that survives, StonkSmith also reads its positions and its
 recent transactions. Both calls are per account, so both are bounded and both
 fail soft: `--history-days` (default 90) sets the transaction window,

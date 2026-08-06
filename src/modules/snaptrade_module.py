@@ -29,6 +29,7 @@ worse than any of the above.
 """
 
 import datetime
+import re
 from typing import Any, ClassVar
 
 from brokers.snaptrade.saver import Saver
@@ -49,6 +50,11 @@ LIABILITY_CATEGORIES = frozenset({"LOC"})
 #: Account statuses that still represent money you have. ``None`` is accepted
 #: too -- several brokerages never populate it.
 LIVE_STATUSES = frozenset({"open"})
+
+#: The "Brokerage / Account" separator, with whatever spacing it was written
+#: with. Normalized so a hand-typed "Schwab/Ezekiel 529 Plan" still matches the
+#: "Schwab / Ezekiel 529 Plan" the sync prints.
+_SEPARATOR = re.compile(pattern=r"\s*/\s*")
 
 
 def holdings_status(account: dict[str, Any]) -> dict[str, Any]:
@@ -108,6 +114,34 @@ def currency_code(currency: Any, default: str = "USD") -> str:
             return str(object=code).upper()
 
     return default
+
+
+def normalize_label(label: str) -> str:
+    """
+    Reduce an account label to something two sources can agree on.
+
+    One side of the comparison is typed into a config file by hand, the other is
+    built from whatever SnapTrade returned. Requiring those to match byte for
+    byte means an exclusion silently does nothing over a capital letter or a
+    doubled space -- and "silently does nothing" here restores the double count
+    the config line was written to stop.
+
+    The separator gets its own rule because it is the one piece of punctuation
+    this format demands and therefore the one a person retypes: "Schwab /
+    Ezekiel 529 Plan" and "Schwab/Ezekiel 529 Plan" are plainly the same
+    account, and collapsing whitespace alone leaves them different strings.
+    Every slash is treated the same way, on both sides, so a name that contains
+    one is not a special case.
+
+    Nothing else is touched. "Individual - TOD" and "Individual TOD" are not
+    obviously the same account, and guessing wrong drops a real one -- the
+    opposite failure, and the worse of the two.
+    :param label: A "Brokerage / Account" label, from either side
+    :return: The label, case-folded, whitespace collapsed, separators evened out
+    :rtype: str
+    """
+
+    return _SEPARATOR.sub(repl=" / ", string=" ".join(label.split())).casefold()
 
 
 def brokerage_name(
@@ -404,6 +438,7 @@ def select_accounts(
     max_age_days: int,
     include_liabilities: bool,
     allow_stale: bool,
+    excluded: frozenset[str] = frozenset(),
 ) -> tuple[list[dict[str, str]], list[str]]:
     """
     Split accounts into rows worth writing and reasons for the rest.
@@ -415,6 +450,7 @@ def select_accounts(
     :param max_age_days: How old a successful holdings sync may be
     :param include_liabilities: Whether to sync credit and other debts
     :param allow_stale: Whether to sync accounts that failed the freshness check
+    :param excluded: Normalized labels another broker already covers
     :return: Rows to write, and one reason per excluded account
     :rtype: tuple[list[dict[str, str]], list[str]]
     """
@@ -436,6 +472,18 @@ def select_accounts(
             account=account, connection=connection, conn_id=conn_id
         )
         label = f"{brokerage} / {name}"
+
+        if normalize_label(label) in excluded:
+            # First, deliberately. Every other skip describes something wrong
+            # with the account; this one says the account is fine and belongs
+            # to somebody else, so reporting it as stale or unclassified first
+            # would send the operator looking for a problem that is not there.
+            skipped.append(
+                f"Skipped {label}: excluded, because another broker covers it. "
+                "Remove it from exclude_accounts in the [SNAPTRADE] config "
+                "section to sync it here instead."
+            )
+            continue
 
         if account.get("is_paper"):
             skipped.append(f"Skipped {label}: it is a paper trading account.")
@@ -581,6 +629,29 @@ class SnapTradeModule:
             kind=row["Category"],
             currency=row["Currency"],
         )
+
+    @staticmethod
+    def excluded(context: Context) -> frozenset[str]:
+        """
+        Accounts another broker owns, from the config and the command line.
+
+        The union rather than either alone: the config carries the standing
+        overlap, which is the one a cron run has to know about without being
+        told, and --exclude covers the one-off.
+
+        Read here rather than at import time, so a config edit takes effect on
+        the next run and the module stays importable without one.
+        :param context: The module context
+        :return: Normalized labels to skip
+        :rtype: frozenset[str]
+        """
+
+        from etc.config import get_snaptrade_excluded_accounts
+
+        labels: list[str] = list(get_snaptrade_excluded_accounts())
+        labels.extend(getattr(context.args, "exclude", None) or [])
+
+        return frozenset(normalize_label(label) for label in labels if label.strip())
 
     def positions(
         self, connection: Connection, row: dict[str, str], context: Context
@@ -755,6 +826,7 @@ class SnapTradeModule:
             max_age_days=getattr(context.args, "max_age_days", 3),
             include_liabilities=getattr(context.args, "include_liabilities", False),
             allow_stale=getattr(context.args, "allow_stale", False),
+            excluded=self.excluded(context=context),
         )
 
         for reason in skipped:

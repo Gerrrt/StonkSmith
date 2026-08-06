@@ -177,6 +177,34 @@ def get_snaptrade_client_id() -> str:
     return get_config().get(section="SNAPTRADE", option="clientId", fallback="").strip()
 
 
+def get_snaptrade_excluded_accounts() -> list[str]:
+    """
+    Accounts the SnapTrade sync must leave to another broker.
+
+    An account reachable both through SnapTrade and through a dedicated broker
+    -- a Schwab-held 529 that schwab529plan already scrapes -- is otherwise
+    written twice, into two databases and two worksheet tabs. Nothing in
+    StonkSmith adds those tabs together, so it corrupts nothing on its own; a
+    dashboard that sums them counts the money twice and says nothing.
+
+    Config rather than a flag alone: which broker owns which account is a
+    standing fact about the setup, and a run from cron has nobody to remember
+    it. ``--exclude`` adds to this rather than replacing it.
+
+    One label per line, in the "Brokerage / Account" form the sync already
+    prints in its skip messages, so what to paste here is whatever the run
+    called the account.
+    :return: Labels to skip, with blank lines and surrounding space removed
+    :rtype: list[str]
+    """
+
+    raw: str = get_config().get(
+        section="SNAPTRADE", option="exclude_accounts", fallback=""
+    )
+
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
 def process_secret(text: str | None) -> str:
     """
     Mask a secret for display.
