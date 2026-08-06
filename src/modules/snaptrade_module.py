@@ -192,30 +192,56 @@ def position_holding(position: dict[str, Any]) -> Holding:
     Turn one SnapTrade position into a holding row.
 
     Pure: plain dictionary in, record out, so the mapping is testable without an
-    SDK. The ticker and description are nested one level down under ``symbol``,
-    which is itself a ``symbol``/``description`` pair.
+    SDK.
 
-    Cost basis is derived rather than reported: SnapTrade gives an average
-    purchase price per unit, and what the position cost is that times the units.
-    Missing either leaves it None rather than guessing a zero.
+    Two shapes, both read. SnapTrade now describes what is held under
+    ``instrument`` -- ``{"kind", "symbol", "description", "currency"}`` -- and
+    reports the average purchase price as ``cost_basis``. It used to nest a
+    ``symbol`` inside a ``symbol`` and call that price ``average_purchase_price``.
+    Reading only the current one would turn every holding into a row of Nones
+    against any payload still using the old names, which is worse than the error
+    that shape mismatch used to raise: an empty row is written and looks real.
+
+    ``cost_basis`` is per unit despite the name -- 8.93 units of FSKAX report
+    213.32 as ``price`` and 181.91 as ``cost_basis`` -- so what the position cost
+    is still that times the units. Missing either leaves it None rather than
+    guessing a zero.
     :param position: One position as returned by SnapTrade
     :return: The holding
     :rtype: Holding
     """
 
-    # Two levels of nesting, each of which some responses flatten to a bare
-    # string. dict("VTI") does not raise a KeyError, it raises a ValueError, so
-    # an unguarded dict() here turns an odd payload into a dead run.
+    # _mapping, not dict(): every one of these is flattened to a bare string by
+    # some payloads, and dict("VTI") raises ValueError rather than KeyError, so
+    # an unguarded dict() turns an odd position into a dead run.
+    instrument: dict[str, Any] = _mapping(position.get("instrument"))
     nested: dict[str, Any] = _mapping(position.get("symbol"))
     inner: dict[str, Any] = _mapping(nested.get("symbol"))
 
     units: float | None = to_amount(position.get("units"))
     price: float | None = to_amount(position.get("price"))
-    average: float | None = to_amount(position.get("average_purchase_price"))
+    # Current name first. The old one is not a fallback for a *missing* value so
+    # much as for a whole older payload, so order only matters if both appear.
+    average: float | None = to_amount(
+        position.get("cost_basis")
+        if position.get("cost_basis") is not None
+        else position.get("average_purchase_price")
+    )
 
     return Holding(
-        symbol=str(object=inner.get("symbol") or nested.get("symbol") or "") or None,
-        name=str(object=inner.get("description") or nested.get("description") or "")
+        symbol=str(
+            object=instrument.get("symbol")
+            or inner.get("symbol")
+            or nested.get("symbol")
+            or ""
+        )
+        or None,
+        name=str(
+            object=instrument.get("description")
+            or inner.get("description")
+            or nested.get("description")
+            or ""
+        )
         or None,
         units=units,
         price=price,
@@ -224,7 +250,10 @@ def position_holding(position: dict[str, Any]) -> Holding:
         if units is not None and average is not None
         else None,
         currency=currency_code(
-            position.get("currency") or inner.get("currency") or nested.get("currency")
+            position.get("currency")
+            or instrument.get("currency")
+            or inner.get("currency")
+            or nested.get("currency")
         ),
     )
 

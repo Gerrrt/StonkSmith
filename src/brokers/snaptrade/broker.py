@@ -60,11 +60,11 @@ def as_page_rows(response: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """
     Normalize a *paginated* SDK response.
 
-    Activities do not come back as a bare list like accounts and positions do:
-    the body is ``{"data": [...], "pagination": {...}}``. Handing that to
-    as_rows iterates the envelope's two keys instead of the records, which
-    yields two meaningless rows rather than an error -- so this is a separate
-    function rather than a flag on the other one.
+    Activities do not come back as a bare list like accounts do: the body is
+    ``{"data": [...], "pagination": {...}}``. Handing that to as_rows iterates
+    the envelope's keys instead of the records -- so this is a separate
+    function rather than a flag on the other one. Positions are wrapped too,
+    differently again; see as_keyed_rows.
     :param response: The SDK response
     :return: The records, and the pagination block
     :rtype: tuple[list[dict[str, Any]], dict[str, Any]]
@@ -80,6 +80,37 @@ def as_page_rows(response: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     pagination: Any = body.get("pagination") if hasattr(body, "get") else None
 
     return [dict(entry) for entry in (data or [])], dict(pagination or {})
+
+
+def as_keyed_rows(response: Any, key: str) -> list[dict[str, Any]]:
+    """
+    Normalize a response whose records sit under a single named key.
+
+    Positions come back as ``{"positions": [...], "data_freshness": {...}}``.
+    Passing that to as_rows iterates the *keys* of the envelope, so the first
+    thing it tries to build a row from is the string "positions" -- and
+    ``dict("positions")`` raises "dictionary update sequence element #0 has
+    length 1; 2 is required", which names nothing an operator could act on. It
+    also failed identically for every account on every brokerage, because the
+    shape has nothing to do with the data.
+
+    Tolerates a bare list for the same reason as_page_rows does: some SDK
+    versions unwrap the envelope, and an older StonkSmith read this endpoint as
+    a plain list, so both shapes have been seen in the wild.
+    :param response: The SDK response
+    :param key: The envelope key the records sit under
+    :return: One dictionary per record
+    :rtype: list[dict[str, Any]]
+    """
+
+    body: Any = getattr(response, "body", response)
+
+    if isinstance(body, list):
+        return [dict(entry) for entry in body]
+
+    rows: Any = body.get(key) if hasattr(body, "get") else None
+
+    return [dict(entry) for entry in (rows or [])]
 
 
 class SnapTradeBroker(ApiConnection):
@@ -256,15 +287,19 @@ class SnapTradeBroker(ApiConnection):
         reports an account pre-aggregated -- a Schwab-held 529, for instance --
         gives SnapTrade a balance and no positions at all. The caller records the
         balance either way.
+
+        Read through as_keyed_rows, not as_rows: the body is an envelope,
+        ``{"positions": [...], "data_freshness": {...}}``.
         :param account_id: The SnapTrade account id
         :return: One dictionary per position
         :rtype: list[dict[str, Any]]
         """
 
-        return as_rows(
+        return as_keyed_rows(
             self.client.account_information.get_all_account_positions(
                 account_id=account_id
-            )
+            ),
+            key="positions",
         )
 
     def fetch_activities(
