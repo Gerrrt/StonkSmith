@@ -11,6 +11,8 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import etc.browser_connection as browser_mod
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 
@@ -43,7 +45,7 @@ def setUpModule() -> None:
     global _profile_home
 
     _profile_home = tempfile.TemporaryDirectory()
-    fidelity_mod.playwright_path = Path(_profile_home.name)
+    browser_mod.playwright_path = Path(_profile_home.name)
 
 
 def tearDownModule() -> None:
@@ -130,7 +132,7 @@ class FidelityHeadedFlagTests(unittest.TestCase):
 
         playwright = MagicMock()
         with patch.object(
-            fidelity_mod,
+            browser_mod,
             "sync_playwright",
             return_value=MagicMock(start=lambda: playwright),
         ):

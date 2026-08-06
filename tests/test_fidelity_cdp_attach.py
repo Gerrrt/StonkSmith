@@ -15,6 +15,8 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import etc.browser_connection as browser_mod
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 
@@ -55,7 +57,7 @@ class AttachTests(unittest.TestCase):
 
     def _run(self, broker, playwright):
         with patch.object(
-            fidelity_mod,
+            browser_mod,
             "sync_playwright",
             return_value=MagicMock(start=lambda: playwright),
         ):
@@ -225,7 +227,7 @@ class MissingEndpointGuidanceTests(unittest.TestCase):
 
         with (
             patch.object(
-                fidelity_mod,
+                browser_mod,
                 "sync_playwright",
                 return_value=MagicMock(start=lambda: playwright),
             ),
@@ -258,7 +260,7 @@ class MissingEndpointGuidanceTests(unittest.TestCase):
         browser.contexts = []  # connected, but no window -> raises
 
         with patch.object(
-            fidelity_mod,
+            browser_mod,
             "sync_playwright",
             return_value=MagicMock(start=lambda: playwright),
         ):
@@ -285,7 +287,7 @@ class MissingEndpointGuidanceTests(unittest.TestCase):
 
         with (
             patch.object(
-                fidelity_mod,
+                browser_mod,
                 "sync_playwright",
                 return_value=MagicMock(start=lambda: playwright),
             ),
