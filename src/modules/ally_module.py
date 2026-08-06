@@ -141,7 +141,13 @@ class AllyModule:
         """
         context.log.highlight(msg=f"Starting Ally sync for: {connection.username}")
 
-        page: Any = getattr(connection, "active_page", None)
+        # The attribute, not the active_page property. getattr's default only
+        # covers AttributeError, and active_page raises RuntimeError when the
+        # browser was never started -- so asking for the property turns "no
+        # page" into a traceback instead of the message below. Reading `page`
+        # answers None for both cases: a connection that is not browser-backed
+        # at all, and one whose browser did not start.
+        page: Any = getattr(connection, "page", None)
         if page is None:
             context.log.fail(
                 msg="Ally module requires a browser-backed connection; "
@@ -313,13 +319,12 @@ class AllyModule:
             row for row in listed if row["Kind"] == INVESTMENT_KIND
         ]
         accounts: list[dict[str, Any]] = []
-        matched: bool = False
+        selected: int | None = self._which_is_selected(
+            investments=investments, name=name, number=number, context=context
+        )
 
-        for row in investments:
-            is_selected: bool = not matched and masked_matches(
-                masked=row["Number"], number=number
-            )
-            matched = matched or is_selected
+        for index, row in enumerate(iterable=investments):
+            is_selected: bool = index == selected
 
             if is_selected:
                 accounts.append(
@@ -353,10 +358,17 @@ class AllyModule:
                     )
                 )
 
-        if not matched and name:
-            # The sidebar did not list the account on screen. Mask its number
-            # the way the sidebar would, so this run and any run that does see
-            # the sidebar agree on one identity.
+        # Only when the heading names an account the sidebar genuinely does not
+        # list. Adding a row here because the heading merely lacked a *number*
+        # would file the account twice -- once from the sidebar as "Brokerage
+        # (...0111)" carrying only a balance, and once from the heading as
+        # "Brokerage" carrying the positions -- which is the split history this
+        # reconciliation exists to prevent.
+        unlisted: bool = selected is None and bool(number or not investments)
+
+        if unlisted and name:
+            # Mask its number the way the sidebar would, so this run and any
+            # run that does see the sidebar agree on one identity.
             label: str = account_label(name=name, number=masked_form(number=number))
             context.log.highlight(
                 msg=(
@@ -375,6 +387,62 @@ class AllyModule:
             )
 
         return accounts
+
+    @staticmethod
+    def _which_is_selected(
+        investments: list[dict[str, str]],
+        name: str,
+        number: str,
+        context: Context,
+    ) -> int | None:
+        """Decide which sidebar account the positions on screen belong to.
+
+        Normally the account number does it: the sidebar masks it, the heading
+        does not. The awkward case is a heading with no number at all, which
+        `selected_account()` reports as "" rather than guessing. Then:
+
+        * one investment account -- unambiguous, the positions are its own
+        * several -- unattributable, so nothing gets them. Guessing would file
+          one account's positions under another, and that is worse than the
+          balances-only run this falls back to, because a wrong holding reads
+          as fact while a missing one is reported.
+
+        Args:
+            investments (list[dict[str, str]]): Sidebar investment accounts.
+            name (str): The nickname from the page heading.
+            number (str): The account number from the heading, possibly "".
+            context (Context): Used for logging.
+
+        Returns:
+            int | None: Index into `investments`, or None when the positions
+            cannot be attributed to any of them.
+
+        """
+        if number:
+            return next(
+                (
+                    index
+                    for index, row in enumerate(iterable=investments)
+                    if masked_matches(masked=row["Number"], number=number)
+                ),
+                None,
+            )
+
+        if len(investments) == 1:
+            return 0
+
+        if investments and name:
+            context.log.fail(
+                msg=(
+                    f"The holdings on screen say they belong to {name}, but "
+                    "the page heading gives no account number and there are "
+                    f"{len(investments)} investment accounts to choose from. "
+                    "Recording balances only; no account is given positions "
+                    "that might be another's."
+                )
+            )
+
+        return None
 
     @staticmethod
     def _row(

@@ -187,6 +187,105 @@ class UnlistedAccountTests(unittest.TestCase):
         self.assertIn("not in the", said)
 
 
+class NumberlessHeadingTests(unittest.TestCase):
+    """A heading that names an account but not its number.
+
+    selected_account() reports "" for the number rather than guessing, so
+    masked_matches() can never succeed. Left alone that produces the exact
+    double count this reconciliation exists to prevent: every sidebar account
+    recorded balance-only, plus a *second* row built from the heading carrying
+    the positions -- one account, two keys, half its history in each.
+    """
+
+    def _numberless(self, markup: str | None = None) -> BeautifulSoup:
+        text = markup if markup is not None else FIXTURE.read_text(encoding="utf-8")
+        return _page(markup=text.replace("Brokerage - 1AB20111", "Brokerage"))
+
+    def test_one_account_takes_the_positions_unambiguously(self) -> None:
+        rows, _context = _scrape(soup=self._numberless())
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["Account"], "Brokerage (...0111)")
+        self.assertEqual(len(rows[0]["Holdings"]), 1)
+
+    def test_one_account_keeps_the_identity_the_sidebar_gives(self) -> None:
+        # Not "Brokerage" from the heading: the sidebar's masked label is what
+        # every other run stores.
+        with_number, _ = _scrape(soup=_page())
+        without_number, _ = _scrape(soup=self._numberless())
+
+        self.assertEqual(without_number[0]["Account"], with_number[0]["Account"])
+
+    def test_two_accounts_produce_no_third_row(self) -> None:
+        # The regression: a heading-derived row here duplicates whichever
+        # account is on screen.
+        rows, _context = _scrape(
+            soup=self._numberless(
+                markup=FIXTURE.read_text(encoding="utf-8").replace(
+                    '<li class="savings-account">',
+                    f'{SECOND_ACCOUNT}<li class="savings-account">',
+                )
+            )
+        )
+
+        self.assertEqual(
+            sorted(row["Account"] for row in rows),
+            ["Brokerage (...0111)", "Roth IRA (...0333)"],
+        )
+
+    def test_two_accounts_get_no_positions_at_all(self) -> None:
+        # Guessing would file one account's holdings under another, and a wrong
+        # holding reads as fact while a missing one is reported.
+        rows, _context = _scrape(
+            soup=self._numberless(
+                markup=FIXTURE.read_text(encoding="utf-8").replace(
+                    '<li class="savings-account">',
+                    f'{SECOND_ACCOUNT}<li class="savings-account">',
+                )
+            )
+        )
+
+        self.assertEqual([row["Holdings"] for row in rows], [[], []])
+
+    def test_two_accounts_report_why_the_positions_were_dropped(self) -> None:
+        _rows, context = _scrape(
+            soup=self._numberless(
+                markup=FIXTURE.read_text(encoding="utf-8").replace(
+                    '<li class="savings-account">',
+                    f'{SECOND_ACCOUNT}<li class="savings-account">',
+                )
+            )
+        )
+
+        said = " ".join(
+            str(object=call.kwargs.get("msg", ""))
+            for call in context.log.fail.call_args_list
+        )
+
+        self.assertIn("no account number", said)
+        self.assertIn("Brokerage", said)
+
+
+class NoActivePageTests(unittest.TestCase):
+    def test_a_broker_whose_browser_never_started_is_reported_not_raised(self) -> None:
+        # active_page is a property that raises RuntimeError when there is no
+        # page, and getattr's default only covers AttributeError -- so asking
+        # for the property here turns "no page" into a traceback instead of the
+        # module's own message.
+        class Unstarted:
+            page = None
+            username = "someone"
+
+            @property
+            def active_page(self):
+                raise RuntimeError("Browser not started")
+
+        context = MagicMock()
+
+        self.assertFalse(AllyModule().on_login(context=context, connection=Unstarted()))
+        self.assertTrue(context.log.fail.called)
+
+
 class EmptyPageTests(unittest.TestCase):
     def test_a_page_with_nothing_on_it_yields_no_accounts(self) -> None:
         # The caller treats this as a failure and captures the markup, which is
