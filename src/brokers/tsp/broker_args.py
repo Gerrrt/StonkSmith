@@ -60,6 +60,29 @@ def broker_args(
     )
 
     group.add_argument(
+        "--balance",
+        type=float,
+        help=(
+            "A balance read off the TSP site, which is back-solved into a unit "
+            "count against that day's published price. The site states a "
+            "balance and a date but never a unit count, so this is the way to "
+            "reset the count between statements without downloading one."
+        ),
+    )
+
+    group.add_argument(
+        "--balance-as-of",
+        type=str,
+        metavar="YYYY-MM-DD",
+        help=(
+            "The 'Balance as of' date printed beside the balance. Required "
+            "with --balance: the same dollars buy a different number of units "
+            "on a different day, so a balance without its date cannot be "
+            "converted at all."
+        ),
+    )
+
+    group.add_argument(
         "--units-as-of",
         type=str,
         metavar="YYYY-MM-DD",

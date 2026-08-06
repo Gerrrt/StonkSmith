@@ -30,12 +30,19 @@ STATEMENT_OPTION = "STATEMENT"
 #: line, because a TSP value is only as current as its unit count and the
 #: number itself gives no hint which of these produced it.
 FROM_STATEMENT = "statement"
+FROM_BALANCE = "--balance"
 FROM_FLAG = "--units"
 FROM_CONFIG = "config"
 
 #: Beyond this the unit count has almost certainly missed a contribution, since
 #: TSP posts monthly for uniformed members and no less often for civilians.
 UNITS_STALE_DAYS = 40
+
+#: How far a balance's date may run ahead of the newest price available to
+#: convert it. A long weekend plus a federal holiday is the widest ordinary gap
+#: between business days; past that, the price file is stale rather than the
+#: market closed, and dividing by an old price invents units.
+BALANCE_PRICE_GAP_DAYS = 4
 
 
 def pdf_text(pages: Iterable[Any]) -> str:
@@ -119,6 +126,47 @@ def read_statement(path: str) -> tuple[float | None, str, dt.date | None]:
     return units[0], funds[0], (period[1] if period else None)
 
 
+def units_from_balance(
+    prices: dict[dt.date, dict[str, float]], fund: str, balance: float, day: dt.date
+) -> tuple[float, dt.date, float] | None:
+    """Turn a balance read off the TSP site back into a unit count.
+
+    The site states a balance and the date it is true for, and never states a
+    unit count. But the balance *is* units times that day's price, so the
+    division is exact and inverts TSP's own arithmetic rather than estimating
+    it. That makes any moment spent logged in worth a fresh unit count, instead
+    of waiting a quarter for a statement.
+
+    The price is taken on or before the date given, because TSP does not
+    revalue on a weekend or a holiday: a Saturday balance is still struck at
+    Friday's price, and that is the price the balance was computed with. The
+    date actually used is returned so the caller can show it, which is what
+    makes a mistyped balance date visible rather than silently absorbed.
+
+    Args:
+        prices (dict[dt.date, dict[str, float]]): The parsed price file.
+        fund (str): The fund the balance belongs to.
+        balance (float): The balance as printed.
+        day (dt.date): The date printed beside it.
+
+    Returns:
+        tuple[float, dt.date, float] | None: Units, the price date used, and
+        that price. None when the fund has no price on or before that day.
+
+    """
+    found: tuple[dt.date, float] | None = price_on(prices=prices, fund=fund, day=day)
+
+    if found is None:
+        return None
+
+    price_date, price = found
+
+    if price <= 0:
+        return None
+
+    return balance / price, price_date, price
+
+
 def statement_reconciles(text_units: float, price: float, closing: float) -> bool:
     """Whether a statement's own numbers multiply out.
 
@@ -167,17 +215,33 @@ class TspModule:
         self.export_format = options.get("EXPORT", "print")
         self.statement = str(object=options.get(STATEMENT_OPTION, "") or "")
 
-    def units_for(self, context: Context) -> tuple[float | None, str, str]:
+    def units_for(
+        self,
+        context: Context,
+        prices: dict[dt.date, dict[str, float]] | None = None,
+        fund: str = "",
+    ) -> tuple[float | None, str, str]:
         """Decide which unit count to value, and say where it came from.
 
-        Precedence runs most-authoritative first: a statement states units, a
-        flag is someone typing what they just read, and config is whatever was
+        Precedence runs most-authoritative first. A statement and a balance are
+        both exact -- the statement states units outright, and a balance
+        inverts into them against a published price -- while ``--units`` is a
+        raw number with nothing to check it against and config is whatever was
         true last time. Every one of them is reported, because the number they
         produce looks identical and only the provenance says whether to trust
         it.
 
+        A balance is a flag and never a config key. It is true for exactly one
+        day, so storing it would leave a value that silently rots into a wrong
+        answer -- the opposite of what this module exists to prevent. The unit
+        count it derives is what belongs in config, and the run prints it ready
+        to paste.
+
         Args:
             context (Context): Logging, and the parsed CLI arguments.
+            prices (dict[dt.date, dict[str, float]] | None): The parsed price
+            file, needed only to back-solve ``--balance``.
+            fund (str): The fund a balance belongs to.
 
         Returns:
             tuple[float | None, str, str]: Units, the date they were true, and
@@ -209,6 +273,16 @@ class TspModule:
                 )
                 return units, dated, FROM_STATEMENT
 
+        balance: float | None = getattr(context.args, "balance", None)
+
+        if balance is not None:
+            derived = self.solve_balance(
+                context=context, prices=prices, fund=fund, balance=balance
+            )
+
+            if derived is not None:
+                return derived
+
         flag: float | None = getattr(context.args, "units", None)
 
         if flag is not None:
@@ -217,6 +291,110 @@ class TspModule:
 
         units_cfg, as_of_cfg = get_tsp_units()
         return units_cfg, as_of_cfg, FROM_CONFIG
+
+    @staticmethod
+    def solve_balance(
+        context: Context,
+        prices: dict[dt.date, dict[str, float]] | None,
+        fund: str,
+        balance: float,
+    ) -> tuple[float, str, str] | None:
+        """Back-solve ``--balance`` into a unit count, or say why it could not.
+
+        Every way this fails is reported and falls through to the next source
+        rather than aborting the run, because a mistyped balance should cost
+        the correction and not the mark. Returning None is that fall-through.
+
+        Args:
+            context (Context): Logging, and the parsed CLI arguments.
+            prices (dict[dt.date, dict[str, float]] | None): The parsed price
+            file.
+            fund (str): The fund the balance belongs to.
+            balance (float): The balance as printed on the site.
+
+        Returns:
+            tuple[float, str, str] | None: Units, the date they are true, and
+            the source label. None when the balance could not be converted.
+
+        """
+        written: str = str(object=getattr(context.args, "balance_as_of", "") or "")
+
+        if not written:
+            context.log.fail(
+                msg=(
+                    "--balance needs --balance-as-of. The same dollars buy a "
+                    "different number of units on a different day, so a "
+                    "balance with no date cannot be converted at all. Use the "
+                    "'Balance as of' date printed beside it."
+                )
+            )
+            return None
+
+        try:
+            day: dt.date = dt.date.fromisoformat(written)
+
+        except ValueError:
+            context.log.fail(
+                msg=f"Unreadable --balance-as-of {written!r}; expected YYYY-MM-DD."
+            )
+            return None
+
+        if not prices or not fund:
+            context.log.fail(
+                msg="--balance needs the share price file to convert against."
+            )
+            return None
+
+        solved: tuple[float, dt.date, float] | None = units_from_balance(
+            prices=prices, fund=fund, balance=balance, day=day
+        )
+
+        if solved is None:
+            context.log.fail(
+                msg=(
+                    f"No published {fund} price on or before {day}, so "
+                    f"${balance:,.2f} cannot be converted to units."
+                )
+            )
+            return None
+
+        units, price_date, price = solved
+        gap: int = (day - price_date).days
+
+        if gap > BALANCE_PRICE_GAP_DAYS:
+            # price_on() falls back to the newest price on or before the date,
+            # which is right across a weekend and wrong across a stale file:
+            # dividing a current balance by a month-old price silently invents
+            # a unit count that is off by every day of drift in between. A
+            # refusal costs one correction; this would corrupt the config.
+            context.log.fail(
+                msg=(
+                    f"The newest {fund} price on or before {day} is from "
+                    f"{price_date}, {gap} days earlier. That is too wide a gap "
+                    "to convert a balance against -- update the price file, or "
+                    "check the --balance-as-of date."
+                )
+            )
+            return None
+
+        context.log.success(
+            msg=(
+                f"Balance ${balance:,.2f} on {day} at ${price:,.4f} "
+                f"({price_date}) = {format_units(units)} units"
+            )
+        )
+        # The derived count is the durable half: the balance is true for one
+        # day, the units it implies stay true until the next transaction. So
+        # print it ready to paste, or the next run is back to a stale config.
+        # Dated to the balance, not to the price -- nothing moves units over a
+        # weekend, so a Saturday balance struck at Friday's price still states
+        # Saturday's unit count.
+        context.log.display(
+            msg=(
+                f"Store it: [TSP] units = {units:.4f}, units_as_of = {day.isoformat()}"
+            )
+        )
+        return units, day.isoformat(), FROM_BALANCE
 
     def on_login(self, context: Context, connection: Connection) -> bool:
         """Mark the account and persist it.
@@ -239,7 +417,7 @@ class TspModule:
             )
             return False
 
-        units, as_of, source = self.units_for(context=context)
+        units, as_of, source = self.units_for(context=context, prices=prices, fund=fund)
 
         if units is None:
             context.log.fail(

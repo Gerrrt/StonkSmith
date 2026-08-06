@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 
 from helpers.tsp import fund_prices
 from modules.tsp_module import (
+    FROM_BALANCE,
     FROM_CONFIG,
     FROM_FLAG,
     FROM_STATEMENT,
@@ -27,6 +28,7 @@ from modules.tsp_module import (
     pdf_text,
     read_statement,
     statement_reconciles,
+    units_from_balance,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -47,10 +49,21 @@ def _connection() -> MagicMock:
     return connection
 
 
-def _context(units: float | None = None, as_of: str | None = None) -> MagicMock:
+def _context(
+    units: float | None = None,
+    as_of: str | None = None,
+    balance: float | None = None,
+    balance_as_of: str | None = None,
+) -> MagicMock:
     context = MagicMock()
-    context.args = Namespace(units=units, units_as_of=as_of)
+    context.args = Namespace(
+        units=units, units_as_of=as_of, balance=balance, balance_as_of=balance_as_of
+    )
     return context
+
+
+def _prices() -> dict:
+    return fund_prices(text=PRICES.read_text(encoding="utf-8"))
 
 
 def _said(mock_log) -> str:
@@ -122,6 +135,154 @@ class PdfPageTests(unittest.TestCase):
 
     def test_no_readable_page_at_all_yields_nothing_to_parse(self) -> None:
         self.assertEqual(pdf_text(pages=[_Page(text=None)]).strip(), "")
+
+
+class BalanceInversionTests(unittest.TestCase):
+    """The site states a balance and a date, and never states units."""
+
+    def test_a_balance_divides_back_into_the_units_that_made_it(self) -> None:
+        # 100 units of L 2060 closed at 24.7344 on 2026-08-05, so a balance of
+        # 100 x that has to invert to exactly 100 units back.
+        solved = units_from_balance(
+            prices=_prices(),
+            fund="L 2060",
+            balance=100.0 * 24.7344,
+            day=dt.date(2026, 8, 5),
+        )
+
+        assert solved is not None
+        units, price_date, price = solved
+        self.assertAlmostEqual(units, 100.0, places=6)
+        self.assertEqual((price_date, price), (dt.date(2026, 8, 5), 24.7344))
+
+    def test_a_non_business_day_uses_the_price_the_balance_was_struck_at(self) -> None:
+        # TSP does not revalue on a weekend or holiday, so a balance dated then
+        # was computed with the previous business day's price -- which is the
+        # one that inverts it correctly.
+        solved = units_from_balance(
+            prices=_prices(), fund="L 2060", balance=1000.0, day=dt.date(2026, 7, 2)
+        )
+
+        assert solved is not None
+        self.assertEqual(solved[1], dt.date(2026, 6, 30))
+
+    def test_a_fund_with_no_price_cannot_be_inverted(self) -> None:
+        self.assertIsNone(
+            units_from_balance(
+                prices=_prices(),
+                fund="Q Fund",
+                balance=1000.0,
+                day=dt.date(2026, 8, 5),
+            )
+        )
+
+    def test_a_date_before_the_file_begins_cannot_be_inverted(self) -> None:
+        self.assertIsNone(
+            units_from_balance(
+                prices=_prices(),
+                fund="L 2060",
+                balance=1000.0,
+                day=dt.date(1999, 1, 1),
+            )
+        )
+
+
+class BalanceFlagTests(unittest.TestCase):
+    """Reading a balance off the site has to beat waiting for a statement."""
+
+    def _solve(self, context: MagicMock) -> tuple[float | None, str, str]:
+        return TspModule().units_for(context=context, prices=_prices(), fund="L 2060")
+
+    def test_a_balance_becomes_a_unit_count_dated_to_the_balance(self) -> None:
+        units, as_of, source = self._solve(
+            context=_context(balance=100.0 * 24.7344, balance_as_of="2026-08-05")
+        )
+
+        assert units is not None
+        self.assertAlmostEqual(units, 100.0, places=6)
+        self.assertEqual((as_of, source), ("2026-08-05", FROM_BALANCE))
+
+    def test_the_units_are_dated_by_the_balance_not_the_price(self) -> None:
+        # Nothing moves units over a weekend, so a Saturday balance struck at
+        # Friday's price still states Saturday's unit count. Dating it to the
+        # price would report the count as older than it is.
+        _units, as_of, _source = self._solve(
+            context=_context(balance=1000.0, balance_as_of="2026-07-02")
+        )
+
+        self.assertEqual(as_of, "2026-07-02")
+
+    def test_the_derived_count_is_printed_ready_to_store(self) -> None:
+        # The balance is true for one day; the units it implies stay true until
+        # the next transaction. Without this the next run is stale again.
+        context = _context(balance=100.0 * 24.7344, balance_as_of="2026-08-05")
+
+        self._solve(context=context)
+
+        self.assertIn("[TSP] units =", _said(context.log.display))
+
+    def test_a_balance_beats_a_typed_unit_count(self) -> None:
+        _units, _as_of, source = self._solve(
+            context=_context(
+                units=999.0,
+                as_of="2020-01-01",
+                balance=100.0 * 24.7344,
+                balance_as_of="2026-08-05",
+            )
+        )
+
+        self.assertEqual(source, FROM_BALANCE)
+
+    def test_a_balance_with_no_date_refuses_and_falls_through(self) -> None:
+        # The same dollars buy a different number of units on a different day.
+        context = _context(balance=7810.84, units=50.0, as_of="2026-06-30")
+
+        self.assertEqual(self._solve(context=context), (50.0, "2026-06-30", FROM_FLAG))
+        self.assertIn("needs --balance-as-of", _said(context.log.fail))
+
+    def test_an_unreadable_balance_date_says_what_was_expected(self) -> None:
+        context = _context(balance=7810.84, balance_as_of="August")
+
+        with patch("modules.tsp_module.get_tsp_units", return_value=(None, "")):
+            self._solve(context=context)
+
+        self.assertIn("YYYY-MM-DD", _said(context.log.fail))
+
+    def test_a_price_file_too_old_to_convert_against_refuses(self) -> None:
+        # price_on falls back to the newest price on or before the date, which
+        # is right across a weekend and wrong across a stale file: dividing a
+        # current balance by an old price invents a unit count.
+        context = _context(balance=7810.84, balance_as_of="2026-08-30")
+
+        with patch("modules.tsp_module.get_tsp_units", return_value=(None, "")):
+            units, _as_of, _source = self._solve(context=context)
+
+        self.assertIsNone(units)
+        self.assertIn("too wide a gap", _said(context.log.fail))
+
+    def test_a_balance_with_no_price_file_falls_through(self) -> None:
+        context = _context(
+            balance=7810.84, balance_as_of="2026-08-05", units=50.0, as_of="2026-06-30"
+        )
+
+        self.assertEqual(
+            TspModule().units_for(context=context), (50.0, "2026-06-30", FROM_FLAG)
+        )
+        self.assertIn("share price file", _said(context.log.fail))
+
+    def test_a_statement_still_outranks_a_balance(self) -> None:
+        module = TspModule()
+        module.options(
+            context=None, module_options={"STATEMENT": str(object=STATEMENT)}
+        )
+
+        _units, _as_of, source = module.units_for(
+            context=_context(balance=7810.84, balance_as_of="2026-08-05"),
+            prices=_prices(),
+            fund="L 2060",
+        )
+
+        self.assertEqual(source, FROM_STATEMENT)
 
 
 class StatementIntegrityTests(unittest.TestCase):

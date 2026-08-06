@@ -380,8 +380,8 @@ uv run stonksmith tsp -M tsp
 ```
 
 Units are the half TSP does not publish, because they are the account's own
-state. They come from a quarterly statement, and they only move on a
-transaction:
+state. They come from a quarterly statement — or from a balance you read off
+the site, see below — and they only move on a transaction:
 
 ```bash
 uv run stonksmith tsp -M tsp -o STATEMENT=~/Downloads/statement.pdf
@@ -400,6 +400,29 @@ units_as_of = 2026-06-30
 `--units` and `--units-as-of` override it for a single run, and `--prices`
 reads a share price file already on disk instead of downloading one — useful
 when the machine cannot reach tsp.gov.
+
+**You do not have to wait for a statement.** The TSP site states a balance and
+the date it is true for, and never states a unit count — but a balance *is*
+units × that day's price, so the division inverts it exactly:
+
+```bash
+uv run stonksmith tsp -M tsp --balance 7810.84 --balance-as-of 2026-08-05
+```
+
+```text
+Balance $7,810.84 on 2026-08-05 at $24.7344 (2026-08-05) = 315.7885 units
+Store it: [TSP] units = 315.7885, units_as_of = 2026-08-05
+```
+
+So any moment spent logged in is worth a fresh unit count, and the two numbers
+on the dashboard are all it takes. The derived count is what belongs in the
+config — the balance itself is deliberately not a config key, because it is
+true for exactly one day and storing it would leave a value that silently rots.
+
+A balance is converted against the price on or before its date, since TSP does
+not revalue on a weekend or a holiday. If the price file is too old to cover
+the balance's date, the run says so and refuses rather than dividing by a stale
+price and inventing a unit count.
 
 **Every mark says how old its unit count is.** A value carried on a
 three-month-old count is still exact arithmetic, but it is missing every
