@@ -1,0 +1,317 @@
+<!--
+  A signed-in Ally Invest holdings page, structurally faithful to a real
+  capture and redacted throughout: every account number, nickname and amount
+  below is invented. The numbers are internally consistent so the parser's
+  arithmetic assumptions can be checked -- 100 units at a 12.50 average is the
+  1250.00 cost basis, and 100 units at the 15.00 last price is the 1500.00
+  market value.
+
+  Two details are preserved on purpose because the parser has to survive them:
+
+  * the _ngcontent-gdx-NNN attributes, which change on every Ally deploy and
+    which nothing may key on
+  * gain/loss amounts written without a sign, with only an "up"/"down" class
+    saying which way they went
+-->
+<body>
+  <ally-navigation _ngcontent-gdx-14="">
+    <nav>
+      <menu-item class="util-item" id="allyNavLogOut">
+        <div class="menu-item button-item">
+          <button class="button-link" title="Log Out">Log Out</button>
+        </div>
+      </menu-item>
+    </nav>
+  </ally-navigation>
+
+  <page-header menu="accounts" name="Holdings">
+    <div class="row" id="page-header">
+      <h1>Ally Invest | <span>Holdings</span></h1>
+    </div>
+  </page-header>
+
+  <change-account _ngcontent-gdx-62="">
+    <span aria-level="2" data-private="" role="heading">
+      Brokerage - 1AB20111
+    </span>
+  </change-account>
+
+  <holdings-account-totals>
+    <section class="info-section">
+      <div class="acc-totals">
+        <h3>Account Value</h3>
+        <p>$1,500.00</p>
+      </div>
+      <div class="acc-totals">
+        <h3>Market Value</h3>
+        <total-market-value><span>
+  $1,500.00
+</span>
+</total-market-value>
+      </div>
+      <div class="acc-totals">
+        <h3>Total G/L</h3>
+        <total-gain-loss><span class="up">
+  <caret-display><i role="img" aria-label="Gain" class="allycon-glyph-caret-up"></i>
+</caret-display>
+  $250.00
+</span>
+</total-gain-loss>
+      </div>
+      <div class="acc-totals">
+        <h3>Today's G/L</h3>
+        <day-gain-loss><span class="down">
+  <caret-display><i role="img" aria-label="Loss" class="allycon-glyph-caret-down"></i>
+</caret-display>
+  $3.00
+</span>
+</day-gain-loss>
+      </div>
+    </section>
+  </holdings-account-totals>
+
+  <account-balances-info>
+    <button aria-controls="balanceContent" class="collapsable-heading" aria-expanded="false">
+      <h3>Account Balances</h3>
+    </button>
+    <div class="collapsable-content hidden" id="balanceContent" style="max-height: 0px;">
+      <div class="balance-info row margin-top-5">
+        <div class="balance-column col-xs-12 col-sm-6 col-mg-3">
+          <p>
+            <span id="cash-money" tabindex="-1">Total Cash and Money Fund:</span>
+            <span>
+              <strong>
+                $0.00
+              </strong>
+            </span>
+          </p>
+          <p>
+            <span>Cash:</span>
+            <span>
+              <strong>$-25.00</strong>
+            </span>
+          </p>
+        </div>
+        <div class="balance-column col-xs-12 col-sm-6 col-mg-3">
+          <p>
+            <span>Total Securities:</span>
+            <span>
+              <strong>
+                $1,500.00
+              </strong>
+            </span>
+          </p>
+          <p>
+            <span>Mutual Funds:</span>
+            <span>
+              <strong>$1,500.00</strong>
+            </span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </account-balances-info>
+
+  <holdings-table>
+    <table-container captionclass="visually-hidden">
+      <section tabindex="0">
+        <table class="table-container-wrapper dash-hldg-table">
+          <caption tabindex="-1" class="visually-hidden">
+            Holdings overview table, showing All Asset Types
+          </caption>
+          <thead>
+            <tr>
+              <th style="text-align: left;">
+                Sym/Desc
+              </th><th style="text-align: center;">
+                Event
+              </th><th style="text-align: right;">
+                Qty
+              </th><th style="text-align: right;">
+                Last Price
+                <span class="subHead">
+                  (%)
+                </span>
+              </th><th style="text-align: right;">
+                Bid
+              </th><th style="text-align: right;">
+                Ask
+              </th><th style="text-align: right;">
+                Cost Basis
+              </th><th style="text-align: right;">
+                Avg Price
+              </th><th style="text-align: right;">
+                Today's G/L
+              </th><th style="text-align: right;">
+                Total G/L
+                <span class="subHead">
+                  (%)
+                </span>
+              </th><th class="market-value-td" style="text-align: right;">
+                Mkt Value
+              </th><th style="text-align: center;">
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr holding-row="" class="even" _ngcontent-gdx-91="">
+              <td class="static">
+                <div class="symbol-container">
+                  <div class="child-symbol-content">
+                    <div class="symbol push">
+                      <span title="EXMPL">
+                        <strong>EXMPL</strong>
+                      </span>
+                      <span title="Example Index Fund">
+                        Example Index Fund
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td class="badges static" aria-label="EXMPL">
+                <div>
+                  <event-badges><div class="badge-block" role="group">
+  <div aria-label="No events"> -- </div>
+</div>
+</event-badges>
+                </div>
+              </td>
+              <td>
+                <div>
+                  <span>100.000</span>
+                </div>
+              </td>
+              <td>
+                <div>
+                  <invest-last><span role="text" aria-label="Last price: 15.00">
+  <span aria-hidden="true">15.00</span>
+</span>
+</invest-last>
+                  <invest-price-change>
+<p class="down">
+  <span class="price" aria-label="Price change down: 0.03">
+    -
+    0.03
+  </span>
+  <span class="percentage" aria-label="Percent change down: 0.20%">
+    <span>&nbsp;</span>
+    (0.20%)
+  </span>
+</p>
+</invest-price-change>
+                </div>
+              </td>
+              <td>
+                <div>
+                  <bid-ask type="bid">
+  <button aria-label="Open Quick Trade at bid price of 15.00 for EXMPL" class="fontSizeLg">
+    15.00
+  </button>
+</bid-ask>
+                </div>
+              </td>
+              <td>
+                <div>
+                  <bid-ask type="ask">
+  <button aria-label="Open Quick Trade at ask price of 15.00 for EXMPL" class="fontSizeLg">
+    15.00
+  </button>
+</bid-ask>
+                </div>
+              </td>
+              <td>
+                <div>
+                  <span>
+                    1250.00
+                  </span>
+                </div>
+              </td>
+              <td>
+                <div>
+                  <invest-average-price>12.50
+</invest-average-price>
+                </div>
+              </td>
+              <td>
+                <div>
+                  <holding-day-gain-loss><span class="down">$3.00</span>
+</holding-day-gain-loss>
+                </div>
+              </td>
+              <td>
+                <div>
+                  <holding-total-gain-loss><span class="total up">
+  $250.00
+</span>
+  <span class="percentage up">
+    (20.00%)
+  </span>
+</holding-total-gain-loss>
+                </div>
+              </td>
+              <td class="market-value-td">
+                <div>
+                  <total-market-value><span>
+  $1,500.00
+</span>
+</total-market-value>
+                </div>
+              </td>
+              <td class="static">
+                <div class="child-menu-content">
+                  <div class="child-menu">
+                    <holdings-menu><ally-menu container="body" icon="ellipsis"></ally-menu>
+</holdings-menu>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </table-container>
+  </holdings-table>
+
+  <ally-accounts-list>
+    <div id="allyAccountsList">
+      <div class="container">
+        <ul>
+          <li class="investments-account">
+            <div class="left">
+              <div>Investments</div>
+              <div>
+                <a href="#">
+                  Brokerage
+                </a>
+                <span>...0111</span>
+              </div>
+            </div>
+            <div class="right">
+              <div>
+                Account Value
+              </div>
+              <div><span>$1,500.00</span></div>
+            </div>
+          </li><li class="savings-account">
+            <div class="left">
+              <div>Savings</div>
+              <div>
+                <a href="#">
+                  Savings Account
+                </a>
+                <span>...0222</span>
+              </div>
+            </div>
+            <div class="right">
+              <div>
+                Available
+              </div>
+              <div><span>$4,000.00</span></div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </ally-accounts-list>
+</body>

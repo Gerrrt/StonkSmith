@@ -28,14 +28,15 @@ all the accounts you own.
 ## :wrench: Features
 
 - [x] Multi-broker support (Fidelity, Schwab and anything else via SnapTrade,
-      plus a Schwab 529 scraper for what SnapTrade does not cover)
+      plus Ally Invest and Schwab 529 scrapers for what SnapTrade does not
+      cover)
 - [x] Automatic data scraping (requests + Playwright)
 - [x] Google Sheets sync
 - [x] CLI commands for automation
 - [x] Credentials stored in the OS keyring
 - [x] Account history: numeric balances, holdings and transactions over time
-- [ ] More brokers: TSP and Ally both need a scraper — neither is one of the
-      brokerages SnapTrade covers. Vanguard needs no code at all; link it.
+- [ ] More brokers: TSP needs a scraper — it is not one of the brokerages
+      SnapTrade covers. Vanguard needs no code at all; link it.
 - [ ] Net worth tracking over time
 - [ ] Asset allocation breakdown
 - [ ] Scheduling (cron / background jobs)
@@ -66,10 +67,13 @@ publishes it as `Broker`, alongside `database.py`, `db_navigator.py`,
 `broker.py` is optional; a broker without `database.py` and `db_navigator.py` is
 listed as "incomplete" by `stonksmithdb`.
 
-Brokers come in two shapes. A **scraper** has a username, a password and a login
-step, and subclasses `Connection`: Schwab 529 and Fidelity. An **API-backed**
-broker has none of those — its key lives in config and the OS keyring, and there
-is nothing to log into — and subclasses `ApiConnection` instead: SnapTrade.
+Brokers come in three shapes. A **scraper** posts a form and reads the response,
+and subclasses `Connection`: Schwab 529. A **browser-backed** broker has a login
+guarded by bot detection, a session worth keeping between runs, and a page that
+only exists after JavaScript has run; it subclasses `BrowserConnection`, which
+owns the whole Playwright lifecycle: Fidelity and Ally. An **API-backed** broker
+has no login at all — its key lives in config and the OS keyring — and
+subclasses `ApiConnection`: SnapTrade.
 
 ---
 
@@ -83,7 +87,7 @@ cd stonksmith
 uv sync
 ```
 
-Fidelity drives a real browser, so install the Playwright runtime once:
+Fidelity and Ally drive a real browser, so install the Playwright runtime once:
 
 ```bash
 uv run playwright install firefox
@@ -191,6 +195,44 @@ uv run stonksmith fidelity -M fidelity --manual-login --browser chrome
 better than bundled builds; `--browser chromium` uses Playwright's own build.
 Both keep their profile in `~/.stonksmith/playwright/chrome-profile`, so cookies
 and history accumulate between runs. `--profile-dir` points elsewhere.
+
+### Ally Invest
+
+**Ally Invest has no login of its own.** ally.com signs you in to Ally *Bank* at
+`secure.ally.com`, and the investing site is reached by clicking through from
+the bank dashboard — `live.invest.ally.com` is handed a session, it never asks
+for one. So there is no way to point StonkSmith at an Ally Invest login page,
+and the sign-in is always yours to perform:
+
+```bash
+uv run stonksmith ally -M ally --manual-login
+```
+
+A browser window opens at `secure.ally.com`. Sign in, **then click through to
+your investment account** — StonkSmith is still waiting at the bank dashboard
+and will not touch the page until `live.invest.ally.com` loads. It then saves
+the session; Ally remembers a device once it has seen one, so later runs skip
+the sign-in until the session expires.
+
+Ally runs Akamai, Dynatrace and Transmit on that login page, so the same
+attach-to-your-own-Chrome path Fidelity documents above applies here, pointed at
+the bank:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/.stonksmith/playwright/cdp-profile" \
+  "https://secure.ally.com/"
+
+uv run stonksmith --verbose ally -M ally --browser cdp
+```
+
+Ally shows one account's positions at a time. StonkSmith reads the sidebar as
+well as the table, so every investment account gets a balance, but only the
+account currently selected gets its holdings — it says so per account when
+there is more than one. Select another account in the browser and re-run to
+store its positions too. Ally *Bank* deposit accounts appear in the same
+sidebar; they are reported as skipped rather than filed under a brokerage.
 
 ### SnapTrade
 
