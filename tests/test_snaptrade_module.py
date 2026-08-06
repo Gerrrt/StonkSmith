@@ -23,6 +23,7 @@ from modules.snaptrade_module import (
     brokerage_name,
     currency_code,
     money,
+    normalize_label,
     position_holding,
     select_accounts,
     silent_connections,
@@ -576,6 +577,127 @@ class MultipleBrokerageTests(unittest.TestCase):
         self.assertNotIn("degraded", skipped[0])
 
 
+class ExcludedAccountTests(unittest.TestCase):
+    """
+    An account two brokers can both reach is money counted twice.
+
+    Nothing in StonkSmith adds the tabs together, so the overlap corrupts no
+    stored data -- it just quietly inflates any dashboard total that sums them.
+    A Schwab-held 529 is the live case: schwab529plan scrapes it with a
+    beneficiary and a principal/earnings split, and SnapTrade reports the same
+    money again as one of five Schwab accounts.
+    """
+
+    def account_at(self, brokerage: str, name: str) -> dict[str, Any]:
+        return account(id=f"acct-{name}", name=name, institution_name=brokerage)
+
+    def test_an_excluded_account_is_skipped(self) -> None:
+        rows, skipped = select(
+            [self.account_at("Schwab", "Ezekiel 529 Plan")],
+            excluded=frozenset({"schwab / ezekiel 529 plan"}),
+        )
+
+        self.assertEqual(rows, [])
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("another broker covers it", skipped[0])
+
+    def test_the_other_accounts_at_that_brokerage_still_sync(self) -> None:
+        # Brokerage-level exclusion would be too coarse: one of five Schwab
+        # accounts overlaps, and dropping the other four to fix it is worse
+        # than the double count.
+        rows, _ = select(
+            [
+                self.account_at("Schwab", "Ezekiel 529 Plan"),
+                self.account_at("Schwab", "Garrett IRA"),
+            ],
+            excluded=frozenset({"schwab / ezekiel 529 plan"}),
+        )
+
+        self.assertEqual([row["Account"] for row in rows], ["Garrett IRA"])
+
+    def test_exclusion_is_reported_before_any_other_reason(self) -> None:
+        # An excluded account is not broken, it belongs to somebody else.
+        # Reporting it as stale first sends the operator hunting a non-problem.
+        stale = self.account_at("Schwab", "Ezekiel 529 Plan")
+        stale["sync_status"] = {
+            "holdings": {
+                "last_successful_sync": "2026-07-01T11:00:00+00:00",
+                "initial_sync_completed": True,
+            }
+        }
+
+        _, skipped = select([stale], excluded=frozenset({"schwab / ezekiel 529 plan"}))
+
+        self.assertIn("another broker covers it", skipped[0])
+        self.assertNotIn("last synced", skipped[0])
+
+    def test_case_and_spacing_do_not_have_to_match(self) -> None:
+        # One side is typed into a config file by hand. A capital letter
+        # silently restoring the double count is the failure to avoid.
+        rows, _ = select(
+            [self.account_at("Schwab", "Ezekiel 529 Plan")],
+            excluded=frozenset({normalize_label("  SCHWAB  /  ezekiel 529 PLAN ")}),
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_a_same_named_account_elsewhere_is_not_caught(self) -> None:
+        # The label carries the brokerage precisely so excluding one
+        # brokerage's account cannot silently drop another's.
+        rows, _ = select(
+            [self.account_at("Fidelity", "Ezekiel 529 Plan")],
+            excluded=frozenset({"schwab / ezekiel 529 plan"}),
+        )
+
+        self.assertEqual(len(rows), 1)
+
+    def test_nothing_excluded_changes_nothing(self) -> None:
+        rows, skipped = select([self.account_at("Schwab", "Garrett IRA")])
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(skipped, [])
+
+
+class ExclusionSourcesTests(unittest.TestCase):
+    """The config and --exclude are combined, not chosen between."""
+
+    def context(self, exclude: Any) -> Any:
+        return _StubContext(_StubDb(), exclude=exclude)
+
+    def test_the_config_alone_is_used(self) -> None:
+        with patch(
+            "etc.config.get_snaptrade_excluded_accounts",
+            return_value=["Schwab / Ezekiel 529 Plan"],
+        ):
+            self.assertEqual(
+                SnapTradeModule.excluded(context=self.context(exclude=None)),
+                frozenset({"schwab / ezekiel 529 plan"}),
+            )
+
+    def test_the_flag_adds_to_the_config_rather_than_replacing_it(self) -> None:
+        # A cron run carries the standing overlap in config; --exclude is for
+        # the one-off. Replacing would silently drop the standing one.
+        with patch(
+            "etc.config.get_snaptrade_excluded_accounts",
+            return_value=["Schwab / Ezekiel 529 Plan"],
+        ):
+            self.assertEqual(
+                SnapTradeModule.excluded(
+                    context=self.context(exclude=["Fidelity / Individual - TOD"])
+                ),
+                frozenset({"schwab / ezekiel 529 plan", "fidelity / individual - tod"}),
+            )
+
+    def test_blank_entries_are_dropped(self) -> None:
+        # A trailing newline in the config is not an account called "".
+        with patch(
+            "etc.config.get_snaptrade_excluded_accounts", return_value=["", "   "]
+        ):
+            self.assertEqual(
+                SnapTradeModule.excluded(context=self.context(exclude=[])), frozenset()
+            )
+
+
 class BrokerageNameTests(unittest.TestCase):
     """The fallback chain on its own, without an account payload around it."""
 
@@ -781,6 +903,15 @@ class OnLoginTests(unittest.TestCase):
     def setUp(self) -> None:
         self.module = SnapTradeModule()
         self.db = _StubDb()
+
+        # on_login() now reads the exclusion list, and get_config() backfills
+        # any option missing from the shipped defaults by *rewriting* the
+        # user's stonksmith.conf. Left alone this suite would edit the
+        # developer's own config, which tests/test_suite_does_not_touch_home.py
+        # exists to catch.
+        excluded = patch("etc.config.get_snaptrade_excluded_accounts", return_value=[])
+        self.addCleanup(excluded.stop)
+        excluded.start()
 
     def test_balances_reach_the_database(self) -> None:
         context = _StubContext(self.db)
