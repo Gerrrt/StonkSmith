@@ -1,0 +1,52 @@
+Quarterly Account Statement
+Thrift Savings Plan (Uniformed Services)
+Thrift Savings Plan (Uniformed Services)
+Account Summary 04-01-2026 to 06-30-2026
+Opening Balance $1,500.00
+Deposits/Adjustments 1 $200.00
+Withdrawals $0.00
+Transaction Fees/Expenses $0.00
+Gains/Losses $300.00
+Closing Balance $2,000.00
+Vested Balance $2,000.00
+Your Personal Rate of Return 15.20%
+1 Included contributions, loan repayments, redesignations and earnings
+adjustments related to payroll corrections.
+Contributions and Earnings
+You
+$2,000.00 100%
+Employer
+$0.00 0%
+Total
+$2,000.00 100%
+Statement Date: July 8, 2026
+EXAMPLE MEMBER
+1 EXAMPLE ST
+EXAMPLETOWN XX  00000
+My Account
+tsp.gov
+Your Contributions As of 06-30-2026
+Quarter-to-date Year-to-date
+Traditional
+(Tax-deferred)
+$200.00 $200.00
+Roth $0.00 $400.00
+Your Balances As of 06-30-2026
+Total $2,000.00 100%
+Your Investment Summary
+Fund Allocation as of 06-30-2026
+Fund Name Current Allocation Future Investments All
+L 2060 100% 100%
+Activity Detail by Fund
+04-01-2026 to 06-30-2026 Asset Class
+Lifecycle
+Fund Name L 2060
+Opening Balance $1,500.00
+Contributions $200.00
+Gains/Losses $300.00
+Closing Balance $2,000.00
+Closing Units 100.000
+Unit Price (NAV) 20.000000
+Important Notice: For more detailed information, especially for payroll corrections such as late/missed contributions,
+negative adjustments, miscellaneous adjustments and redesignations, visit My Account from tsp.gov and go to the
+Account Activity page from Savings & Retirement menu.
