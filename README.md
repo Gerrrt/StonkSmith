@@ -64,7 +64,10 @@ publishes it as `Broker`, alongside `database.py`, `db_navigator.py`,
 `broker.py` *is* a broker — that is how `BrokerLoader` discovers them, scanning
 `src/brokers/` first and then `~/.stonksmith/brokers/`. Everything except
 `broker.py` is optional; a broker without `database.py` and `db_navigator.py` is
-listed as "incomplete" by `stonksmithdb`.
+listed as "incomplete" by `stonksmithdb`. A broker that *raises* while loading is
+reported by name and skipped — it registers no subparser and is simply
+unavailable for that run, so a half-finished broker under
+`~/.stonksmith/brokers/` never takes the rest of the tool down with it.
 
 Brokers come in three shapes. A **scraper** posts a form and reads the response,
 and subclasses `Connection`: Schwab 529. A **browser-backed** broker has a login
