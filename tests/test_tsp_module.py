@@ -24,6 +24,7 @@ from modules.tsp_module import (
     FROM_STATEMENT,
     UNITS_STALE_DAYS,
     TspModule,
+    pdf_text,
     read_statement,
     statement_reconciles,
 )
@@ -81,6 +82,48 @@ class StatementReadTests(unittest.TestCase):
         self.assertEqual(read_statement(path=str(object=PRICES)), (None, "", None))
 
 
+class _Page:
+    """Stands in for a pypdf page: extracts text, nothing, or an exception."""
+
+    def __init__(self, text: str | None = "", error: Exception | None = None) -> None:
+        self.text: str | None = text
+        self.error: Exception | None = error
+
+    def extract_text(self) -> str | None:
+        if self.error is not None:
+            raise self.error
+
+        return self.text
+
+
+class PdfPageTests(unittest.TestCase):
+    """A statement is several pages and the units live on one of them."""
+
+    def test_pages_are_joined_in_order(self) -> None:
+        self.assertEqual(
+            pdf_text(pages=[_Page(text="one"), _Page(text="two")]), "one\ntwo"
+        )
+
+    def test_a_page_with_no_text_does_not_sink_the_document(self) -> None:
+        # extract_text is annotated -> str, but a None would reach str.join and
+        # turn a readable statement into an unreadable one.
+        self.assertIn(
+            "Closing Units",
+            pdf_text(pages=[_Page(text=None), _Page(text="Closing Units 100.0")]),
+        )
+
+    def test_a_page_that_raises_costs_only_that_page(self) -> None:
+        pages = [
+            _Page(error=ValueError("malformed content stream")),
+            _Page(text="Closing Units 100.0"),
+        ]
+
+        self.assertIn("Closing Units", pdf_text(pages=pages))
+
+    def test_no_readable_page_at_all_yields_nothing_to_parse(self) -> None:
+        self.assertEqual(pdf_text(pages=[_Page(text=None)]).strip(), "")
+
+
 class StatementIntegrityTests(unittest.TestCase):
     def test_a_statements_own_numbers_multiply_out(self) -> None:
         self.assertTrue(
@@ -127,6 +170,25 @@ class UnitSourceTests(unittest.TestCase):
                 TspModule().units_for(context=_context()),
                 (100.0, "2026-06-30", FROM_CONFIG),
             )
+
+    def test_a_statement_with_no_readable_period_says_so_in_words(self) -> None:
+        # Real units, no date for them. "as of None" reads like a bug rather
+        # than like the missing date it is, on the one line whose whole job is
+        # to say how current the number is.
+        module = TspModule()
+        module.options(context=None, module_options={"STATEMENT": "statement.pdf"})
+        context = _context()
+
+        with patch(
+            "modules.tsp_module.read_statement", return_value=(100.0, "L 2060", None)
+        ):
+            self.assertEqual(
+                module.units_for(context=context), (100.0, "", FROM_STATEMENT)
+            )
+
+        said = _said(context.log.success)
+        self.assertIn("an unstated date", said)
+        self.assertNotIn("None", said)
 
     def test_an_unreadable_statement_falls_through_and_says_so(self) -> None:
         module = TspModule()

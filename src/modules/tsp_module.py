@@ -4,6 +4,7 @@
 """Module to value a TSP account from published share prices and a unit count."""
 
 import datetime as dt
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -37,6 +38,40 @@ FROM_CONFIG = "config"
 UNITS_STALE_DAYS = 40
 
 
+def pdf_text(pages: Iterable[Any]) -> str:
+    """Join a PDF's pages into one string, page by page.
+
+    Per page rather than in one comprehension, because a statement is several
+    pages and the units live on exactly one of them. A page that extracts to
+    nothing -- or raises, which pypdf does on a malformed content stream --
+    should cost that page and no others; joining in a single pass gives up the
+    whole document over the one page nobody needed.
+
+    ``or ""`` is belt-and-braces: ``extract_text()`` is annotated ``-> str`` and
+    returns an empty string for a page with no text, but a None here would
+    otherwise turn a readable statement into an unreadable one via TypeError.
+
+    Args:
+        pages (Iterable[Any]): The reader's pages.
+
+    Returns:
+        str: The text of every page that could be read.
+
+    """
+    out: list[str] = []
+
+    for page in pages:
+        try:
+            out.append(page.extract_text() or "")
+
+        except Exception:
+            # Broad on purpose: pypdf raises a wide and undocumented set here,
+            # and the answer is the same for all of them -- skip the page.
+            out.append("")
+
+    return "\n".join(out)
+
+
 def read_statement(path: str) -> tuple[float | None, str, dt.date | None]:
     """Pull the authoritative unit count out of a quarterly statement.
 
@@ -59,7 +94,7 @@ def read_statement(path: str) -> tuple[float | None, str, dt.date | None]:
         if target.suffix.lower() == ".pdf":
             from pypdf import PdfReader
 
-            text = "\n".join(page.extract_text() for page in PdfReader(target).pages)
+            text = pdf_text(pages=PdfReader(target).pages)
         else:
             text = target.read_text(encoding="utf-8")
 
@@ -160,13 +195,19 @@ class TspModule:
                     )
                 )
             else:
+                # One string for the log line and the return value. A statement
+                # whose period would not parse has a real unit count and no
+                # date for it, and "as of None" reads like a bug rather than
+                # like the missing date it is -- on the one line whose whole
+                # job is to say how current the number is.
+                dated: str = as_of.isoformat() if as_of else ""
                 context.log.success(
                     msg=(
                         f"Statement: {format_units(units)} units of {fund} "
-                        f"as of {as_of}"
+                        f"as of {dated or 'an unstated date'}"
                     )
                 )
-                return units, (as_of.isoformat() if as_of else ""), FROM_STATEMENT
+                return units, dated, FROM_STATEMENT
 
         flag: float | None = getattr(context.args, "units", None)
 
