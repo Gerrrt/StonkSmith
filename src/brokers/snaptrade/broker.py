@@ -31,6 +31,13 @@ BROKER_NAME = "snaptrade"
 #: "snaptrade:consumerKey" from it.
 CONSUMER_KEY_ACCOUNT = "consumerKey"
 
+#: Envelope keys the positions list has been seen under, most authoritative
+#: first. ``results`` is what snaptrade-python-sdk's AllAccountPositionsResponse
+#: declares required and what a real sync receives; ``positions`` is what
+#: SnapTrade's documentation and MCP server call the same list. Reading only one
+#: of them yields no holdings against the other, silently.
+POSITION_KEYS: tuple[str, ...] = ("results", "positions")
+
 SETUP_HINT = (
     "Run `uv run python scripts/snaptrade_register.py store` to put your "
     "SnapTrade consumer key in the keyring, then set clientId in the "
@@ -82,23 +89,29 @@ def as_page_rows(response: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     return [dict(entry) for entry in (data or [])], dict(pagination or {})
 
 
-def as_keyed_rows(response: Any, key: str) -> list[dict[str, Any]]:
+def as_keyed_rows(response: Any, keys: tuple[str, ...]) -> list[dict[str, Any]]:
     """
-    Normalize a response whose records sit under a single named key.
+    Normalize a response whose records sit under a named key.
 
-    Positions come back as ``{"positions": [...], "data_freshness": {...}}``.
-    Passing that to as_rows iterates the *keys* of the envelope, so the first
-    thing it tries to build a row from is the string "positions" -- and
-    ``dict("positions")`` raises "dictionary update sequence element #0 has
-    length 1; 2 is required", which names nothing an operator could act on. It
-    also failed identically for every account on every brokerage, because the
-    shape has nothing to do with the data.
+    Positions arrive wrapped: records under one key, a ``data_freshness`` block
+    under another. Passing that to as_rows iterates the envelope's *keys*, so
+    the first thing it tries to build a row from is the key's own name, and
+    ``dict("results")`` raises "dictionary update sequence element #0 has length
+    1; 2 is required" -- a message naming nothing an operator could act on, for
+    every account on every brokerage, because the shape has nothing to do with
+    the data.
 
-    Tolerates a bare list for the same reason as_page_rows does: some SDK
-    versions unwrap the envelope, and an older StonkSmith read this endpoint as
-    a plain list, so both shapes have been seen in the wild.
+    Two names are accepted because the wire and the SDK disagree. The generated
+    client's ``AllAccountPositionsResponse`` requires ``results``, and that is
+    what a real sync sees; SnapTrade's own documentation and its MCP server both
+    call the same list ``positions``. Keying on one of them alone silently
+    yields no holdings against the other -- no error, no rows, a run that looks
+    healthy -- which is how this shipped once already.
+
+    Tolerates a bare list too, for the same reason as_page_rows does: some SDK
+    versions unwrap the envelope.
     :param response: The SDK response
-    :param key: The envelope key the records sit under
+    :param keys: Envelope keys to look under, most authoritative first
     :return: One dictionary per record
     :rtype: list[dict[str, Any]]
     """
@@ -108,9 +121,19 @@ def as_keyed_rows(response: Any, key: str) -> list[dict[str, Any]]:
     if isinstance(body, list):
         return [dict(entry) for entry in body]
 
-    rows: Any = body.get(key) if hasattr(body, "get") else None
+    if not hasattr(body, "get"):
+        return []
 
-    return [dict(entry) for entry in (rows or [])]
+    for key in keys:
+        rows: Any = body.get(key)
+
+        # `is not None`, not truthiness: an envelope that explicitly carries an
+        # empty list has answered the question, and falling through to the next
+        # name would be looking for a second opinion that cannot exist.
+        if rows is not None:
+            return [dict(entry) for entry in rows]
+
+    return []
 
 
 class SnapTradeBroker(ApiConnection):
@@ -288,8 +311,10 @@ class SnapTradeBroker(ApiConnection):
         gives SnapTrade a balance and no positions at all. The caller records the
         balance either way.
 
-        Read through as_keyed_rows, not as_rows: the body is an envelope,
-        ``{"positions": [...], "data_freshness": {...}}``.
+        Read through as_keyed_rows, not as_rows: the body is an envelope. The
+        SDK names the list ``results``; the documented wire format calls it
+        ``positions``. Both are tried, because getting it wrong returns nothing
+        rather than failing.
         :param account_id: The SnapTrade account id
         :return: One dictionary per position
         :rtype: list[dict[str, Any]]
@@ -299,7 +324,7 @@ class SnapTradeBroker(ApiConnection):
             self.client.account_information.get_all_account_positions(
                 account_id=account_id
             ),
-            key="positions",
+            keys=POSITION_KEYS,
         )
 
     def fetch_activities(
