@@ -227,3 +227,59 @@ def process_secret(text: str | None) -> str:
         return mask
 
     return f"{text[:reveal]}{mask}"
+
+
+def get_tsp_fund() -> str:
+    """
+    Which TSP fund the account holds.
+
+    One fund, not an allocation: TSP reports units per fund and a member in a
+    single Lifecycle fund -- the common case -- has exactly one unit count.
+    Multi-fund support belongs in the statement importer, which already reads a
+    row per fund, rather than in a config string nobody can keep in sync.
+    :return: The fund name as the price file spells it, or "" when unset
+    :rtype: str
+    """
+
+    return get_config().get(section="TSP", option="fund", fallback="").strip()
+
+
+def get_tsp_units() -> tuple[float | None, str]:
+    """
+    The unit count to value, and the date it was true.
+
+    Both, always. A TSP mark is units times a share price and the two are true
+    as of different days -- the price is today's, the units are as old as the
+    last statement. Returning the count alone would leave every caller free to
+    present a three-month-old number as current, which is the failure this
+    broker exists to avoid.
+    :return: (units, as-of date as written); units is None when unset
+    :rtype: tuple[float | None, str]
+    """
+
+    config = get_config()
+    raw: str = config.get(section="TSP", option="units", fallback="").strip()
+    as_of: str = config.get(section="TSP", option="units_as_of", fallback="").strip()
+
+    try:
+        return (float(raw) if raw else None), as_of
+
+    except ValueError:
+        # A typo must not read as zero units, which would value the account at
+        # nothing and look like a real answer.
+        return None, as_of
+
+
+def get_tsp_price_url() -> str:
+    """
+    Where the published share price history lives.
+
+    Config rather than a constant because it is the one part of this broker
+    that TSP can move without warning, and a URL in a config file is fixable
+    without a release. ``--prices`` reads a downloaded copy instead, which is
+    also the path for a machine that cannot reach tsp.gov at all.
+    :return: The URL, or "" when unset
+    :rtype: str
+    """
+
+    return get_config().get(section="TSP", option="price_url", fallback="").strip()

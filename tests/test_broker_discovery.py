@@ -20,7 +20,7 @@ REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
 
 EXPECTED_KEYS = {"path", "dbpath", "nvpath", "argspath"}
-SHIPPED = ("ally", "fidelity", "schwab529plan", "snaptrade")
+SHIPPED = ("ally", "fidelity", "schwab529plan", "snaptrade", "tsp")
 
 
 def _fresh_loader(user_root: Path | None = None) -> BrokerLoader:
@@ -107,6 +107,7 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
         from brokers.fidelity import Fidelity
         from brokers.schwab529plan import Schwab529plan
         from brokers.snaptrade import SnapTradeBroker
+        from brokers.tsp import Tsp
 
         brokers = _fresh_loader().get_brokers()
 
@@ -115,6 +116,7 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
             ("fidelity", Fidelity),
             ("schwab529plan", Schwab529plan),
             ("snaptrade", SnapTradeBroker),
+            ("tsp", Tsp),
         ):
             with self.subTest(broker=name):
                 module = BrokerLoader.load_broker(broker_path=brokers[name]["path"])

@@ -8,6 +8,9 @@ dependencies = [
     "playwright>=1.52",
     # 1.x imports pkg_resources, which no longer exists on Python 3.14.
     "playwright-stealth>=2",
+    # Reads TSP quarterly statements, which are the only place a unit count
+    # is stated without a login.
+    "pypdf>=5",
     "requests>=2.33.1",
     "rich>=13.7",
     "snaptrade-python-sdk>=12.0.4",

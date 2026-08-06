@@ -1,0 +1,22 @@
+Quarterly Account Statement
+Thrift Savings Plan (Uniformed Services)
+Account Summary 04-01-2026 to 06-30-2026
+Opening Balance $2,800.00
+Closing Balance $3,500.00
+Contributions and Earnings
+You
+$3,500.00 100%
+Employer
+$175.00 5%
+Total
+$3,675.00 100%
+Activity Detail by Fund
+04-01-2026 to 06-30-2026 Asset Class
+Lifecycle Individual
+Fund Name L 2060 C Fund
+Opening Balance $1,500.00 $1,300.00
+Contributions $200.00 $100.00
+Gains/Losses $300.00 $100.00
+Closing Balance $2,000.00 $1,500.00
+Closing Units 100.000 50.000
+Unit Price (NAV) 20.000000 30.000000

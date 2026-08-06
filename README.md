@@ -28,15 +28,14 @@ all the accounts you own.
 ## :wrench: Features
 
 - [x] Multi-broker support (Fidelity, Schwab and anything else via SnapTrade,
-      plus Ally Invest and Schwab 529 scrapers for what SnapTrade does not
-      cover)
+      plus Ally Invest and Schwab 529 scrapers, and TSP from public data, for
+      what SnapTrade does not cover)
 - [x] Automatic data scraping (requests + Playwright)
 - [x] Google Sheets sync
 - [x] CLI commands for automation
 - [x] Credentials stored in the OS keyring
 - [x] Account history: numeric balances, holdings and transactions over time
-- [ ] More brokers: TSP needs a scraper — it is not one of the brokerages
-      SnapTrade covers. Vanguard needs no code at all; link it.
+- [ ] More brokers. Vanguard needs no code at all; link it through SnapTrade.
 - [ ] Net worth tracking over time
 - [ ] Asset allocation breakdown
 - [ ] Scheduling (cron / background jobs)
@@ -73,7 +72,8 @@ guarded by bot detection, a session worth keeping between runs, and a page that
 only exists after JavaScript has run; it subclasses `BrowserConnection`, which
 owns the whole Playwright lifecycle: Fidelity and Ally. An **API-backed** broker
 has no login at all — its key lives in config and the OS keyring — and
-subclasses `ApiConnection`: SnapTrade.
+subclasses `ApiConnection`: SnapTrade, and TSP, which holds no key either
+because the data it reads is published.
 
 ---
 
@@ -365,6 +365,73 @@ Connections expire after a few weeks and re-authorising is a browser step —
 `scripts/snaptrade_register.py link` again. Until then the sync is unattended.
 
 `scripts/snaptrade_coverage.py` lists every brokerage SnapTrade supports.
+
+### TSP
+
+**The Thrift Savings Plan needs no login at all.** TSP computes a balance the
+same way every day — units held times that fund's share price — and it publishes
+the share prices as a public file. So the daily path has no credential in it,
+nothing to expire, and nothing to re-authorise. A run cannot fail because a
+session went stale, which is the failure mode that makes the usual aggregators
+give up on this account and show nothing.
+
+```bash
+uv run stonksmith tsp -M tsp
+```
+
+Units are the half TSP does not publish, because they are the account's own
+state. They come from a quarterly statement — or from a balance you read off
+the site, see below — and they only move on a transaction:
+
+```bash
+uv run stonksmith tsp -M tsp -o STATEMENT=~/Downloads/statement.pdf
+```
+
+That reads `Closing Units` straight off the statement and remembers the period
+it closed on. Between statements, put the same number in the config once:
+
+```ini
+[TSP]
+fund = L 2060
+units = 302.116
+units_as_of = 2026-06-30
+```
+
+`--units` and `--units-as-of` override it for a single run, and `--prices`
+reads a share price file already on disk instead of downloading one — useful
+when the machine cannot reach tsp.gov.
+
+**You do not have to wait for a statement.** The TSP site states a balance and
+the date it is true for, and never states a unit count — but a balance *is*
+units × that day's price, so the division inverts it exactly:
+
+```bash
+uv run stonksmith tsp -M tsp --balance 7810.84 --balance-as-of 2026-08-05
+```
+
+```text
+Balance $7,810.84 on 2026-08-05 at $24.7344 (2026-08-05) = 315.7885 units
+Store it: [TSP] units = 315.7885, units_as_of = 2026-08-05
+```
+
+So any moment spent logged in is worth a fresh unit count, and the two numbers
+on the dashboard are all it takes. The derived count is what belongs in the
+config — the balance itself is deliberately not a config key, because it is
+true for exactly one day and storing it would leave a value that silently rots.
+
+A balance is converted against the price on or before its date, since TSP does
+not revalue on a weekend or a holiday. If the price file is too old to cover
+the balance's date, the run says so and refuses rather than dividing by a stale
+price and inventing a unit count.
+
+**Every mark says how old its unit count is.** A value carried on a
+three-month-old count is still exact arithmetic, but it is missing every
+contribution since, and the number itself gives no sign of that. So the run
+prints which input supplied the units and what date they were true, and warns
+once the count is old enough to have missed a contribution. The error is
+bounded by one contribution, it corrects itself at the next statement, and it
+is stated rather than hidden — which is the whole reason this broker values the
+account instead of refusing to.
 
 Manage stored credentials and scraped balances:
 
