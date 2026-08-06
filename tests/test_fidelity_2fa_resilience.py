@@ -14,6 +14,8 @@ from unittest.mock import MagicMock, patch
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
+import etc.browser_connection as browser_mod
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 
@@ -74,12 +76,12 @@ class BrowserClosedDetectionTests(unittest.TestCase):
             "Locator.click: Target page, context or browser has been closed"
         )
 
-        self.assertTrue(fidelity_mod._browser_was_closed(error=error))
+        self.assertTrue(browser_mod.browser_was_closed(error=error))
 
     def test_does_not_misread_an_ordinary_error(self) -> None:
         error = PlaywrightError("Locator.click: strict mode violation")
 
-        self.assertFalse(fidelity_mod._browser_was_closed(error=error))
+        self.assertFalse(browser_mod.browser_was_closed(error=error))
 
 
 class CapturePageTests(unittest.TestCase):
@@ -89,7 +91,7 @@ class CapturePageTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
-        self._logs_patch = patch.object(fidelity_mod, "logs_path", self.tmp / "logs")
+        self._logs_patch = patch.object(browser_mod, "logs_path", self.tmp / "logs")
         self._logs_patch.start()
 
     def tearDown(self) -> None:

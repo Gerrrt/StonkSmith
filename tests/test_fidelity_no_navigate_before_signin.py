@@ -18,6 +18,8 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import etc.browser_connection as browser_mod
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 LOGIN_URL = "https://digital.fidelity.com/prgw/digital/signin/retail"
@@ -53,7 +55,7 @@ def setUpModule() -> None:
     global _profile_home
 
     _profile_home = tempfile.TemporaryDirectory()
-    fidelity_mod.playwright_path = Path(_profile_home.name)
+    browser_mod.playwright_path = Path(_profile_home.name)
 
 
 def tearDownModule() -> None:

@@ -18,6 +18,8 @@ from unittest.mock import MagicMock, patch
 
 from playwright.sync_api import Error as PlaywrightError
 
+import etc.browser_connection as browser_mod
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 REFUSED_PAGE = """
@@ -67,7 +69,7 @@ class _IsolatedBrokerTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         # capture_page() reads this at call time from the module namespace.
-        self._logs_patch = patch.object(fidelity_mod, "logs_path", self.tmp / "logs")
+        self._logs_patch = patch.object(browser_mod, "logs_path", self.tmp / "logs")
         self._logs_patch.start()
 
     def tearDown(self) -> None:

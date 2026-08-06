@@ -16,6 +16,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import etc.browser_connection as browser_mod
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 # The real redirect observed in the wild.
@@ -61,7 +63,7 @@ def setUpModule() -> None:
     global _profile_home
 
     _profile_home = tempfile.TemporaryDirectory()
-    fidelity_mod.playwright_path = Path(_profile_home.name)
+    browser_mod.playwright_path = Path(_profile_home.name)
 
 
 def tearDownModule() -> None:

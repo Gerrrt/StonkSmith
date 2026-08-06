@@ -1,38 +1,28 @@
 """
 Fidelity broker class.
 
+What is left here is Fidelity: its URLs, the markers that tell a signed-in page
+from a refused one, and its 2FA flow. Starting, attaching to, persisting and
+tearing down the browser all live in etc.browser_connection, which Ally and any
+other browser-backed broker share.
+
 BrokerLoader discovers this package by the presence of this file and imports it by
 path, reading the module-level ``Broker`` alias at the bottom. Imports here must be
 absolute: the module is executed under the synthetic name "broker" with no package,
 so relative imports would fail.
 """
 
-import contextlib
-import json
-import warnings
-from datetime import UTC, datetime
-from pathlib import Path
+from typing import ClassVar
 from urllib.parse import urlparse
 
 from playwright.sync_api import (
-    Browser,
-    BrowserContext,
-    Page,
-    Playwright,
-    TimeoutError,
-    sync_playwright,
-)
-from playwright.sync_api import (
     Error as PlaywrightError,
 )
+from playwright.sync_api import TimeoutError
 from playwright.sync_api._generated import Locator
-from playwright_stealth import Stealth
-from requests import Response
-from requests.exceptions import RequestException
 
-from etc.connection import Connection
+from etc.browser_connection import BrowserConnection, browser_was_closed
 from etc.logger import StonkSmithAdapter
-from etc.paths import logs_path, playwright_path
 
 #: Playwright's default is 30s. These steps are optional or fast-failing, so a
 #: shorter wait keeps a broken selector from stalling the whole login.
@@ -45,11 +35,6 @@ REMEMBER_DEVICE_TEXT = "Don't ask me again on this"
 #: Landing on the summary page after submitting a code involves a redirect
 #: chain, so it gets a longer budget than the individual clicks.
 SUBMIT_TIMEOUT_MS = 15000
-
-#: Playwright raises TargetClosedError when the browser goes away mid-call, but
-#: that class is not exported from playwright.sync_api -- only from a private
-#: module. It subclasses the public Error, so it is identified by message.
-BROWSER_CLOSED_TEXT = "has been closed"
 
 #: Fidelity answers a refused sign-in with a generic error page that still lives
 #: under /signin and is still titled "Log in to Fidelity", so a URL check alone
@@ -76,22 +61,6 @@ SIGN_IN_MARKERS: tuple[str, ...] = (
     "pvdccl-form",
 )
 
-#: --browser values mapped to Playwright channels. "chromium" is the bundled
-#: build; "chrome" is the real Google Chrome binary, which fingerprints much
-#: better but has to be installed separately.
-CHROMIUM_CHANNELS: dict[str, str | None] = {
-    "chromium": None,
-    "chrome": "chrome",
-}
-
-#: Default CDP endpoint. Chrome must be started with --remote-debugging-port,
-#: and since Chrome 136 it refuses to expose that on the default profile, so a
-#: dedicated --user-data-dir is required too.
-CDP_DEFAULT_URL = "http://127.0.0.1:9222"
-
-#: Where the CDP profile lives when StonkSmith prints the launch command.
-CDP_PROFILE_DIRNAME = "cdp-profile"
-
 #: Stand-in username when the session came from a manual sign-in rather than a
 #: stored credential.
 MANUAL_SESSION_LABEL = "manual session"
@@ -112,36 +81,16 @@ def _is_summary_path(url: str) -> bool:
     return urlparse(url=url).path.rstrip("/").endswith(SUMMARY_PATH)
 
 
-def _browser_was_closed(error: Exception) -> bool:
-    """
-    Whether a Playwright error means the browser went away.
-    :param error: The raised Playwright error
-    :return: True when the target was closed
-    """
-
-    return BROWSER_CLOSED_TEXT in str(object=error)
-
-
-def _restrict(path: Path) -> None:
-    """
-    Make a captured file owner-readable only.
-
-    Captures are raw markup from a signed-in brokerage session and can contain
-    account numbers, balances, and 2FA context. Default permissions follow the
-    process umask, which is commonly world-readable.
-    :param path: The file to restrict
-    """
-
-    # Best-effort: a filesystem without POSIX permissions must not turn a
-    # diagnostic capture into a failure.
-    with contextlib.suppress(OSError):
-        path.chmod(mode=0o600)
-
-
-class Fidelity(Connection):
+class Fidelity(BrowserConnection):
     """
     Fidelity broker class
     """
+
+    #: Names the storage-state and trace files. Capitalized because that is
+    #: what shipped: renaming it orphans every existing saved session and
+    #: quietly costs the operator their device-trust cookie.
+    profile_name: ClassVar[str] = "Fidelity"
+    browser_slug: ClassVar[str] = "fidelity"
 
     def __init__(self) -> None:
         super().__init__()
@@ -149,35 +98,6 @@ class Fidelity(Connection):
         self.name = "Fidelity"
         self.login_url = "https://digital.fidelity.com/prgw/digital/signin/retail"
         self.summary_url = "https://digital.fidelity.com/ftgw/digital/portfolio/summary"
-        self.profile_path: Path = playwright_path / "Fidelity.json"
-        self.trace_path: Path = playwright_path / "Fidelity_trace.zip"
-        # Leave language/user-agent/vendor untouched so the session looks like
-        # the real browser. playwright-stealth 2.x keeps a default *_override
-        # for each of these and warns when the evasion is disabled while its
-        # override is still set; the override is unused in that case, and the
-        # library types it as non-Optional, so the warning is what gets muted.
-        with warnings.catch_warnings():
-            warnings.filterwarnings(action="ignore", message=".*_override.*")
-            self.stealth = Stealth(
-                navigator_languages=False,
-                navigator_user_agent=False,
-                navigator_vendor=False,
-            )
-        # The browser is NOT started here. Launching Firefox from __init__ meant
-        # that even `--list-modules` spawned a browser, and the instance had no
-        # owner responsible for closing it. broker_flow() starts it instead, and
-        # teardown() always closes it.
-        # True once a Chromium-family persistent profile is in use: that
-        # directory holds the cookies, so no storage_state file is written.
-        self.persistent_profile: bool = False
-        # True when attached to a browser somebody else started. Nothing we did
-        # not create gets closed.
-        self.attached: bool = False
-        self.tracing_started: bool = False
-        self.playwright: Playwright | None = None
-        self.browser: Browser | None = None
-        self.context: BrowserContext | None = None
-        self.page: Page | None = None
         self.account_dict: dict[str, str] = {}
         self.source_account: str = ""
 
@@ -195,82 +115,6 @@ class Fidelity(Connection):
             },
             logger=self.logger.logger,
         )
-
-    def create_conn_obj(self) -> bool:
-        """
-        Create connection object for Fidelity broker class
-        :return: bool
-        :rtype: bool
-        """
-
-        try:
-            response: Response = self.session.get(url=self.login_url, timeout=10)
-            if not response.ok:
-                # broker_flow() no longer logs a generic connection failure, so
-                # this path has to report itself.
-                self.logger.fail(
-                    msg=(
-                        f"{self.broker} sign-in page returned HTTP "
-                        f"{response.status_code}."
-                    )
-                )
-                return False
-
-        except RequestException as e:
-            self.logger.fail(msg=f"Could not connect to {self.broker}: {e}")
-            return False
-
-        try:
-            self.getDriver()
-
-        except Exception as e:
-            self.logger.fail(msg=f"Could not start browser for {self.broker}: {e}")
-            self.teardown()
-            return False
-
-        return True
-
-    def teardown(self) -> None:
-        """
-        Stop tracing and shut down the browser and Playwright driver.
-
-        Called by Connection.__call__ on every exit path. Without this, each run
-        left an orphaned Firefox process and a running Playwright driver.
-        """
-
-        if self.context is not None:
-            # Save before closing: cookies set during this run (including any
-            # device-trust cookie) are lost otherwise.
-            self.save_session()
-
-            if self.tracing_started:
-                try:
-                    self.context.tracing.stop(path=str(object=self.trace_path))
-
-                except Exception as e:
-                    self.logger.fail(msg=f"Could not write Playwright trace: {e}")
-
-            # Never close a window the operator opened.
-            if not self.attached:
-                self.context.close()
-
-            self.context = None
-
-        # A persistent context owns its browser, so self.browser is None there
-        # and closing the context above already shut the browser down. An
-        # attached browser belongs to the operator: disconnecting happens when
-        # playwright stops, and closing it would shut their window.
-        if self.browser is not None:
-            if not self.attached:
-                self.browser.close()
-
-            self.browser = None
-
-        if self.playwright is not None:
-            self.playwright.stop()
-            self.playwright = None
-
-        self.page = None
 
     def login(self) -> bool:
         """
@@ -296,18 +140,6 @@ class Fidelity(Connection):
         """
 
         return _is_summary_path(url=self.active_page.url)
-
-    def page_body(self) -> str | None:
-        """
-        The current page's markup, lowercased.
-        :return: The body, or None if the page could not be read
-        """
-
-        try:
-            return self.active_page.content().lower()
-
-        except PlaywrightError:
-            return None
 
     def shows_sign_in_form(self) -> bool:
         """
@@ -428,7 +260,7 @@ class Fidelity(Connection):
             return False
 
         except PlaywrightError as e:
-            if _browser_was_closed(error=e):
+            if browser_was_closed(error=e):
                 self.logger.fail(msg="Browser was closed before sign-in finished.")
             else:
                 self.logger.fail(msg=f"Browser error during manual sign-in: {e}")
@@ -487,246 +319,6 @@ class Fidelity(Connection):
         else:
             self.logger.fail(msg=f"Failed to log in to {self.broker} with 2FA")
             return False
-
-    def getDriver(self) -> None:
-        """
-        Initializes webdriver for all follow on functions. Create and apply
-        stealth settings to playwright context wrapper. Create storage for
-        cookies and data.
-        """
-
-        self.playwright = sync_playwright().start()
-
-        # --headed exists so the login flow (and its 2FA prompt) can be
-        # watched. --manual-login requires it: nobody can sign in to a window
-        # they cannot see.
-        headed: bool = bool(
-            getattr(self.args, "headed", False)
-            or getattr(self.args, "manual_login", False)
-        )
-        browser_name: str = str(object=getattr(self.args, "browser", "firefox"))
-
-        if browser_name == "firefox":
-            self.start_firefox(headed=headed)
-
-        elif browser_name == "cdp":
-            self.attach_over_cdp()
-
-        elif browser_name in CHROMIUM_CHANNELS:
-            self.start_chromium(headed=headed, channel=CHROMIUM_CHANNELS[browser_name])
-
-        else:
-            # argparse choices cover the CLI, but a stale config or a
-            # programmatic caller deserves a message, not a KeyError.
-            known: str = ", ".join(["firefox", "cdp", *CHROMIUM_CHANNELS])
-            raise RuntimeError(
-                f"Unknown browser {browser_name!r}; choose one of: {known}"
-            )
-
-        if self.context is None:
-            raise RuntimeError(f"{browser_name} did not produce a browser context")
-
-        try:
-            self.context.tracing.start(
-                name="fidelity_trace", screenshots=True, snapshots=True
-            )
-
-        except PlaywrightError as e:
-            # Tracing is a diagnostic, not a requirement, and a context we
-            # attached to rather than created may not support it.
-            self.tracing_started = False
-            self.logger.highlight(msg=f"Tracing unavailable: {e}")
-
-        else:
-            self.tracing_started = True
-
-        self.stealth.apply_stealth_sync(self.active_page)
-
-    def start_firefox(self, headed: bool) -> None:
-        """
-        Launch bundled Firefox with the saved storage state.
-        :param headed: Whether to show the window
-        """
-
-        if not self.profile_path.exists():
-            self.profile_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(
-                file=str(object=self.profile_path), mode="w", encoding="utf-8"
-            ) as f:
-                json.dump(obj={}, fp=f)
-
-        assert self.playwright is not None
-        self.browser = self.playwright.firefox.launch(
-            headless=not headed,
-            args=["--disable-webgl", "--disable-software-rasterizer"],
-        )
-
-        self.context = self.browser.new_context(storage_state=self.profile_path)
-        self.page = self.context.new_page()
-
-    def start_chromium(self, headed: bool, channel: str | None) -> None:
-        """
-        Launch a Chromium-family browser against a persistent profile
-        directory.
-
-        A persistent profile keeps cookies, history and local storage on disk
-        between runs, so the browser presents as one that has been used before
-        rather than a fresh install. ``channel="chrome"`` uses the real Google
-        Chrome binary, which fingerprints far better than bundled Chromium --
-        but it has to be installed.
-        :param headed: Whether to show the window
-        :param channel: Playwright browser channel, or None for bundled Chromium
-        :raises RuntimeError: if the requested channel is not installed
-        """
-
-        profile_dir: Path = self.chrome_profile_dir()
-        profile_dir.mkdir(parents=True, exist_ok=True)
-
-        assert self.playwright is not None
-
-        try:
-            self.context = self.playwright.chromium.launch_persistent_context(
-                user_data_dir=str(object=profile_dir),
-                channel=channel,
-                headless=not headed,
-                # The single most-checked automation tell.
-                args=["--disable-blink-features=AutomationControlled"],
-            )
-
-        except PlaywrightError as e:
-            # Playwright words this two ways: "Executable doesn't exist at ..."
-            # for a bundled build, "Chromium distribution 'chrome' is not found
-            # at ..." for a channel. Both then suggest `playwright install`.
-            if not any(
-                phrase in str(object=e).lower()
-                for phrase in ("executable doesn't exist", "is not found at")
-            ):
-                raise
-
-            # Playwright downloads browsers separately, and `playwright install
-            # firefox` does not bring Chromium along. Name the exact command.
-            install: str = "chrome" if channel else "chromium"
-            raise RuntimeError(
-                f"The {install} browser is not installed. Run "
-                f"`uv run playwright install {install}` and try again"
-                + (
-                    ", or pass --browser chromium to use the bundled build."
-                    if channel
-                    else "."
-                )
-            ) from e
-
-        # A persistent context owns its browser; there is no separate handle.
-        self.browser = None
-        self.persistent_profile = True
-        self.page = (
-            self.context.pages[0] if self.context.pages else self.context.new_page()
-        )
-
-    def attach_over_cdp(self) -> None:
-        """
-        Attach to a Chrome the operator started and signed into themselves.
-
-        Fidelity's bot protection refuses the login page to a browser that
-        automation launched, before any credentials are entered. Attaching
-        instead of launching sidesteps that: the page load and the sign-in
-        happen in an ordinary browsing session, and StonkSmith only connects
-        afterwards to read the DOM.
-        :raises RuntimeError: if nothing is listening, or no context is open
-        """
-
-        endpoint: str = str(
-            object=getattr(self.args, "cdp_url", None) or CDP_DEFAULT_URL
-        )
-
-        assert self.playwright is not None
-
-        try:
-            self.browser = self.playwright.chromium.connect_over_cdp(endpoint)
-
-        except Exception as e:
-            raise RuntimeError(
-                f"Nothing is listening for CDP on {endpoint}. Start Chrome with "
-                f"remote debugging first:\n\n    {self.cdp_launch_command()}\n\n"
-                "then sign in to Fidelity in that window and re-run."
-            ) from e
-
-        # Set before any further validation. create_conn_obj() calls teardown()
-        # when this method raises, and teardown closes self.browser unless it
-        # knows the session is attached -- which would shut the operator's
-        # window on the error paths below.
-        self.attached = True
-        # The operator's own profile is the cookie store.
-        self.persistent_profile = True
-
-        if not self.browser.contexts:
-            raise RuntimeError(
-                "Attached, but that Chrome has no open window. Open a tab and "
-                "sign in to Fidelity, then re-run."
-            )
-
-        # Reuse the existing context: it holds the cookies from the operator's
-        # sign-in. A new context would start empty and defeat the whole point.
-        self.context = self.browser.contexts[0]
-        self.page = (
-            self.context.pages[0] if self.context.pages else self.context.new_page()
-        )
-
-    def cdp_launch_command(self) -> str:
-        """
-        The command that starts Chrome with remote debugging enabled.
-
-        Chrome 136 and later refuse --remote-debugging-port on the default
-        profile, so this names a dedicated one. Signing in there once is enough:
-        the profile persists.
-        :return: A shell command
-        """
-
-        profile: Path = playwright_path / CDP_PROFILE_DIRNAME
-        port: int = (
-            urlparse(
-                url=str(object=getattr(self.args, "cdp_url", None) or CDP_DEFAULT_URL)
-            ).port
-            or 9222
-        )
-
-        return (
-            '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" '
-            f"--remote-debugging-port={port} "
-            f'--user-data-dir="{profile}" '
-            f'"{self.login_url}"'
-        )
-
-    def chrome_profile_dir(self) -> Path:
-        """
-        Where the persistent Chromium profile lives.
-
-        Defaults to a directory StonkSmith owns. --profile-dir can point at
-        another one, including a real browser profile -- at the cost of that
-        browser needing to be closed while StonkSmith runs.
-        :return: The user-data directory
-        """
-
-        override = getattr(self.args, "profile_dir", None)
-        if override:
-            return Path(override).expanduser()
-
-        return playwright_path / "chrome-profile"
-
-    @property
-    def active_page(self) -> Page:
-        """
-        The live Playwright page, guaranteed non-None.
-        :return: The current page
-        :raises RuntimeError: if the browser has not been started
-        """
-
-        if self.page is None:
-            raise RuntimeError(
-                "Browser not started: create_conn_obj() must run before login."
-            )
-
-        return self.page
 
     def wait_for_loading_sign(self, timeout: int = 30000) -> None:
         """
@@ -850,7 +442,7 @@ class Fidelity(Connection):
             return False, False
 
         except PlaywrightError as e:
-            if _browser_was_closed(error=e):
+            if browser_was_closed(error=e):
                 # Typically the operator closed the headed browser window.
                 self.logger.fail(
                     msg="Browser was closed before the login flow finished."
@@ -908,81 +500,6 @@ class Fidelity(Connection):
         body: str | None = self.page_body()
         return body is not None and any(m in body for m in REFUSED_PAGE_MARKERS)
 
-    def save_session(self) -> bool:
-        """
-        Persist cookies and local storage so the next run is a returning
-        browser rather than a brand-new one.
-
-        The context was created from ``storage_state`` but the state was never
-        written back, so every run started with an empty jar. That defeats the
-        "Don't ask me again on this device" checkbox -- the trust cookie it sets
-        was discarded on exit -- and makes each login look like a new device.
-        :return: True if the session was written
-        """
-
-        if self.context is None:
-            return False
-
-        if self.persistent_profile:
-            # Cookies already live in the profile directory. Writing
-            # storage_state as well would leave a Chromium jar behind that the
-            # next Firefox run would load as if it were its own.
-            return True
-
-        try:
-            self.profile_path.parent.mkdir(parents=True, exist_ok=True)
-            self.context.storage_state(path=str(object=self.profile_path))
-            # Session cookies: owner-readable only.
-            _restrict(path=self.profile_path)
-
-        except Exception as e:
-            self.logger.fail(msg=f"Could not save the browser session: {e}")
-            return False
-
-        return True
-
-    def capture_page(self, reason: str) -> Path | None:
-        """
-        Save the current page so selectors can be fixed against real markup.
-
-        Writes the HTML, and a screenshot when possible, from wherever the run
-        got stuck -- including inside the login flow, which a module-level
-        diagnostic cannot reach because modules only run *after* a successful
-        login. modules/fidelity_module.py calls this too when a scrape finds
-        nothing.
-        :param reason: Short slug describing why the capture happened
-        :return: Path to the saved HTML, or None if nothing could be captured
-        """
-
-        if self.page is None:
-            return None
-
-        stamp: str = datetime.now(tz=UTC).strftime(format="%Y%m%d-%H%M%S")
-        target: Path = logs_path / f"fidelity-{reason}-{stamp}.html"
-
-        try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(data=self.active_page.content(), encoding="utf-8")
-            _restrict(path=target)
-
-        except Exception as e:
-            self.logger.fail(msg=f"Could not capture the page: {e}")
-            return None
-
-        self.logger.fail(msg=f"Saved the page markup to {target}")
-
-        try:
-            shot: Path = target.with_suffix(suffix=".png")
-            self.active_page.screenshot(path=str(object=shot))
-            _restrict(path=shot)
-            self.logger.fail(msg=f"Saved a screenshot to {shot}")
-
-        except Exception:
-            # A screenshot is a nice-to-have; the HTML is what matters.
-            pass
-
-        return target
-
     def login_2FA(self, code: str) -> bool:
         """
         Attempt login with 2FA code for Fidelity broker class
@@ -1018,7 +535,7 @@ class Fidelity(Connection):
             return False
 
         except PlaywrightError as e:
-            if _browser_was_closed(error=e):
+            if browser_was_closed(error=e):
                 self.logger.fail(msg="Browser was closed before 2FA completed.")
                 return False
 

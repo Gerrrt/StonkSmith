@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
+import etc.browser_connection as browser_mod
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 
@@ -36,7 +38,7 @@ class ManualLoginTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
-        self._logs_patch = patch.object(fidelity_mod, "logs_path", self.tmp / "logs")
+        self._logs_patch = patch.object(browser_mod, "logs_path", self.tmp / "logs")
         self._logs_patch.start()
 
     def tearDown(self) -> None:
@@ -169,7 +171,7 @@ class HeadedImplicationTests(unittest.TestCase):
 
         playwright = MagicMock()
         with patch.object(
-            fidelity_mod,
+            browser_mod,
             "sync_playwright",
             return_value=MagicMock(start=lambda: playwright),
         ):

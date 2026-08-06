@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 
 from playwright.sync_api import Error as PlaywrightError
 
+import etc.browser_connection as browser_mod
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 
@@ -56,7 +58,7 @@ class BrowserSelectionTests(unittest.TestCase):
 
     def _launch(self, broker, playwright):
         with patch.object(
-            fidelity_mod,
+            browser_mod,
             "sync_playwright",
             return_value=MagicMock(start=lambda: playwright),
         ):
@@ -162,7 +164,7 @@ class UnknownBrowserTests(unittest.TestCase):
         )
 
         with (
-            patch.object(fidelity_mod, "sync_playwright", return_value=MagicMock()),
+            patch.object(browser_mod, "sync_playwright", return_value=MagicMock()),
             self.assertRaises(RuntimeError) as caught,
         ):
             broker.getDriver()
@@ -203,7 +205,7 @@ class MissingBrowserGuidanceTests(unittest.TestCase):
 
     def _run(self, broker, playwright):
         with patch.object(
-            fidelity_mod,
+            browser_mod,
             "sync_playwright",
             return_value=MagicMock(start=lambda: playwright),
         ):
