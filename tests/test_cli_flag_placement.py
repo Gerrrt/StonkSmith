@@ -83,7 +83,7 @@ class VerboseFlagPlacementTests(unittest.TestCase):
     def test_every_broker_accepts_them(self) -> None:
         # std_parser is a parent of every broker subparser, so this holds for
         # any broker added later too.
-        for broker in ("fidelity", "schwab529plan", "snaptrade"):
+        for broker in ("ally", "fidelity", "schwab529plan", "snaptrade"):
             with self.subTest(broker=broker):
                 self.assertTrue(_parse(broker, "-M", "x", "--verbose").verbose)
 

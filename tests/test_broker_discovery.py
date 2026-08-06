@@ -20,7 +20,7 @@ REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
 
 EXPECTED_KEYS = {"path", "dbpath", "nvpath", "argspath"}
-SHIPPED = ("fidelity", "schwab529plan", "snaptrade")
+SHIPPED = ("ally", "fidelity", "schwab529plan", "snaptrade")
 
 
 def _fresh_loader(user_root: Path | None = None) -> BrokerLoader:
@@ -103,6 +103,7 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
     def test_the_package_export_matches_the_path_loaded_class(self) -> None:
         # Not assertIs: load_broker never registers in sys.modules, so the
         # path-loaded class is a distinct object from the imported one.
+        from brokers.ally import Ally
         from brokers.fidelity import Fidelity
         from brokers.schwab529plan import Schwab529plan
         from brokers.snaptrade import SnapTradeBroker
@@ -110,6 +111,7 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
         brokers = _fresh_loader().get_brokers()
 
         for name, exported in (
+            ("ally", Ally),
             ("fidelity", Fidelity),
             ("schwab529plan", Schwab529plan),
             ("snaptrade", SnapTradeBroker),
