@@ -1045,6 +1045,120 @@ class PositionMappingTests(unittest.TestCase):
         self.assertIsNone(holding.earnings)
 
 
+class InstrumentPositionTests(unittest.TestCase):
+    """
+    The shape SnapTrade actually returns today.
+
+    Verbatim from a live account: what is held is described under
+    ``instrument``, and the average purchase price is called ``cost_basis``.
+    Reading only the older nested ``symbol``/``average_purchase_price`` names
+    against this produces a holding of Nones -- a row that is written, looks
+    real, and says nothing. Numbers here are the real ones, so the arithmetic
+    below is checkable against a brokerage statement.
+    """
+
+    FSKAX: ClassVar[dict[str, Any]] = {
+        "instrument": {
+            "kind": "mutualfund",
+            "id": "6e0b7961-1e4a-4953-b780-65d29224e230",
+            "symbol": "FSKAX",
+            "raw_symbol": "FSKAX",
+            "description": "Fidelity Total Market Index Fund",
+            "currency": "USD",
+            "exchange": "XNAS",
+        },
+        "units": "8.93",
+        "price": "213.32",
+        "cost_basis": "181.91",
+        "currency": "USD",
+        "cash_equivalent": False,
+    }
+
+    CASH: ClassVar[dict[str, Any]] = {
+        "instrument": {
+            "kind": "other",
+            "symbol": "FCASH",
+            "raw_symbol": "FCASH",
+            "description": "CASH",
+            "currency": "USD",
+        },
+        "units": "0.08",
+        "price": "1",
+        "cost_basis": "1",
+        "currency": "USD",
+    }
+
+    def test_the_ticker_and_name_come_from_the_instrument(self) -> None:
+        holding = position_holding(position=self.FSKAX)
+
+        self.assertEqual(holding.symbol, "FSKAX")
+        self.assertEqual(holding.name, "Fidelity Total Market Index Fund")
+
+    def test_string_numbers_are_read_as_numbers(self) -> None:
+        # Units and price arrive as strings from this endpoint.
+        holding = position_holding(position=self.FSKAX)
+
+        self.assertEqual(holding.units, 8.93)
+        self.assertEqual(holding.price, 213.32)
+        self.assertAlmostEqual(holding.value or 0, 1904.95, places=2)
+
+    def test_cost_basis_is_per_unit_despite_the_name(self) -> None:
+        # 181.91 against a 213.32 price is an average purchase price, not what
+        # the whole position cost. Storing it as-is would understate the basis
+        # by a factor of the unit count.
+        self.assertAlmostEqual(
+            position_holding(position=self.FSKAX).cost_basis or 0, 1624.46, places=2
+        )
+
+    def test_a_cash_like_instrument_maps_the_same_way(self) -> None:
+        holding = position_holding(position=self.CASH)
+
+        self.assertEqual(holding.symbol, "FCASH")
+        self.assertEqual(holding.name, "CASH")
+        self.assertAlmostEqual(holding.value or 0, 0.08, places=4)
+
+    def test_the_currency_comes_through(self) -> None:
+        self.assertEqual(position_holding(position=self.FSKAX).currency, "USD")
+
+    def test_a_flattened_instrument_does_not_crash_the_run(self) -> None:
+        holding = position_holding(
+            position={"instrument": "FSKAX", "units": "2", "price": "10"}
+        )
+
+        self.assertIsNone(holding.symbol)
+        self.assertEqual(holding.value, 20.0)
+
+    def test_the_older_nested_shape_still_reads(self) -> None:
+        # Both shapes, so a payload that has not moved yet is not silently
+        # turned into a row of Nones.
+        holding = position_holding(
+            position={
+                "symbol": {"symbol": {"symbol": "VTI", "description": "Vanguard"}},
+                "units": 3,
+                "price": 250,
+                "average_purchase_price": 200,
+            }
+        )
+
+        self.assertEqual(holding.symbol, "VTI")
+        self.assertEqual(holding.cost_basis, 600.0)
+
+    def test_a_zero_cost_basis_is_kept_rather_than_falling_through(self) -> None:
+        # A genuinely free position -- a grant, a spinoff -- reports 0. Treating
+        # that as "absent" would fall back to the old field and, finding
+        # nothing, drop the basis entirely.
+        holding = position_holding(
+            position={
+                "instrument": {"symbol": "GRANT"},
+                "units": "10",
+                "price": "5",
+                "cost_basis": "0",
+            }
+        )
+
+        self.assertEqual(holding.cost_basis, 0.0)
+
+
 class ActivityMappingTests(unittest.TestCase):
     """A SnapTrade activity becomes a transaction row."""
 

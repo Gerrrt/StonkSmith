@@ -91,6 +91,7 @@ class _FakeClient:
         self.accounts: list[dict[str, Any]] = []
         self.positions: list[dict[str, Any]] = []
         self.positions_error: Exception | None = None
+        self.wrap_positions = False
         self.activities: list[dict[str, Any]] = []
         self.activity_calls: list[dict[str, Any]] = []
         self.page_size = 2
@@ -115,10 +116,16 @@ class _FakeClient:
             del kwargs
             return self.outer.accounts
 
-        def get_all_account_positions(self, **kwargs: Any) -> list[dict[str, Any]]:
+        def get_all_account_positions(self, **kwargs: Any) -> Any:
             del kwargs
             if self.outer.positions_error is not None:
                 raise self.outer.positions_error
+            if self.outer.wrap_positions:
+                # What the endpoint actually returns: an envelope, not a list.
+                return {
+                    "positions": self.outer.positions,
+                    "data_freshness": {"as_of": "2026-08-06T02:28:23Z"},
+                }
             return self.outer.positions
 
         def get_account_activities(self, **kwargs: Any) -> dict[str, Any]:
@@ -391,6 +398,27 @@ class FetchPositionsTests(unittest.TestCase):
     ) -> None:
         # A brokerage that pre-aggregates -- a Schwab-held 529 -- reports a
         # balance and zero positions. That is a fact about the account.
+        self.assertEqual(self.broker.fetch_positions(account_id="acct-1"), [])
+
+    def test_the_positions_envelope_is_unwrapped(self) -> None:
+        # The regression. Reading the envelope with as_rows iterates its keys,
+        # so the first row it tries to build is dict("positions") -- which
+        # raises "dictionary update sequence element #0 has length 1; 2 is
+        # required" for every account on every brokerage, since the shape has
+        # nothing to do with the data.
+        self.client.wrap_positions = True
+        self.client.positions = [
+            {"instrument": {"symbol": "FSKAX"}, "units": "8.93", "price": "213.32"}
+        ]
+
+        self.assertEqual(
+            self.broker.fetch_positions(account_id="acct-1"),
+            [{"instrument": {"symbol": "FSKAX"}, "units": "8.93", "price": "213.32"}],
+        )
+
+    def test_an_empty_envelope_reads_as_no_positions(self) -> None:
+        self.client.wrap_positions = True
+
         self.assertEqual(self.broker.fetch_positions(account_id="acct-1"), [])
 
 
