@@ -46,6 +46,11 @@ def _run(markup: str, capture: str | None = "/tmp/ally-empty-account-rail.html")
     )
     context = MagicMock()
 
+    # A real run carries the flag as False. Left as a MagicMock it is truthy,
+    # which sends every one of these down the --from-prices path -- where the
+    # rail is never read, so half of them would pass for the wrong reason.
+    context.args.from_prices = False
+
     module.on_login(context, connection)
     return connection, context
 

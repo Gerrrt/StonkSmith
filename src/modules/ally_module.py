@@ -12,7 +12,12 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from brokers.ally.saver import Saver
 from etc.connection import Connection
-from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from etc.context import (
+    BrokerDbProtocol,
+    Context,
+    SnapshotDbProtocol,
+    SnapshotReadDbProtocol,
+)
 from etc.records import AccountIdentity, Holding
 from helpers.ally import (
     INVESTMENT_KIND,
@@ -26,6 +31,7 @@ from helpers.ally import (
     sidebar_accounts,
 )
 from helpers.normalize import format_amount, format_units, to_amount, to_currency
+from helpers.quotes import QuotesUnavailable, daily_closes, repriced
 from helpers.sheets import SheetsUnavailable
 
 #: The account-value block above the holdings table. Waited for rather than the
@@ -43,6 +49,27 @@ RENDER_TIMEOUT_MS = 30000
 #: worth reporting rather than one worth waiting on -- the run has its
 #: positions either way and an extra half minute buys nothing.
 SIDEBAR_TIMEOUT_MS = 5000
+
+#: How far back to look for each account's last sighting. Comfortably more
+#: snapshots than a handful of accounts accumulate between sign-ins.
+SNAPSHOT_SCAN_LIMIT = 200
+
+#: Where published closes come from for a --from-prices run. One symbol at a
+#: time; a month of history so a run over a long weekend still finds a price to
+#: fall back to.
+QUOTE_URL = (
+    "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1mo"
+)
+
+#: The feed answers a plain requests User-Agent, but says less about who is
+#: asking than it might. Same shape as the TSP broker's, and for the same
+#: reason: be identifiable.
+QUOTE_USER_AGENT = (
+    "Mozilla/5.0 (compatible; stonksmith/0.1.0; +https://github.com/Gerrrt/StonkSmith)"
+)
+
+#: How long to wait for one symbol's prices.
+QUOTE_TIMEOUT_SECONDS = 20
 
 #: Heading of the figure used as the account balance. Ally's own summary, and
 #: the one number that includes uninvested cash as well as positions.
@@ -130,6 +157,203 @@ class AllyModule:
         options: dict[str, Any] = module_options or {}
         self.export_format = options.get("EXPORT", "print")
 
+    def fetch_closes(
+        self, context: Context, connection: Connection, symbol: str
+    ) -> dict[datetime.date, float] | None:
+        """Published closes for one symbol.
+
+        Args:
+            context (Context): Used for logging.
+            connection (Connection): Supplies the requests session.
+            symbol (str): The ticker to price.
+
+        Returns:
+            dict[datetime.date, float] | None: Closes by day, or None when the
+            feed could not be read.
+
+        """
+        session = getattr(connection, "session", None)
+
+        if session is None:
+            context.log.fail(msg="No HTTP session to fetch prices with.")
+            return None
+
+        try:
+            response = session.get(
+                url=QUOTE_URL.format(symbol=symbol),
+                headers={"User-Agent": QUOTE_USER_AGENT},
+                timeout=QUOTE_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            return daily_closes(payload=response.text)
+
+        except QuotesUnavailable as e:
+            context.log.fail(msg=f"No prices for {symbol}: {e}")
+            return None
+
+        except Exception as e:
+            context.log.fail(msg=f"Could not reach the price feed for {symbol}: {e}")
+            return None
+
+    def value_from_prices(self, context: Context, connection: Connection) -> bool:
+        """Value the account from published prices and the last known units.
+
+        Ally refuses a restored session however it is stored, so a daily run
+        cannot scrape. It does not have to: units only change when a deposit
+        lands, and a published price needs no login. This multiplies what the
+        last signed-in run recorded by what the market says today.
+
+        Two ages are reported rather than one. The price is the market's, from
+        whenever it was last struck; the units are the broker's, from whenever
+        somebody last signed in. A run that printed a total without saying how
+        old either half is would be claiming a freshness it does not have --
+        and the units are the half that goes quietly wrong, because a deposit
+        adds units this run cannot see.
+
+        Args:
+            context (Context): Logging, database, and shared resources.
+            connection (Connection): The broker, for its HTTP session.
+
+        Returns:
+            bool: False when nothing could be valued.
+
+        """
+        db: BrokerDbProtocol = context.db
+
+        if not isinstance(db, SnapshotReadDbProtocol):
+            context.log.fail(
+                msg=(
+                    "This database cannot be read back, so there are no units "
+                    "to value. Run with --manual-login once to record them."
+                )
+            )
+            return False
+
+        rows: list[tuple[Any, ...]] = db.get_holdings()
+
+        if not rows:
+            context.log.fail(
+                msg=(
+                    "No holdings on record to value. Run with --manual-login "
+                    "once so a signed-in run can record the units."
+                )
+            )
+            return False
+
+        # When each account was last actually read, for the units half of the
+        # staleness report. Newest first, so the first sighting is the newest.
+        last_seen: dict[str, str] = {}
+
+        for row in db.get_snapshots(limit=SNAPSHOT_SCAN_LIMIT):
+            last_seen.setdefault(str(object=row[1]), str(object=row[3]))
+
+        today: datetime.date = datetime.datetime.now(tz=datetime.UTC).date()
+        priced: dict[str, list[Holding]] = {}
+        dates: dict[str, datetime.date] = {}
+        closes: dict[str, dict[datetime.date, float]] = {}
+
+        for row in rows:
+            account, symbol, name, units = (
+                str(object=row[0]),
+                str(object=row[1] or ""),
+                row[2],
+                row[3],
+            )
+
+            if not symbol:
+                context.log.fail(
+                    msg=f"{account}: a holding with no symbol cannot be priced."
+                )
+                continue
+
+            if symbol not in closes:
+                found = self.fetch_closes(
+                    context=context, connection=connection, symbol=symbol
+                )
+
+                if found is None:
+                    return False
+
+                closes[symbol] = found
+
+            marked = repriced(
+                holding=Holding(
+                    symbol=symbol,
+                    name=name,
+                    units=units,
+                    cost_basis=row[8],
+                    currency=str(object=row[9] or "USD"),
+                ),
+                prices=closes[symbol],
+                day=today,
+            )
+
+            if marked is None:
+                context.log.fail(
+                    msg=(
+                        f"{account}: {symbol} could not be valued -- no units on "
+                        "record, or no published price for them."
+                    )
+                )
+                continue
+
+            holding, when = marked
+            priced.setdefault(account, []).append(holding)
+            dates[account] = when
+
+            context.log.success(
+                msg=(
+                    f"{account}: {format_units(holding.units)} {symbol} x "
+                    f"{format_amount(holding.price, holding.currency)} ({when}) "
+                    f"= {format_amount(holding.value, holding.currency)}"
+                )
+            )
+
+        if not priced:
+            return False
+
+        timestamp: str = datetime.datetime.now(tz=datetime.UTC).strftime(
+            format="%Y-%m-%d %H:%M:%S",
+        )
+
+        for account, positions in priced.items():
+            total: float = round(
+                number=sum(p.value or 0.0 for p in positions), ndigits=2
+            )
+            when = dates[account]
+
+            # Said plainly rather than left to be inferred from a date: units
+            # are the half that goes quietly wrong. A deposit adds units this
+            # run cannot see, so the total drifts low and keeps drifting until
+            # somebody signs in again.
+            observed: str = last_seen.get(account, "")
+            context.log.display(
+                msg=(
+                    f"{account}: priced at {when}; units as recorded "
+                    f"{observed or 'at an unknown time'}. Re-run with "
+                    "--manual-login after a deposit."
+                )
+            )
+
+            db.save_snapshot(
+                account=AccountIdentity(
+                    account_key=account,
+                    display_name=account,
+                    kind="INVESTMENT",
+                ),
+                scraped_at=timestamp,
+                value=total,
+                currency=positions[0].currency,
+                # The date the value is for: the price's, not the run's. That
+                # is what as_of is documented to mean, and it has been NULL on
+                # every Ally snapshot so far.
+                as_of=when.isoformat(),
+                holdings=positions,
+            )
+
+        context.log.success(msg="Ally valued from published prices.")
+        return True
+
     def on_login(self, context: Context, connection: Connection) -> bool:
         """Scrape the holdings page and persist what it says.
 
@@ -150,6 +374,13 @@ class AllyModule:
 
         """
         context.log.highlight(msg=f"Starting Ally sync for: {connection.username}")
+
+        # Asked for explicitly, never inferred from the browser being absent. A
+        # scrape whose browser failed to start also has no page, and quietly
+        # valuing from stale units in that case would answer a question nobody
+        # asked -- with a number that looks like a scrape and is not one.
+        if bool(getattr(context.args, "from_prices", False)):
+            return self.value_from_prices(context=context, connection=connection)
 
         # The attribute, not the active_page property. getattr's default only
         # covers AttributeError, and active_page raises RuntimeError when the
