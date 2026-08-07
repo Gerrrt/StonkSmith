@@ -145,6 +145,23 @@ class Ally(BrowserConnection):
 
         return on_invest_host(url=self.active_page.url)
 
+    def page_host(self) -> str:
+        """
+        The hostname the browser is currently on, for reporting.
+
+        Naming where a run actually landed is the difference between "it asked
+        me to sign in again" and a diagnosis, so this never raises: a host that
+        cannot be read is itself reportable.
+        :return: The hostname, or "" when there is no readable page
+        :rtype: str
+        """
+
+        try:
+            return (urlparse(url=self.active_page.url).hostname or "").lower()
+
+        except PlaywrightError:
+            return ""
+
     def shows_sign_in_form(self) -> bool:
         """
         Whether the bank's login form is on screen.
@@ -178,6 +195,12 @@ class Ally(BrowserConnection):
         asking for a sign-in that was not needed, while the opposite mistake
         scrapes a logged-out page and reports it as an account with no
         holdings.
+
+        Every rejection says which one it was. Falling through to manual_login()
+        costs the operator five minutes at a browser, and "it asked me to sign
+        in again" is the same sentence whether the cookies expired, the request
+        bounced, or the markup moved -- three different problems with three
+        different answers.
         :return: True if already signed in
         :rtype: bool
         """
@@ -189,21 +212,85 @@ class Ally(BrowserConnection):
         # whatever is already on screen instead.
         if self.attached:
             if not self.on_invest_site():
+                self.logger.display(
+                    msg=(
+                        f"No saved session to reuse: the attached browser is on "
+                        f"{self.page_host() or 'no page'}, not {INVEST_HOST}."
+                    )
+                )
                 return False
 
         else:
             try:
                 self.active_page.goto(url=self.holdings_url)
 
-            except PlaywrightError:
+            except PlaywrightError as e:
+                # Swallowing this left the operator with a five-minute sign-in
+                # prompt and no idea a navigation had failed at all.
+                self.logger.display(
+                    msg=(
+                        f"No saved session to reuse: {self.holdings_url} would "
+                        f"not load ({e})."
+                    )
+                )
                 return False
 
             # A bounced request lands back on secure.ally.com, so the host
             # check is the redirect check.
             if not self.on_invest_site():
+                where: str = self.page_host() or "an unreadable page"
+                why: str = (
+                    "the bank's sign-in form"
+                    if self.shows_sign_in_form()
+                    else "not the sign-in form, so something else moved"
+                )
+                self.logger.display(
+                    msg=(
+                        f"No saved session to reuse: asking for the holdings "
+                        f"page landed on {where}, showing {why}."
+                    )
+                )
                 return False
 
-        return self.shows_signed_in_chrome()
+        if self.attached:
+            return self.shows_signed_in_chrome()
+
+        # The shell hydrates after the URL changes, exactly as manual_login()
+        # documents. Reading the body the instant goto() returns judges an
+        # Angular app by its empty root element -- and because this check
+        # demands the log-out control be *present* rather than a login form be
+        # absent, an un-rendered page fails it every time. A live session then
+        # reads as a dead one.
+        try:
+            self.active_page.wait_for_selector(
+                "#allyNavLogOut", state="attached", timeout=SIGNED_IN_TIMEOUT_MS
+            )
+
+        except TimeoutError:
+            # Only reachable while on the investing host: a bounce is caught by
+            # the host check above, so this is the session being genuinely dead
+            # or the markup having moved. Keep the page -- it is the only thing
+            # that tells those two apart.
+            self.logger.display(
+                msg=(
+                    f"No saved session to reuse: {INVEST_HOST} loaded but never "
+                    f"rendered a log-out control within "
+                    f"{SIGNED_IN_TIMEOUT_MS // 1000}s."
+                )
+            )
+            self.capture_page(reason="session-check")
+            return False
+
+        except PlaywrightError as e:
+            # Ordered after TimeoutError, which subclasses it. A page that went
+            # away mid-wait is unreadable rather than unrendered, and must not
+            # be reported as a session that timed out.
+            self.logger.display(
+                msg=f"No saved session to reuse: the page could not be read ({e})."
+            )
+            return False
+
+        return True
 
     def manual_login(self) -> bool:
         """
