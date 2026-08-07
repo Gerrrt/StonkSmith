@@ -46,7 +46,7 @@ TOTAL_GAIN_LOSS = "Total G/L"
 DAY_GAIN_LOSS = "Today's G/L"
 
 
-def capture_holdings(connection: Connection) -> str | None:
+def capture_holdings(connection: Connection, reason: str = "no-holdings") -> str | None:
     """Save the rendered page so selectors can be fixed from real markup.
 
     Reuses the broker's capture, which writes the HTML and a screenshot to
@@ -54,6 +54,8 @@ def capture_holdings(connection: Connection) -> str | None:
 
     Args:
         connection (Connection): The live broker.
+        reason (str): Slug for the filename, naming what surprised the run.
+            Defaults to the page never rendering its holdings at all.
 
     Returns:
         str | None: Path to the saved HTML, or None if it could not be
@@ -64,7 +66,7 @@ def capture_holdings(connection: Connection) -> str | None:
     if not callable(capture):
         return None
 
-    saved = capture(reason="no-holdings")
+    saved = capture(reason=reason)
     return str(object=saved) if saved else None
 
 
@@ -193,6 +195,24 @@ class AllyModule:
                 )
             )
             return False
+
+        # A run that reaches here has its positions, so this is not a failure --
+        # but the rail is the only place the page says how many accounts exist,
+        # and scrape_accounts() falls back to the heading when it parses empty.
+        # That fallback describes exactly one account, so a second one would go
+        # unmentioned by a run that looked entirely successful. Capture the
+        # markup while it is on screen: the failure paths above never see a
+        # rendered page, so nothing else in the run can.
+        if not sidebar_accounts(soup=soup):
+            saved = capture_holdings(connection=connection, reason="empty-account-rail")
+            where = f" Page markup saved to {saved}." if saved else ""
+            context.log.highlight(
+                msg=(
+                    "The account rail parsed as empty on a page that did "
+                    "render its holdings, so its selectors in helpers/ally.py "
+                    f"have moved. Only the account on screen was read.{where}"
+                )
+            )
 
         context.log.success(msg=f"Found {len(accounts)} investment account(s)")
 
