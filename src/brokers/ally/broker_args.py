@@ -59,6 +59,20 @@ def broker_args(
     )
 
     access_group.add_argument(
+        "--from-prices",
+        action="store_true",
+        help=(
+            "Value the account from published prices and the units the last "
+            "signed-in run recorded, without opening a browser at all. Ally "
+            "refuses a restored session however it is stored, so a daily "
+            "unattended run cannot scrape -- but units only change when a "
+            "deposit lands, and a published price needs no login. Re-run with "
+            "--manual-login when the units change; every other day this is "
+            "exact and needs nothing from you."
+        ),
+    )
+
+    access_group.add_argument(
         "--browser",
         choices=("firefox", "cdp", "chromium", "chrome"),
         default="firefox",

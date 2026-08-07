@@ -73,6 +73,9 @@ SIGNED_IN_TIMEOUT_MS = 30000
 #: stored credential.
 MANUAL_SESSION_LABEL = "manual session"
 
+#: And when there was no session at all, because none was needed.
+PRICED_SESSION_LABEL = "published prices"
+
 
 def on_invest_host(url: str) -> bool:
     """
@@ -121,6 +124,40 @@ class Ally(BrowserConnection):
             logger=self.logger.logger,
         )
 
+    def from_prices(self) -> bool:
+        """
+        Whether this run values the account instead of scraping it.
+        :return: True when --from-prices was given
+        :rtype: bool
+        """
+
+        return bool(getattr(self.args, "from_prices", False))
+
+    def create_conn_obj(self) -> bool:
+        """
+        Get ready to run, which for a price-only run means doing nothing.
+
+        No browser, and no preflight against the bank either. Ally's sign-in
+        page has no part in a run that never signs in, and reaching for it
+        would turn "the bank is down" into a reason not to value a position
+        from a price the bank does not publish and a unit count already in the
+        database.
+        :return: True when the run can proceed
+        :rtype: bool
+        """
+
+        if self.from_prices():
+            self.username = PRICED_SESSION_LABEL
+
+            # broker_flow() builds the logger before it gets here, so the
+            # records it stamps would carry the username as it was then --
+            # empty. Rebuilt, so a price run's log lines are labelled the way
+            # every other run's are.
+            self.broker_logger()
+            return True
+
+        return super().create_conn_obj()
+
     def login(self) -> bool:
         """
         Obtain an authenticated investing session.
@@ -133,6 +170,14 @@ class Ally(BrowserConnection):
         :return: True when the browser holds an authenticated session
         :rtype: bool
         """
+
+        # Nothing to sign in to: the prices are public and the units are the
+        # database's. Saying so is not a formality -- broker_flow() ends the
+        # run if login() is false, and a price run that reported "not signed
+        # in" would be correct and useless.
+        if self.from_prices():
+            self.logger.success(msg="Valuing from published prices; no sign-in needed.")
+            return True
 
         return self.manual_login()
 
