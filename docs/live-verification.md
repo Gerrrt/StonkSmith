@@ -57,11 +57,15 @@ uv run stonksmith ally -M ally --manual-login
 ```
 
 A browser window opens at `secure.ally.com`. Before signing in, confirm the run has
-printed:
+printed a `[!]` line ending in:
 
 ```
-[!] ... Taking over once live.invest.ally.com loads (waiting up to 5 minutes).
+Taking over once live.invest.ally.com loads (waiting up to 5 minutes).
 ```
+
+That sentence is appended to a longer instruction whose wording depends on whether
+the browser was launched or attached to over CDP, so match on the tail rather than
+on the whole line.
 
 Now sign in **and click through to your investment account**. StonkSmith must not
 touch the page until the host is `live.invest.ally.com` — not merely a bank URL that
