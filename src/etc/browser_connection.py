@@ -42,6 +42,7 @@ What it inherits is everything above, plus ``create_conn_obj()`` and
 
 import contextlib
 import json
+import re
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
@@ -101,6 +102,16 @@ DATA_RESPONSE_LIMIT = 100
 #: Path segments at least this long are account ids, session ids or tokens
 #: rather than route names, and are masked before anything is logged.
 ID_SEGMENT_LENGTH = 20
+
+#: Largest refused response worth opening. An error body is a sentence and a
+#: code; anything larger is a page or a payload and is not read.
+ERROR_BODY_LIMIT = 4096
+
+#: What a machine-readable reason looks like: SESSION_EXPIRED, INVALID_TOKEN,
+#: DEVICE_NOT_RECOGNIZED. Values matching this are quoted; everything else in
+#: the body is described by its key alone and never printed, because a refusal
+#: can carry a name, an email or a masked account beside its reason.
+REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_.-]{2,40}$")
 
 #: --browser values mapped to Playwright channels. "chromium" is the bundled
 #: build; "chrome" is the real Google Chrome binary, which fingerprints much
@@ -192,6 +203,68 @@ def size_suffix(response: PlaywrightResponse) -> str:
         return ""
 
     return f" ({size} bytes)"
+
+
+def error_shape(response: PlaywrightResponse) -> str:
+    """
+    Why a refused request was refused, without printing what it refused.
+
+    A 401 is a fact; the reason inside it is the diagnosis. Ally answers a
+    restored session with 401 on the bank's auth endpoint and then falls back
+    to an anonymous one, and whether that 401 says the session expired or the
+    device is unrecognised decides whether there is anything to fix.
+
+    Only keys are printed, plus values that look like machine-readable codes.
+    A refusal can carry a name, an email or a masked account number beside its
+    reason, and none of that belongs in a log meant to be pasted into an issue.
+
+    Read only for refused responses, only when the body is small enough to be
+    an error rather than a page, and never for the streaming endpoints -- a
+    body read inside a response handler blocks until the response completes.
+    :param response: The Playwright response
+    :return: " {keys: a, b | codes: SESSION_EXPIRED}", or "" when unreadable
+    :rtype: str
+    """
+
+    if response.status < FAILED_RESPONSE_FLOOR:
+        return ""
+
+    try:
+        kind: str | None = response.header_value(name="content-type")
+        length: str | None = response.header_value(name="content-length")
+
+        if kind is None or "json" not in kind.lower():
+            return ""
+
+        if length is None or not length.strip().isdigit():
+            return ""
+
+        if int(length.strip()) > ERROR_BODY_LIMIT:
+            return ""
+
+        payload: object = json.loads(s=response.body())
+
+    except Exception:
+        # Best-effort throughout: an unreadable refusal is still worth its
+        # status line, and nothing here may raise out of an event handler.
+        return ""
+
+    if not isinstance(payload, dict):
+        return ""
+
+    keys: list[str] = [str(object=k) for k in payload]
+    codes: list[str] = [
+        value
+        for value in payload.values()
+        if isinstance(value, str) and REASON_CODE.match(string=value)
+    ]
+
+    parts: list[str] = [f"keys: {', '.join(keys)}"] if keys else []
+
+    if codes:
+        parts.append(f"codes: {', '.join(codes)}")
+
+    return f" {{{' | '.join(parts)}}}" if parts else ""
 
 
 def restrict(path: Path) -> None:
@@ -650,7 +723,11 @@ class BrowserConnection(Connection):
             # Deduplicated: one endpoint retried twenty times is one fact, and
             # the retries would push everything else off the end.
             if response.status >= FAILED_RESPONSE_FLOOR:
-                line: str = f"{response.status} {endpoint}"
+                line: str = (
+                    f"{response.status} {endpoint}"
+                    f"{size_suffix(response=response)}"
+                    f"{error_shape(response=response)}"
+                )
                 if line not in self.failed_responses:
                     self.failed_responses.append(line)
 
