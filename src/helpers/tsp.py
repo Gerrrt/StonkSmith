@@ -318,3 +318,33 @@ def employer_total(text: str) -> float | None:
                 return value
 
     return None
+
+
+def same_fund(one: str, other: str) -> bool:
+    """
+    Whether two spellings name the same TSP fund.
+
+    Compared loosely on purpose. A statement writes "L 2050 Fund" where the
+    price file heads its column "L 2050" and a config line might carry either,
+    with any amount of whitespace and any case -- and none of those differences
+    means a different fund.
+
+    An unnamed side matches anything. A statement whose fund would not parse
+    has already lost that information, and refusing the whole run over a
+    detail the file never carried would reject a perfectly good unit count.
+    What must not pass is two names that are both present and genuinely
+    different, because units are per fund and so are prices.
+    :param one: A fund name, possibly empty
+    :param other: The other, possibly empty
+    :return: True when they name the same fund, or either is unnamed
+    :rtype: bool
+    """
+
+    if not one.strip() or not other.strip():
+        return True
+
+    def bare(name: str) -> str:
+        words = name.upper().replace("-", " ").split()
+        return " ".join(word for word in words if word != "FUND")
+
+    return bare(one) == bare(other)
