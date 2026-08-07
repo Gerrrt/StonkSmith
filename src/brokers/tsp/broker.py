@@ -45,9 +45,16 @@ BROKER_NAME = "tsp"
 #: the widest ordinary gap.
 PRICE_STALE_DAYS = 5
 
+#: What to do about it, and deliberately not "or pass --prices". That flag
+#: reads a downloaded price file instead of fetching one; it does not say which
+#: fund is held and cannot stand in for this. Offering it here sent a live run
+#: to `--prices` with nothing to give it and an argparse error for an answer.
 SETUP_HINT = (
-    "Set fund and units in the [TSP] section of ~/.stonksmith/stonksmith.conf, "
-    "or pass --prices to read a downloaded share price file."
+    "Add a [TSP] section to ~/.stonksmith/stonksmith.conf with a fund line, "
+    "naming the fund exactly as the published price file heads its column -- "
+    'for example "fund = C Fund", "fund = G Fund" or "fund = L 2060". Units '
+    "can come from the same section, from --units, from --balance with "
+    "--balance-as-of, or from a statement via -o STATEMENT=<file>."
 )
 
 #: tsp.gov sits behind a WAF that answers the default requests User-Agent with a
