@@ -228,7 +228,7 @@ class Ally(BrowserConnection):
             # same one -- so when it comes up empty the answer is in what the
             # page asked for and was refused, not in the markup it managed to
             # render.
-            self.watch_failed_responses()
+            self.watch_responses()
 
             try:
                 self.active_page.goto(url=self.holdings_url)

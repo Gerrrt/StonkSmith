@@ -82,6 +82,19 @@ FAILED_RESPONSE_FLOOR = 400
 #: requests for one reason, and the first few name it.
 FAILED_RESPONSE_LIMIT = 12
 
+#: Request types a single-page app uses to fetch its data, as opposed to the
+#: scripts and images that make up its shell. A shell that loads while none of
+#: these run is a different bug from one whose data calls all come back empty.
+DATA_RESOURCE_TYPES = frozenset({"xhr", "fetch"})
+
+#: How many distinct data endpoints to report. Enough to see whether the app
+#: asked for accounts at all, short of transcribing every poll.
+DATA_RESPONSE_LIMIT = 20
+
+#: Path segments at least this long are account ids, session ids or tokens
+#: rather than route names, and are masked before anything is logged.
+ID_SEGMENT_LENGTH = 20
+
 #: --browser values mapped to Playwright channels. "chromium" is the bundled
 #: build; "chrome" is the real Google Chrome binary, which fingerprints much
 #: better but has to be installed separately.
@@ -108,6 +121,29 @@ def browser_was_closed(error: Exception) -> bool:
     """
 
     return BROWSER_CLOSED_TEXT in str(object=error)
+
+
+def endpoint_of(url: str) -> str:
+    """
+    A URL reduced to something safe to log and useful to compare.
+
+    Two things are dropped. The query string, because Ally's carries the jwt
+    and the account id and these lines are meant to be pasted into an issue.
+    And any path segment long enough to be an id rather than a route name, both
+    for the same reason and so that twenty polls of one endpoint under twenty
+    account ids collapse to one line instead of filling the log.
+    :param url: The full request URL
+    :return: scheme://host/path with long segments masked
+    :rtype: str
+    """
+
+    split = urlparse(url=url)
+    segments: list[str] = [
+        "<id>" if len(segment) >= ID_SEGMENT_LENGTH else segment
+        for segment in split.path.split(sep="/")
+    ]
+
+    return f"{split.scheme}://{split.netloc}{'/'.join(segments)}"
 
 
 def restrict(path: Path) -> None:
@@ -181,11 +217,12 @@ class BrowserConnection(Connection):
         self.context: BrowserContext | None = None
         self.page: Page | None = None
 
-        # Filled by watch_failed_responses(), reported by capture_page(). A
-        # saved page says what rendered; these say what the page asked for and
-        # did not get, which is the difference between markup that moved and a
-        # request that was refused.
+        # Filled by watch_responses(), reported by capture_page(). A saved
+        # page says what rendered; these say what the page asked for and what
+        # came back, which is the difference between markup that moved, a
+        # request that was refused, and a call that was never made.
         self.failed_responses: list[str] = []
+        self.data_responses: list[str] = []
         self.watching_responses: bool = False
 
     def create_conn_obj(self) -> bool:
@@ -518,20 +555,25 @@ class BrowserConnection(Connection):
 
         return True
 
-    def watch_failed_responses(self) -> None:
+    def watch_responses(self) -> None:
         """
-        Start recording requests the site refused.
+        Start recording what the page asked for and what came back.
 
         A saved page answers "what rendered". It cannot answer "why nothing
         did", because a single-page app that is signed out, blocked by a bot
-        filter, or simply pointed at the wrong account all render the same
+        filter, or pointed at an account it cannot see all render the same
         empty shell -- the difference is in the XHRs behind it, which never
-        reach the markup. Recording the failures makes the two capture files
-        say different things instead of the same thing.
+        reach the markup.
 
-        Installs once per page. Query strings are dropped: they carry tokens
-        and account ids, and these lines are meant to be pasteable into an
-        issue.
+        Two lists, because "nothing was refused" turned out not to be an
+        answer on its own. A shell that renders while its data calls come back
+        200-and-empty is a session the site accepts but treats as nobody; a
+        shell that renders having made no data calls at all is a router or a
+        guard that never ran. Both show zero failures, need opposite fixes, and
+        are told apart only by whether the calls happened.
+
+        Installs once per page. See ``endpoint_of()`` for what is dropped
+        before anything is recorded.
         :return: None
         :rtype: None
         """
@@ -540,28 +582,33 @@ class BrowserConnection(Connection):
             return
 
         def note(response: PlaywrightResponse) -> None:
-            if response.status < FAILED_RESPONSE_FLOOR:
-                return
+            endpoint: str = endpoint_of(url=response.url)
 
-            split = urlparse(url=response.url)
-            line: str = f"{response.status} {split.scheme}://{split.netloc}{split.path}"
+            # Deduplicated: one endpoint retried twenty times is one fact, and
+            # the retries would push everything else off the end.
+            if response.status >= FAILED_RESPONSE_FLOOR:
+                line: str = f"{response.status} {endpoint}"
+                if line not in self.failed_responses:
+                    self.failed_responses.append(line)
 
-            # Deduplicated: one refused endpoint retried twenty times is one
-            # fact, and the retries would push the other endpoints off the end.
-            if line not in self.failed_responses:
-                self.failed_responses.append(line)
+            # Scripts, styles and images are the shell arriving; they say
+            # nothing about whether the app went looking for data.
+            if response.request.resource_type in DATA_RESOURCE_TYPES:
+                call: str = f"{response.status} {endpoint}"
+                if call not in self.data_responses:
+                    self.data_responses.append(call)
 
         self.page.on("response", note)
         self.watching_responses = True
 
-    def report_failed_responses(self) -> None:
+    def report_responses(self) -> None:
         """
-        Log whatever ``watch_failed_responses()`` collected.
+        Log whatever ``watch_responses()`` collected.
 
-        Says so explicitly when nothing failed. "The page asked for nothing and
-        got nothing" points at routing or a script that never ran, which is a
-        different problem from "every call came back 403", and silence would
-        read as the diagnostic not being wired up.
+        Both halves are reported even when empty, and the empty cases are
+        stated rather than left as silence: "nothing was refused" and "nothing
+        was asked for" are findings, and a blank log reads as a diagnostic that
+        was never wired up.
         :return: None
         :rtype: None
         """
@@ -569,20 +616,43 @@ class BrowserConnection(Connection):
         if not self.watching_responses:
             return
 
-        if not self.failed_responses:
-            self.logger.fail(msg="No request failed while the page was loading.")
+        self._report_lines(
+            lines=self.failed_responses,
+            limit=FAILED_RESPONSE_LIMIT,
+            some="request(s) were refused:",
+            none="No request failed while the page was loading.",
+        )
+        self._report_lines(
+            lines=self.data_responses,
+            limit=DATA_RESPONSE_LIMIT,
+            some="data call(s) were made:",
+            none="The page made no data calls at all.",
+        )
+
+    def _report_lines(self, lines: list[str], limit: int, some: str, none: str) -> None:
+        """
+        Log one capped, self-describing list of recorded responses.
+        :param lines: The recorded lines
+        :param limit: How many to print before summarising the rest
+        :param some: Headline when there is something to show, after the count
+        :param none: The whole message when the list is empty
+        :return: None
+        :rtype: None
+        """
+
+        if not lines:
+            self.logger.fail(msg=none)
             return
 
-        shown: list[str] = self.failed_responses[:FAILED_RESPONSE_LIMIT]
-        self.logger.fail(msg=f"{len(self.failed_responses)} request(s) were refused:")
+        shown: list[str] = lines[:limit]
+        self.logger.fail(msg=f"{len(lines)} {some}")
 
         for line in shown:
             self.logger.fail(msg=f"    {line}")
 
-        if len(self.failed_responses) > len(shown):
-            self.logger.fail(
-                msg=f"    ... and {len(self.failed_responses) - len(shown)} more"
-            )
+        # Truncation that does not announce itself reads as the whole story.
+        if len(lines) > len(shown):
+            self.logger.fail(msg=f"    ... and {len(lines) - len(shown)} more")
 
     def capture_page(self, reason: str) -> Path | None:
         """
@@ -626,7 +696,7 @@ class BrowserConnection(Connection):
 
         # Alongside the markup, not instead of it: an empty page and the calls
         # that came back refused are only diagnostic together.
-        self.report_failed_responses()
+        self.report_responses()
 
         return target
 
