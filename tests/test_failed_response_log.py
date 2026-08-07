@@ -428,5 +428,117 @@ class Reporting(unittest.TestCase):
         self.assertIn("and 3 more", _messages(conn))
 
 
+class AnswerChanges(unittest.TestCase):
+    """One run holds two sessions; only the recorder saw both.
+
+    The page captures cannot separate them -- a session Ally renders for and
+    one it does not produced HTML identical to within one byte across four
+    runs. What differs is what the endpoints handed back.
+    """
+
+    def test_an_endpoint_that_answered_once_is_not_reported(self) -> None:
+        """Sameness is not evidence, and listing it buries what is."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/settings",
+                content_length="6576",
+            ),
+        )
+        conn.report_answer_changes()
+
+        self.assertEqual(conn.logger.fail.call_count, 0)  # type: ignore[union-attr]
+
+    def test_two_sizes_from_one_endpoint_are_reported(self) -> None:
+        """759 bytes to one session and 4000 to another is the finding."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/account/get",
+                content_length="759",
+            ),
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/account/get",
+                content_length="4096",
+            ),
+        )
+        conn.report_answer_changes()
+        messages = _messages(conn)
+
+        self.assertIn("/api/account/get", messages)
+        self.assertIn("759 bytes", messages)
+        self.assertIn("4096 bytes", messages)
+
+    def test_the_order_is_kept(self) -> None:
+        """Which answer came first is which session it belonged to."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/account/get",
+                content_length="759",
+            ),
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/account/get",
+                content_length="4096",
+            ),
+        )
+        conn.report_answer_changes()
+
+        self.assertIn("200 (759 bytes) then 200 (4096 bytes)", _messages(conn))
+
+    def test_a_status_change_counts_too(self) -> None:
+        """403-then-200 is the same kind of finding as a size change."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(status=403, url="https://live.invest.ally.com/api/account/get"),
+            _xhr(status=200, url="https://live.invest.ally.com/api/account/get"),
+        )
+        conn.report_answer_changes()
+
+        self.assertIn("403 then 200", _messages(conn))
+
+    def test_truncation_announces_itself(self) -> None:
+        """Silent truncation is what hid this finding the first time round."""
+        conn = _connection()
+        conn.watch_responses()
+        for n in range(browser_mod.DATA_RESPONSE_LIMIT + 4):
+            _emit(
+                conn,
+                _xhr(
+                    status=200,
+                    url=f"https://live.invest.ally.com/api/{n}",
+                    content_length="10",
+                ),
+                _xhr(
+                    status=200,
+                    url=f"https://live.invest.ally.com/api/{n}",
+                    content_length="20",
+                ),
+            )
+        conn.report_answer_changes()
+
+        self.assertIn("and 4 more", _messages(conn))
+
+    def test_nothing_recorded_says_nothing(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        conn.report_answer_changes()
+
+        self.assertEqual(conn.logger.fail.call_count, 0)  # type: ignore[union-attr]
+
+
 if __name__ == "__main__":
     unittest.main()
