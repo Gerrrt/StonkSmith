@@ -50,6 +50,17 @@ SETUP_HINT = (
     "or pass --prices to read a downloaded share price file."
 )
 
+#: tsp.gov sits behind a WAF that answers the default requests User-Agent with a
+#: 403 and an HTML "Access Denied" page. It wants a UA that starts with
+#: "Mozilla/5.0" and carries a second product/version token -- "Mozilla/5.0
+#: (compatible; stonksmith)" is refused, this is not. So it is shaped like a
+#: browser's because it has to be, while still saying truthfully who is calling.
+#: The version is an identifier, not a claim about the build, and does not need
+#: to track releases.
+PRICE_USER_AGENT = (
+    "Mozilla/5.0 (compatible; stonksmith/0.1.0; +https://github.com/Gerrrt/StonkSmith)"
+)
+
 
 class Tsp(ApiConnection):
     """
@@ -141,29 +152,35 @@ class Tsp(ApiConnection):
         Download the published share price file.
 
         No credential and no browser: this is a public file, and that is the
-        whole point of the broker.
+        whole point of the broker. The one thing it does need is a User-Agent,
+        because the CDN in front of the file refuses the default one.
+
+        The header goes on the request rather than on ``self.session``, which is
+        shared with every other broker on the base class: nothing here should
+        change what some other broker's login server sees.
         :return: The file's text, or None when it could not be fetched
         :rtype: str | None
         """
 
         url: str = get_tsp_price_url()
 
-        if not url:
-            self.logger.fail(
-                msg=(
-                    "No TSP price_url configured and no --prices file given. "
-                    "Download the share price history from tsp.gov and pass it "
-                    "with --prices, or set price_url in the [TSP] section."
-                )
-            )
-            return None
-
         try:
-            response: Response = self.session.get(url=url, timeout=30)
+            response: Response = self.session.get(
+                url=url, headers={"User-Agent": PRICE_USER_AGENT}, timeout=30
+            )
 
             if not response.ok:
+                detail: str = (
+                    " tsp.gov refused the request rather than the file being "
+                    "missing. Pass --prices with a copy downloaded in a browser."
+                    if response.status_code == 403
+                    else ""
+                )
                 self.logger.fail(
-                    msg=f"Share price file returned HTTP {response.status_code}."
+                    msg=(
+                        "Share price file returned HTTP "
+                        f"{response.status_code}.{detail}"
+                    )
                 )
                 return None
 

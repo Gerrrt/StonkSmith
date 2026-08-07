@@ -400,9 +400,14 @@ units = 302.116
 units_as_of = 2026-06-30
 ```
 
-`--units` and `--units-as-of` override it for a single run, and `--prices`
-reads a share price file already on disk instead of downloading one — useful
-when the machine cannot reach tsp.gov.
+Those three keys are the whole setup. Prices are downloaded from tsp.gov on
+every run, so there is nothing else to configure and nothing to fill in before
+the first run works. `price_url` exists in the `[TSP]` section for the day TSP
+moves that file — leave it blank and the published URL is used.
+
+`--units` and `--units-as-of` override the config for a single run, and
+`--prices` reads a share price file already on disk instead of downloading one
+— useful when the machine cannot reach tsp.gov.
 
 **You do not have to wait for a statement.** The TSP site states a balance and
 the date it is true for, and never states a unit count — but a balance *is*
