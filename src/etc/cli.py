@@ -52,6 +52,11 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         "--debug", action="store_true", help="Enable debug level information"
     )
     parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Report failures only; say nothing about a run that worked",
+    )
+    parser.add_argument(
         "--version", action="version", version=f"{version} - {codename}"
     )
 
@@ -110,10 +115,10 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         help="Show start/finish markers around module execution",
     )
 
-    # --verbose and --debug are declared on the top-level parser too, so they
-    # work on either side of the broker name: `stonksmith --verbose fidelity`
-    # and `stonksmith fidelity --verbose` both do the same thing. Only the
-    # former used to parse, which reads as arbitrary next to -M/-u/-p/-id,
+    # --verbose, --debug and --quiet are declared on the top-level parser too,
+    # so they work on either side of the broker name: `stonksmith --verbose
+    # fidelity` and `stonksmith fidelity --verbose` both do the same thing. Only
+    # the former used to parse, which reads as arbitrary next to -M/-u/-p/-id,
     # which only work after it.
     #
     # SUPPRESS is what makes that safe. With a normal `default=False` this
@@ -124,6 +129,7 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
     for flag, flag_help in (
         ("--verbose", "Enable verbose output"),
         ("--debug", "Enable debug level information"),
+        ("--quiet", "Report failures only; say nothing about a run that worked"),
     ):
         std_parser.add_argument(
             flag,

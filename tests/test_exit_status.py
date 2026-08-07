@@ -89,8 +89,9 @@ class LoggerLevelMixin:
     """Restore the global logger level.
 
     main() calls set_logging_level(), which sets the process-global 'stonksmith'
-    logger to ERROR. This file sorts alphabetically before several that capture
-    INFO-level output, so leaking that level silently blinds them.
+    logger level from the flags it was given. This file sorts alphabetically
+    before several that capture INFO-level output, so leaking a level they did
+    not choose silently blinds them.
     """
 
     def setUp(self) -> None:

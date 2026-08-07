@@ -138,6 +138,23 @@ command line:
 uv run stonksmith schwab529plan -M schwab529plan -id 1
 ```
 
+### Output
+
+A run reports what it did. That is the default and it used to not be: every
+progress line — including the yellow `[!]` warnings — logs at `INFO`, and the
+default level was `ERROR`, so a sync could read a statement, write the snapshot
+to the database and update the Google Sheet while printing nothing but a
+progress bar. Success and doing nothing at all looked identical.
+
+| Flag | Shows |
+| --- | --- |
+| *(none)* | What the run did, and anything that went wrong. |
+| `--quiet` | Failures only. This is what an unattended run wants. |
+| `--verbose` | Same as the default, but wins over `--quiet` — useful for seeing inside a wrapper script that hardcodes it. |
+| `--debug` | Everything, including internals. |
+
+All four work on either side of the broker name.
+
 ### Exit codes
 
 The exit status reflects what the run actually did, so a cron entry, systemd
