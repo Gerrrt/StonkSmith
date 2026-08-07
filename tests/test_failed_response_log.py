@@ -40,15 +40,34 @@ class FakeRequest:
 class FakeResponse:
     """The fields the recorder reads off a Playwright response."""
 
-    def __init__(self, status: int, url: str, resource_type: str = "script") -> None:
+    def __init__(
+        self,
+        status: int,
+        url: str,
+        resource_type: str = "script",
+        content_length: str | None = None,
+    ) -> None:
         self.status = status
         self.url = url
         self.request = FakeRequest(resource_type=resource_type)
+        self._content_length = content_length
+
+    def header_value(self, name: str) -> str | None:
+        return self._content_length if name == "content-length" else None
 
 
-def _xhr(status: int, url: str) -> FakeResponse:
+class DeadResponse(FakeResponse):
+    """A response whose page went away before the header could be read."""
+
+    def header_value(self, name: str) -> str | None:
+        raise RuntimeError("Target page, context or browser has been closed")
+
+
+def _xhr(status: int, url: str, content_length: str | None = None) -> FakeResponse:
     """A data call, as opposed to part of the shell arriving."""
-    return FakeResponse(status=status, url=url, resource_type="xhr")
+    return FakeResponse(
+        status=status, url=url, resource_type="xhr", content_length=content_length
+    )
 
 
 def _connection() -> browser_mod.BrowserConnection:
@@ -104,6 +123,91 @@ class EndpointRedaction(unittest.TestCase):
             ),
             "https://live.invest.ally.com/accounts/holdings-balances",
         )
+
+
+class ResponseSize(unittest.TestCase):
+    """A 200 is not evidence the call returned anything."""
+
+    def test_the_size_is_appended(self) -> None:
+        """Four hundred bytes against forty is the whole diagnosis."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/account/get",
+                content_length="412",
+            ),
+        )
+
+        self.assertEqual(
+            conn.data_responses,
+            ["200 https://live.invest.ally.com/api/account/get (412 bytes)"],
+        )
+
+    def test_a_missing_header_is_left_off(self) -> None:
+        """Chunked responses carry no length; the line is still worth having."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _xhr(status=200, url="https://live.invest.ally.com/api/settings"))
+
+        self.assertEqual(
+            conn.data_responses, ["200 https://live.invest.ally.com/api/settings"]
+        )
+
+    def test_a_nonsense_header_is_left_off(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/settings",
+                content_length="not-a-number",
+            ),
+        )
+
+        self.assertEqual(
+            conn.data_responses, ["200 https://live.invest.ally.com/api/settings"]
+        )
+
+    def test_a_dead_page_does_not_take_the_log_down(self) -> None:
+        """Reading a header off a closed page must not raise out of a handler."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            DeadResponse(
+                status=200,
+                url="https://live.invest.ally.com/api/settings",
+                resource_type="xhr",
+            ),
+        )
+
+        self.assertEqual(
+            conn.data_responses, ["200 https://live.invest.ally.com/api/settings"]
+        )
+
+    def test_the_same_endpoint_at_two_sizes_is_two_lines(self) -> None:
+        """An empty answer and a full one are the comparison being made."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/account/get",
+                content_length="40",
+            ),
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/account/get",
+                content_length="4000",
+            ),
+        )
+
+        self.assertEqual(len(conn.data_responses), 2)
 
 
 class FailureRecording(unittest.TestCase):
