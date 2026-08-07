@@ -87,9 +87,16 @@ FAILED_RESPONSE_LIMIT = 12
 #: these run is a different bug from one whose data calls all come back empty.
 DATA_RESOURCE_TYPES = frozenset({"xhr", "fetch"})
 
-#: How many distinct data endpoints to report. Enough to see whether the app
-#: asked for accounts at all, short of transcribing every poll.
-DATA_RESPONSE_LIMIT = 20
+#: How many distinct data-call lines to report. Set high on purpose. The first
+#: version capped this at 20 and hid the finding it existed to produce: a failed
+#: session check made 22 calls, the page that worked made 66, the first 20 were
+#: identical, and the entire difference sat inside "... and 46 more".
+#:
+#: A line is a status, a redacted endpoint and a size, so one endpoint answering
+#: at two sizes is two lines -- deliberately, since that comparison is the point.
+#: Identical repeats still collapse, which is what keeps a polled endpoint from
+#: filling the log.
+DATA_RESPONSE_LIMIT = 100
 
 #: Path segments at least this long are account ids, session ids or tokens
 #: rather than route names, and are masked before anything is logged.
@@ -145,6 +152,46 @@ def endpoint_of(url: str) -> str:
     ]
 
     return f"{split.scheme}://{split.netloc}{'/'.join(segments)}"
+
+
+def size_suffix(response: PlaywrightResponse) -> str:
+    """
+    How big the response was, when the site says so.
+
+    A 200 is not evidence the call returned anything. Ally's session check and
+    its account list both answer 200 to a session that renders nothing, so the
+    status alone cannot separate "the site accepted this session" from "the
+    site accepted it and handed back nobody" -- but four hundred bytes against
+    forty can.
+
+    Read from the content-length header rather than by fetching the body. The
+    body would mean account numbers and balances in a log, and reading it
+    inside a response handler stalls on the streaming endpoints Ally polls.
+    :param response: The Playwright response
+    :return: " (N bytes)", or "" when the header is absent or not a number
+    :rtype: str
+    """
+
+    # Best-effort: a header read on a response whose page has gone away must
+    # not take the diagnostic down with it.
+    try:
+        length: str | None = response.header_value(name="content-length")
+
+    except Exception:
+        return ""
+
+    if length is None:
+        return ""
+
+    # int() rather than isdigit(), which rejects the surrounding whitespace a
+    # header is allowed to carry.
+    try:
+        size = int(length.strip())
+
+    except ValueError:
+        return ""
+
+    return f" ({size} bytes)"
 
 
 def restrict(path: Path) -> None:
@@ -595,7 +642,9 @@ class BrowserConnection(Connection):
             # Scripts, styles and images are the shell arriving; they say
             # nothing about whether the app went looking for data.
             if response.request.resource_type in DATA_RESOURCE_TYPES:
-                call: str = f"{response.status} {endpoint}"
+                call: str = (
+                    f"{response.status} {endpoint}{size_suffix(response=response)}"
+                )
                 if call not in self.data_responses:
                     self.data_responses.append(call)
 
