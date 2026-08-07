@@ -19,6 +19,12 @@ user_cfg_path: Path = stonksmith_path / "stonksmith.conf"
 
 DEFAULT_HOST_INFO_COLORS: tuple[str, ...] = ("green", "red", "yellow", "cyan")
 
+#: Where TSP publishes the share price history. A static object on their CDN:
+#: the date range parameters the site's own download form sends are ignored and
+#: the response is byte-identical without them, so the bare URL is what actually
+#: serves.
+DEFAULT_TSP_PRICE_URL = "https://www.tsp.gov/data/fund-price-history.csv"
+
 _config: configparser.ConfigParser | None = None
 
 
@@ -274,12 +280,21 @@ def get_tsp_price_url() -> str:
     """
     Where the published share price history lives.
 
-    Config rather than a constant because it is the one part of this broker
-    that TSP can move without warning, and a URL in a config file is fixable
-    without a release. ``--prices`` reads a downloaded copy instead, which is
-    also the path for a machine that cannot reach tsp.gov at all.
-    :return: The URL, or "" when unset
+    Overridable in config because this is the one part of the broker that TSP
+    can move without warning, and a URL in a config file is fixable without a
+    release. But it ships with a working value, because the broker exists to run
+    unattended and a URL nobody has filled in makes that impossible.
+
+    Blank counts as unset, not as "download nothing". Installs predating the
+    default already carry a literal ``price_url =`` line -- ``get_config()``
+    backfills only options that are *absent* -- so keying off emptiness rather
+    than presence is what lets them pick the default up.
+    :return: The configured URL, or the published default when unset
     :rtype: str
     """
 
-    return get_config().get(section="TSP", option="price_url", fallback="").strip()
+    configured: str = (
+        get_config().get(section="TSP", option="price_url", fallback="").strip()
+    )
+
+    return configured or DEFAULT_TSP_PRICE_URL
