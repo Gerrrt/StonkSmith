@@ -156,6 +156,24 @@ class ResponseSize(unittest.TestCase):
             conn.data_responses, ["200 https://live.invest.ally.com/api/settings"]
         )
 
+    def test_surrounding_whitespace_is_tolerated(self) -> None:
+        """A header is allowed to carry it; isdigit() would reject the value."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/account/get",
+                content_length="  412  ",
+            ),
+        )
+
+        self.assertEqual(
+            conn.data_responses,
+            ["200 https://live.invest.ally.com/api/account/get (412 bytes)"],
+        )
+
     def test_a_nonsense_header_is_left_off(self) -> None:
         conn = _connection()
         conn.watch_responses()

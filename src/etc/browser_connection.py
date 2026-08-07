@@ -87,12 +87,15 @@ FAILED_RESPONSE_LIMIT = 12
 #: these run is a different bug from one whose data calls all come back empty.
 DATA_RESOURCE_TYPES = frozenset({"xhr", "fetch"})
 
-#: How many distinct data endpoints to report. Set high on purpose. The first
+#: How many distinct data-call lines to report. Set high on purpose. The first
 #: version capped this at 20 and hid the finding it existed to produce: a failed
 #: session check made 22 calls, the page that worked made 66, the first 20 were
-#: identical, and the entire difference sat inside "... and 46 more". Retries
-#: are already collapsed by deduplication, so this bounds distinct endpoints --
-#: a number that stays small on its own.
+#: identical, and the entire difference sat inside "... and 46 more".
+#:
+#: A line is a status, a redacted endpoint and a size, so one endpoint answering
+#: at two sizes is two lines -- deliberately, since that comparison is the point.
+#: Identical repeats still collapse, which is what keeps a polled endpoint from
+#: filling the log.
 DATA_RESPONSE_LIMIT = 100
 
 #: Path segments at least this long are account ids, session ids or tokens
@@ -176,10 +179,18 @@ def size_suffix(response: PlaywrightResponse) -> str:
     except Exception:
         return ""
 
-    if length is None or not length.isdigit():
+    if length is None:
         return ""
 
-    return f" ({length} bytes)"
+    # int() rather than isdigit(), which rejects the surrounding whitespace a
+    # header is allowed to carry.
+    try:
+        size = int(length.strip())
+
+    except ValueError:
+        return ""
+
+    return f" ({size} bytes)"
 
 
 def restrict(path: Path) -> None:
