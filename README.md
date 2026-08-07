@@ -400,10 +400,11 @@ units = 302.116
 units_as_of = 2026-06-30
 ```
 
-Those three keys are the whole setup. Prices are downloaded from tsp.gov on
-every run, so there is nothing else to configure and nothing to fill in before
-the first run works. `price_url` exists in the `[TSP]` section for the day TSP
-moves that file — leave it blank and the published URL is used.
+Those three keys are the whole setup. Unless a run is given prices to read,
+it downloads them from tsp.gov itself, so there is nothing else to configure
+and nothing to fill in before the first run works. `price_url` exists in the
+`[TSP]` section for the day TSP moves that file — leave it blank and the
+published URL is used.
 
 `--units` and `--units-as-of` override the config for a single run, and
 `--prices` reads a share price file already on disk instead of downloading one
