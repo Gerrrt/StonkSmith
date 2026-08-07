@@ -115,9 +115,15 @@ REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_.-]{2,40}$")
 
 #: A refusal that answers with somewhere to go is describing the fix. Ally's
 #: invest session check refuses a restored session with a 49-byte body holding
-#: one key, redirectUrl, and where it points is the whole question -- so these
-#: are reported, through the same redaction as any other URL.
-REDIRECT_VALUE = re.compile(r"^https?://", re.IGNORECASE)
+#: one key, redirectUrl, and where it points is the whole question -- so that
+#: value is reported, through the same redaction as any other URL.
+#:
+#: Matched on the key rather than on the value looking like a URL. A refusal
+#: can carry a support link or a documentation link beside its reason, and
+#: those are free text like any other: printing every http(s) value would let
+#: an unrelated field through the rule that keeps names and account numbers
+#: out. Only a field whose *name* says it is a destination qualifies.
+REDIRECT_KEY = re.compile(r"redirect|location", re.IGNORECASE)
 
 #: --browser values mapped to Playwright channels. "chromium" is the bundled
 #: build; "chrome" is the real Google Chrome binary, which fingerprints much
@@ -262,17 +268,26 @@ def error_shape(response: PlaywrightResponse) -> str:
     codes: list[str] = []
     targets: list[str] = []
 
-    for value in payload.values():
+    for key, value in payload.items():
         if not isinstance(value, str):
             continue
 
         if REASON_CODE.match(string=value):
             codes.append(value)
+            continue
+
+        if not REDIRECT_KEY.search(string=str(object=key)):
+            continue
+
+        # A host is what makes it a destination. "https:///path" carries a
+        # scheme and nothing to go to, and a relative path is indistinguishable
+        # from free text -- neither is reported.
+        if not urlparse(url=value).netloc:
+            continue
 
         # Through endpoint_of, not raw: a handoff URL carries its token in the
         # query, and where it points is answered by the host and path alone.
-        elif REDIRECT_VALUE.match(string=value):
-            targets.append(endpoint_of(url=value))
+        targets.append(endpoint_of(url=value))
 
     parts: list[str] = [f"keys: {', '.join(keys)}"] if keys else []
 
