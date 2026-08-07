@@ -78,6 +78,15 @@ has no login at all — its key lives in config and the OS keyring — and
 subclasses `ApiConnection`: SnapTrade, and TSP, which holds no key either
 because the data it reads is published.
 
+Not every broker has been run against a real account. **Ally has not** — none of
+it, including the sign-in and the session it is supposed to save. TSP has in
+part: its parsers, its arithmetic and its price download are verified against
+real data, but its database write and its worksheet are not. Green tests say the
+code does what it was written to do, which is not the same as saying the site
+still looks the way it did when the parser was written.
+`docs/live-verification.md` records which claims stand on an observed run and
+gives the procedure for the rest.
+
 ---
 
 ## :wheel: Installation
@@ -90,11 +99,16 @@ cd stonksmith
 uv sync
 ```
 
-Fidelity and Ally drive a real browser, so install the Playwright runtime once:
+Fidelity and Ally drive a real browser, so install the Playwright runtime:
 
 ```bash
 uv run playwright install firefox
 ```
+
+Run that again after any `uv sync` that moves Playwright. Each release pins a
+new browser revision, so an already-installed Firefox stops satisfying it and
+the next run fails with `Could not start browser`, naming an executable that is
+not there.
 
 ---
 
@@ -214,8 +228,21 @@ uv run stonksmith ally -M ally --manual-login
 A browser window opens at `secure.ally.com`. Sign in, **then click through to
 your investment account** — StonkSmith is still waiting at the bank dashboard
 and will not touch the page until `live.invest.ally.com` loads. It then saves
-the session; Ally remembers a device once it has seen one, so later runs skip
-the sign-in until the session expires.
+the session, and reports whether the save succeeded — the intent is that Ally
+remembers a device once it has seen one, so later runs skip the sign-in until
+the session expires.
+
+**That last part did not hold on its first real run.** The sign-in completed and
+the session file was written, and the next run did not reuse it. One cause has
+been found and fixed — the check read the page before Ally's shell had rendered
+the control it looks for, so a live session read as a dead one — and the check
+now reports which of its rejections fired instead of failing silently. Whether
+that was the only cause is still unobserved.
+
+So treat daily unattended operation as unproven. If the session turns out not
+to survive at all, `--manual-login` on every run is the honest description and
+this section is what changes. `docs/live-verification.md` has the procedure and
+what each failure would mean.
 
 Ally runs Akamai, Dynatrace and Transmit on that login page, so the same
 attach-to-your-own-Chrome path Fidelity documents above applies here, pointed at
@@ -236,6 +263,14 @@ account currently selected gets its holdings — it says so per account when
 there is more than one. Select another account in the browser and re-run to
 store its positions too. Ally *Bank* deposit accounts appear in the same
 sidebar; they are reported as skipped rather than filed under a brokerage.
+
+All of that is built and tested against a signed-in page captured once and
+committed redacted as `tests/ally_holdings.html` — one account state, one
+investment account, one holding, one deposit account. Reconciling a masked
+sidebar number like `...0847` against a full `3LD20847`, and everything that
+happens when there is more than one investment account, has never met a real
+page. Treat this section as what the code is written to do until a live run
+says otherwise.
 
 ### SnapTrade
 
@@ -410,6 +445,13 @@ published URL is used.
 `--prices` reads a share price file already on disk instead of downloading one
 — useful when the machine cannot reach tsp.gov.
 
+That download has been run for real: tsp.gov serves the file to a non-browser
+client, but only to one that sends a User-Agent starting `Mozilla/5.0` and
+carrying a second `product/version` token, which is what ships. A refusal comes
+back as a `403` and is reported as a refusal, pointing at `--prices`; a block
+page served with a `200` parses to no rows and is reported as such, rather than
+valuing the account at nothing.
+
 **You do not have to wait for a statement.** The TSP site states a balance and
 the date it is true for, and never states a unit count — but a balance *is*
 units × that day's price, so the division inverts it exactly:
@@ -441,6 +483,19 @@ once the count is old enough to have missed a contribution. The error is
 bounded by one contribution, it corrects itself at the next statement, and it
 is stated rather than hidden — which is the whole reason this broker values the
 account instead of refusing to.
+
+Sheets needs a `TSP` tab in the dashboard spreadsheet, created by hand as every
+broker's tab is. Without it the run prints `TSP mark saved locally; the
+dashboard was not updated.` and still exits 0 — the database write has already
+happened, and Sheets is a view of it. That message means the tab is missing,
+not that the broker failed.
+
+The statement reader, the price parser and the arithmetic are all verified
+against real files, and the mark has been checked against what the site itself
+reports. The database write and the worksheet have not been run;
+`docs/live-verification.md` has the procedure and one trap worth knowing about
+first — a statement's fund is read and logged but not carried into the mark,
+so a statement for one fund with another configured values the wrong one.
 
 Manage stored credentials and scraped balances:
 
