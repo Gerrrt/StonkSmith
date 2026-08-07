@@ -154,7 +154,13 @@ class FidelityModule:
         """
         context.log.highlight(msg=f"Starting Fidelity sync for: {connection.username}")
 
-        page: Any = getattr(connection, "active_page", None)
+        # The attribute, not the active_page property. getattr's default only
+        # covers AttributeError, and active_page raises RuntimeError when the
+        # browser was never started -- so asking for the property turns "no
+        # page" into a traceback instead of the message below. Reading `page`
+        # answers None for both cases: a connection that is not browser-backed
+        # at all, and one whose browser did not start.
+        page: Any = getattr(connection, "page", None)
         if page is None:
             context.log.fail(
                 msg="Fidelity module requires a browser-backed connection; "
