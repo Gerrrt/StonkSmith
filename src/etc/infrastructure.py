@@ -54,25 +54,41 @@ def create_db_engine(db_path: Path) -> sqlalchemy.Engine:
 def set_logging_level(args: Namespace) -> None:
     """
     Sets global log levels based on CLI flags.
+
+    The default is INFO, not ERROR. Every message the tool prints about its own
+    progress -- display(), success() and highlight() alike -- is logged at INFO,
+    so an ERROR default meant a run that worked said nothing whatsoever: a TSP
+    sync could read the statement, write the snapshot to the database and update
+    the Google Sheet while printing only a progress bar, and the operator had no
+    way to tell that from a run that had done nothing at all.
+
+    That default had already been worked around twice rather than fixed. Both
+    workarounds are still in etc.connection, each with a comment explaining that
+    it reports at fail level because INFO is hidden. A default under which
+    correct messages have to be mis-levelled to be seen is the wrong default.
+
+    --quiet restores it for unattended runs, where only failures are wanted;
+    --verbose still forces output on, which is what it is for when a wrapper
+    script has hardcoded --quiet.
     :param args:
     :type args:
     :return:
     :rtype:
     """
 
-    # --list-modules / --options exist purely to print something. They log at
-    # INFO, so at the default ERROR level they produced no output at all.
-    wants_listing: bool = bool(
-        getattr(args, "list_modules", False)
-        or getattr(args, "show_module_options", False)
-    )
-
+    # --verbose lands on the same level as the default and is still not
+    # redundant: it is ahead of --quiet, so passing both turns output back on.
+    # Written this way round because the alternative -- checking --quiet first
+    # -- would let a wrapper script's hardcoded --quiet win over a --verbose the
+    # operator added on purpose to find out what the script was doing.
     if getattr(args, "debug", False):
         level: int = logging.DEBUG
-    elif getattr(args, "verbose", False) or wants_listing:
+    elif getattr(args, "verbose", False):
         level: int = logging.INFO
-    else:
+    elif getattr(args, "quiet", False):
         level: int = logging.ERROR
+    else:
+        level: int = logging.INFO
 
     logging.getLogger(name="stonksmith").setLevel(level=level)
     stonksmith_logger.logger.setLevel(level=level)

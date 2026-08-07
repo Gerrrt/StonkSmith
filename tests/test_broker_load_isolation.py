@@ -49,9 +49,9 @@ class _CaptureMixin:
         self.capture = _CaptureHandler()
         self.logger = logging.getLogger("stonksmith")
         self.logger.addHandler(self.capture)
-        # ERROR is the default (etc.infrastructure.set_logging_level), so a
-        # broker failing to load has to be reported at least this loudly or the
-        # operator never learns why the broker vanished.
+        # ERROR is what --quiet gives (etc.infrastructure.set_logging_level), so
+        # a broker failing to load has to be reported at least this loudly or an
+        # unattended run never learns why the broker vanished.
         self.previous = self.logger.level
         self.logger.setLevel(logging.ERROR)
 

@@ -81,9 +81,9 @@ class _CaptureMixin:
         self.capture = _CaptureHandler()
         self.logger = logging.getLogger("stonksmith")
         self.logger.addHandler(self.capture)
-        # ERROR is the default (see etc.infrastructure.set_logging_level), and
-        # it is the level that matters: anything a broker needs an operator to
-        # see on an ordinary run has to survive it.
+        # ERROR is what --quiet gives (see etc.infrastructure.set_logging_level)
+        # and it is the level that matters: anything a broker needs an operator
+        # to see has to survive an unattended run that asked for failures only.
         self.previous = self.logger.level
         self.logger.setLevel(logging.ERROR)
 
