@@ -113,6 +113,19 @@ ERROR_BODY_LIMIT = 4096
 #: can carry a name, an email or a masked account beside its reason.
 REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_.-]{2,40}$")
 
+#: Keys whose value is a reason rather than a description. A refusal that
+#: carries "error_code" is naming something lookup-able, and it is worth
+#: printing even when it is a number or lowercase -- the uppercase-token rule
+#: below was written for SESSION_EXPIRED and silently withheld Ally's 464-byte
+#: refusal, which carries error_code and error_message and matched neither.
+#:
+#: Values under these keys are still bounded: short, and no whitespace, so a
+#: sentence stays a sentence and goes unprinted.
+CODE_KEY = re.compile(r"code|status|reason", re.IGNORECASE)
+
+#: How long a value under a code-shaped key may be before it stops being a code.
+CODE_VALUE_LIMIT = 40
+
 #: A refusal that answers with somewhere to go is describing the fix. Ally's
 #: invest session check refuses a restored session with a 49-byte body holding
 #: one key, redirectUrl, and where it points is the whole question -- so that
@@ -269,11 +282,28 @@ def error_shape(response: PlaywrightResponse) -> str:
     targets: list[str] = []
 
     for key, value in payload.items():
+        name: str = str(object=key)
+
+        # Numbers and booleans cannot be a name, an email or an account
+        # number, so they are safe to print whatever key they sit under.
+        if isinstance(value, bool | int | float):
+            codes.append(f"{name}={value}")
+            continue
+
         if not isinstance(value, str):
             continue
 
         if REASON_CODE.match(string=value):
             codes.append(value)
+            continue
+
+        # A short, single-token value under a key that says "code" is one.
+        if (
+            CODE_KEY.search(string=name)
+            and len(value) <= CODE_VALUE_LIMIT
+            and value.split() == [value]
+        ):
+            codes.append(f"{name}={value}")
             continue
 
         if not REDIRECT_KEY.search(string=str(object=key)):
