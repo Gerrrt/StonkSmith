@@ -69,5 +69,27 @@ class NoAccountsReportingTests(unittest.TestCase):
         context.db.save_account_data.assert_not_called()
 
 
+class NoActivePageTests(unittest.TestCase):
+    def test_a_broker_whose_browser_never_started_is_reported_not_raised(self) -> None:
+        # active_page is a property that raises RuntimeError when there is no
+        # page, and getattr's default only covers AttributeError -- so asking
+        # for the property here turns "no page" into a traceback instead of the
+        # module's own message.
+        class Unstarted:
+            page = None
+            username = "someone"
+
+            @property
+            def active_page(self):
+                raise RuntimeError("Browser not started")
+
+        context = MagicMock()
+
+        self.assertFalse(
+            FidelityModule().on_login(context=context, connection=Unstarted())
+        )
+        self.assertTrue(context.log.fail.called)
+
+
 if __name__ == "__main__":
     unittest.main()
