@@ -46,14 +46,37 @@ class FakeResponse:
         url: str,
         resource_type: str = "script",
         content_length: str | None = None,
+        content_type: str | None = None,
+        body: bytes = b"",
     ) -> None:
         self.status = status
         self.url = url
         self.request = FakeRequest(resource_type=resource_type)
         self._content_length = content_length
+        self._content_type = content_type
+        self._body = body
 
     def header_value(self, name: str) -> str | None:
-        return self._content_length if name == "content-length" else None
+        if name == "content-length":
+            return self._content_length
+        if name == "content-type":
+            return self._content_type
+        return None
+
+    def body(self) -> bytes:
+        return self._body
+
+
+def _refused(payload: bytes, content_type: str = "application/json") -> FakeResponse:
+    """A 401 carrying a JSON error body."""
+    return FakeResponse(
+        status=401,
+        url="https://secure.ally.com/acs/customers/authenticate/api/v2/auth/login",
+        resource_type="xhr",
+        content_length=str(object=len(payload)),
+        content_type=content_type,
+        body=payload,
+    )
 
 
 class DeadResponse(FakeResponse):
@@ -538,6 +561,107 @@ class AnswerChanges(unittest.TestCase):
         conn.report_answer_changes()
 
         self.assertEqual(conn.logger.fail.call_count, 0)  # type: ignore[union-attr]
+
+
+class ErrorShape(unittest.TestCase):
+    """A 401 is a fact; the reason inside it is the diagnosis.
+
+    Ally answers a restored session with 401 on the bank's auth endpoint and
+    then falls back to an anonymous session. Whether that 401 says the session
+    expired or the device is unrecognised decides whether there is anything to
+    fix -- but the body it says it in can also carry a name, an email or a
+    masked account number, none of which belongs in a pasteable log.
+    """
+
+    def test_the_reason_code_is_quoted(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"error": "SESSION_EXPIRED"}'))
+
+        self.assertIn("SESSION_EXPIRED", conn.failed_responses[0])
+
+    def test_the_keys_are_named(self) -> None:
+        """Which fields came back is itself the shape of the refusal."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"error": "X_Y_Z", "traceId": "abc"}'))
+
+        self.assertIn("error", conn.failed_responses[0])
+        self.assertIn("traceId", conn.failed_responses[0])
+
+    def test_free_text_is_never_printed(self) -> None:
+        """A refusal can name the customer beside its reason."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"customer": "Jane Qui Public"}'))
+        line = conn.failed_responses[0]
+
+        self.assertIn("customer", line)
+        self.assertNotIn("Jane", line)
+
+    def test_a_masked_account_is_not_a_reason_code(self) -> None:
+        """Uppercase-looking values must not smuggle account data through."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"acct": "3LD20847"}'))
+
+        self.assertNotIn("3LD20847", conn.failed_responses[0])
+
+    def test_a_successful_response_is_never_opened(self) -> None:
+        """Only refusals. A 200 body is the payload, not an explanation."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            FakeResponse(
+                status=200,
+                url="https://live.invest.ally.com/api/account/get",
+                resource_type="xhr",
+                content_length="27",
+                content_type="application/json",
+                body=b'{"error": "SESSION_EXPIRED"}',
+            ),
+        )
+
+        self.assertEqual(conn.failed_responses, [])
+
+    def test_a_large_body_is_left_shut(self) -> None:
+        """Past a point it is a page or a payload, not an error."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _refused(payload=b'{"error": "TOO_BIG"}').__class__(
+                status=401,
+                url="https://secure.ally.com/acs/x",
+                resource_type="xhr",
+                content_length=str(object=browser_mod.ERROR_BODY_LIMIT + 1),
+                content_type="application/json",
+                body=b'{"error": "TOO_BIG"}',
+            ),
+        )
+
+        self.assertNotIn("TOO_BIG", conn.failed_responses[0])
+
+    def test_html_is_not_parsed_as_json(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b"<html>nope</html>", content_type="text/html"))
+
+        self.assertEqual(
+            conn.failed_responses,
+            [
+                "401 https://secure.ally.com/acs/customers/authenticate/api/v2"
+                "/auth/login (17 bytes)"
+            ],
+        )
+
+    def test_an_unreadable_body_still_leaves_the_status(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b"not json at all"))
+
+        self.assertIn("401", conn.failed_responses[0])
 
 
 if __name__ == "__main__":
