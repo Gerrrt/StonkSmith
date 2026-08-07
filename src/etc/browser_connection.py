@@ -704,20 +704,16 @@ class BrowserConnection(Connection):
         """
         Endpoints that answered differently at different points in the run.
 
-        An Ally run holds two sessions: the saved one, which the site accepts
-        -- 200 from checkSession, 200 from account/get -- but will not render a
-        signed-in page for, and the one a manual sign-in produces, which it
-        will. Both are recorded, because the recorder outlives the sign-in.
+        A run that signs in partway through has held two sessions, and the
+        recorder outlives the sign-in, so it saw both. Where a status would
+        separate them the failure log already says so; where none of the calls
+        fail, the only thing left is what came back -- one endpoint answering
+        at two sizes is the site treating the two sessions differently, which
+        a page capture cannot show when the markup is identical either way.
 
-        What separates them is not a status, since none of these calls fail.
-        It is what came back. An endpoint answering 759 bytes to one session
-        and several thousand to the other is the site saying the first session
-        is nobody -- and that is a claim no capture of the page can make, since
-        the markup is identical either way, down to the byte.
-
-        Silent when nothing differs: an endpoint that answered the same to both
-        is not evidence, and listing every call again would bury the few that
-        are.
+        Silent when nothing differs: an endpoint that answered the same
+        throughout is not evidence, and listing every call again would bury the
+        few that are. See the caller for why a given broker wants this.
         :return: None
         :rtype: None
         """
@@ -738,9 +734,16 @@ class BrowserConnection(Connection):
             )
         )
 
-        for endpoint, answers in list(changed.items())[:DATA_RESPONSE_LIMIT]:
+        shown: list[tuple[str, list[str]]] = list(changed.items())[:DATA_RESPONSE_LIMIT]
+
+        for endpoint, answers in shown:
             self.logger.fail(msg=f"    {endpoint}")
             self.logger.fail(msg=f"        {' then '.join(answers)}")
+
+        # Truncation that does not announce itself reads as the whole story --
+        # which is the exact fault that hid this finding the first time round.
+        if len(changed) > len(shown):
+            self.logger.fail(msg=f"    ... and {len(changed) - len(shown)} more")
 
     def _report_lines(self, lines: list[str], limit: int, some: str, none: str) -> None:
         """

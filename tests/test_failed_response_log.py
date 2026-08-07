@@ -428,10 +428,6 @@ class Reporting(unittest.TestCase):
         self.assertIn("and 3 more", _messages(conn))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class AnswerChanges(unittest.TestCase):
     """One run holds two sessions; only the recorder saw both.
 
@@ -514,9 +510,35 @@ class AnswerChanges(unittest.TestCase):
 
         self.assertIn("403 then 200", _messages(conn))
 
+    def test_truncation_announces_itself(self) -> None:
+        """Silent truncation is what hid this finding the first time round."""
+        conn = _connection()
+        conn.watch_responses()
+        for n in range(browser_mod.DATA_RESPONSE_LIMIT + 4):
+            _emit(
+                conn,
+                _xhr(
+                    status=200,
+                    url=f"https://live.invest.ally.com/api/{n}",
+                    content_length="10",
+                ),
+                _xhr(
+                    status=200,
+                    url=f"https://live.invest.ally.com/api/{n}",
+                    content_length="20",
+                ),
+            )
+        conn.report_answer_changes()
+
+        self.assertIn("and 4 more", _messages(conn))
+
     def test_nothing_recorded_says_nothing(self) -> None:
         conn = _connection()
         conn.watch_responses()
         conn.report_answer_changes()
 
         self.assertEqual(conn.logger.fail.call_count, 0)  # type: ignore[union-attr]
+
+
+if __name__ == "__main__":
+    unittest.main()
