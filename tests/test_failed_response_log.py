@@ -671,6 +671,31 @@ class ErrorShape(unittest.TestCase):
 
         self.assertIn("error_code=auth.session.absent", conn.failed_responses[0])
 
+    def test_a_passcode_is_not_a_code_key(self) -> None:
+        """It contains "code" and is the last thing that should be logged."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"passcode": "hunter2"}'))
+        line = conn.failed_responses[0]
+
+        self.assertIn("passcode", line)
+        self.assertNotIn("hunter2", line)
+
+    def test_a_zipcode_is_not_a_code_key_either(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"zipcode": "94103"}'))
+
+        self.assertNotIn("94103", conn.failed_responses[0])
+
+    def test_camel_case_keys_are_split_into_words(self) -> None:
+        """errorCode and error_code are the same field spelled two ways."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"errorCode": "auth.absent"}'))
+
+        self.assertIn("errorCode=auth.absent", conn.failed_responses[0])
+
     def test_a_sentence_under_a_code_key_stays_a_sentence(self) -> None:
         """error_message is free text however it is spelled."""
         conn = _connection()

@@ -121,7 +121,15 @@ REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_.-]{2,40}$")
 #:
 #: Values under these keys are still bounded: short, and no whitespace, so a
 #: sentence stays a sentence and goes unprinted.
-CODE_KEY = re.compile(r"code|status|reason", re.IGNORECASE)
+#:
+#: Matched as whole words, not as substrings. "passcode" and "zipcode" both
+#: contain "code" and neither is a refusal reason -- one of them is a secret --
+#: so the key is split on snake_case and camelCase boundaries and each word
+#: compared outright.
+CODE_WORDS = frozenset({"code", "status", "reason"})
+
+#: Splits error_code, errorCode and error-code alike into their words.
+KEY_WORDS = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
 #: How long a value under a code-shaped key may be before it stops being a code.
 CODE_VALUE_LIMIT = 40
@@ -230,6 +238,22 @@ def size_suffix(response: PlaywrightResponse) -> str:
     return f" ({size} bytes)"
 
 
+def names_a_code(key: str) -> bool:
+    """
+    Whether a key says its value is a reason rather than a description.
+
+    Whole words only. "passcode" contains "code" and is the last thing that
+    should reach a log, so a substring test is not good enough here.
+    :param key: The field name from a refusal body
+    :return: True when one of its words is code, status or reason
+    :rtype: bool
+    """
+
+    return any(
+        word.lower() in CODE_WORDS for word in KEY_WORDS.split(string=key) if word
+    )
+
+
 def error_shape(response: PlaywrightResponse) -> str:
     """
     Why a refused request was refused, without printing what it refused.
@@ -299,7 +323,7 @@ def error_shape(response: PlaywrightResponse) -> str:
 
         # A short, single-token value under a key that says "code" is one.
         if (
-            CODE_KEY.search(string=name)
+            names_a_code(key=name)
             and len(value) <= CODE_VALUE_LIMIT
             and value.split() == [value]
         ):
