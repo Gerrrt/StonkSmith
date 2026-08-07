@@ -6,7 +6,7 @@ import configparser
 from argparse import Namespace
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from etc.logger import StonkSmithAdapter
 from etc.paths import stonksmith_path
@@ -20,6 +20,7 @@ __all__ = [
     "Context",
     "Holding",
     "SnapshotDbProtocol",
+    "SnapshotReadDbProtocol",
     "Transaction",
 ]
 
@@ -71,6 +72,34 @@ class SnapshotDbProtocol(BrokerDbProtocol, Protocol):
         timestamp: str,
         rows: Sequence[Transaction],
     ) -> int: ...
+
+
+@runtime_checkable
+class SnapshotReadDbProtocol(SnapshotDbProtocol, Protocol):
+    """
+    A database whose history can be read back, not only written to.
+
+    A third protocol for the same reason there is a second one. Every protocol
+    above this is about handing the database something; this is the first that
+    asks for anything back, and a database that cannot answer is not broken --
+    it just cannot serve a module that values a position from what a previous
+    run observed. Modules test for this one and fall back, as they already do
+    for SnapshotDbProtocol.
+
+    What wants it: a broker whose session cannot be reused. Ally refuses a
+    restored session however it is stored, so a daily run cannot scrape -- but
+    a unit count does not change between deposits, and a published price needs
+    no login. Reading the last observed units is what makes that possible, and
+    it is the one thing a write-only interface cannot provide.
+    """
+
+    def get_snapshots(
+        self, account_id: int | None = None, limit: int = 100
+    ) -> list[tuple[Any, ...]]: ...
+
+    def get_holdings(
+        self, snapshot_id: int | None = None, limit: int = 500
+    ) -> list[tuple[Any, ...]]: ...
 
 
 class Context:
