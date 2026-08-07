@@ -271,6 +271,11 @@ class BrowserConnection(Connection):
         # request that was refused, and a call that was never made.
         self.failed_responses: list[str] = []
         self.data_responses: list[str] = []
+
+        # Endpoint -> the distinct "status (size)" answers it gave. One run
+        # holds a session the site would not render for and, after a manual
+        # sign-in, one it would; this is what an endpoint answered in each.
+        self.endpoint_answers: dict[str, list[str]] = {}
         self.watching_responses: bool = False
 
     def create_conn_obj(self) -> bool:
@@ -652,11 +657,17 @@ class BrowserConnection(Connection):
             # Scripts, styles and images are the shell arriving; they say
             # nothing about whether the app went looking for data.
             if response.request.resource_type in DATA_RESOURCE_TYPES:
+                answer: str = f"{response.status}{size_suffix(response=response)}"
                 call: str = (
                     f"{response.status} {endpoint}{size_suffix(response=response)}"
                 )
+
                 if call not in self.data_responses:
                     self.data_responses.append(call)
+
+                seen: list[str] = self.endpoint_answers.setdefault(endpoint, [])
+                if answer not in seen:
+                    seen.append(answer)
 
         self.page.on("response", note)
         self.watching_responses = True
@@ -688,6 +699,48 @@ class BrowserConnection(Connection):
             some="data call(s) were made:",
             none="The page made no data calls at all.",
         )
+
+    def report_answer_changes(self) -> None:
+        """
+        Endpoints that answered differently at different points in the run.
+
+        An Ally run holds two sessions: the saved one, which the site accepts
+        -- 200 from checkSession, 200 from account/get -- but will not render a
+        signed-in page for, and the one a manual sign-in produces, which it
+        will. Both are recorded, because the recorder outlives the sign-in.
+
+        What separates them is not a status, since none of these calls fail.
+        It is what came back. An endpoint answering 759 bytes to one session
+        and several thousand to the other is the site saying the first session
+        is nobody -- and that is a claim no capture of the page can make, since
+        the markup is identical either way, down to the byte.
+
+        Silent when nothing differs: an endpoint that answered the same to both
+        is not evidence, and listing every call again would bury the few that
+        are.
+        :return: None
+        :rtype: None
+        """
+
+        changed: dict[str, list[str]] = {
+            endpoint: answers
+            for endpoint, answers in self.endpoint_answers.items()
+            if len(answers) > 1
+        }
+
+        if not changed:
+            return
+
+        self.logger.fail(
+            msg=(
+                f"{len(changed)} endpoint(s) answered differently before and "
+                f"after signing in:"
+            )
+        )
+
+        for endpoint, answers in list(changed.items())[:DATA_RESPONSE_LIMIT]:
+            self.logger.fail(msg=f"    {endpoint}")
+            self.logger.fail(msg=f"        {' then '.join(answers)}")
 
     def _report_lines(self, lines: list[str], limit: int, some: str, none: str) -> None:
         """

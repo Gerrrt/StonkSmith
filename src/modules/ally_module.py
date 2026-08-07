@@ -308,6 +308,17 @@ class AllyModule:
             context.log.fail(msg=f"Google Sheets sync failed: {e}")
             sheets_ok = False
 
+        # By here the run may have held two sessions: the saved one, if the
+        # session check rejected it, and the one the operator's sign-in
+        # produced. The response recorder outlived the sign-in, so it is the
+        # only thing that saw both -- the page captures cannot help, being
+        # identical to within a byte whichever session drew them. Reported
+        # before the outcome below, and silent unless something actually
+        # answered two ways.
+        answers = getattr(connection, "report_answer_changes", None)
+        if callable(answers):
+            answers()
+
         if db_ok and sheets_ok:
             context.log.success(msg="Ally sync complete.")
         elif db_ok:
