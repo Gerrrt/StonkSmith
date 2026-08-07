@@ -6,15 +6,21 @@ the XHRs behind it, which never reach the markup -- so a capture taken at the
 moment a session check fails looks identical in all three cases, and picking
 between them means guessing.
 
-Recording the refused requests alongside the capture is what makes those three
-outcomes say different things. What the recording owes its reader:
+Recording the failures was the first half, and on its own it was not an answer:
+a live Ally run reported "No request failed while the page was loading" against
+a page that had rendered nothing. Zero failures is consistent with two opposite
+bugs -- data calls that come back 200-and-empty, which is a session the site
+accepts but treats as nobody, and no data calls at all, which is a router or a
+guard that never ran. So the calls themselves are recorded too.
 
-* no query strings, because these lines are meant to be pasted into an issue
-  and Ally's carry tokens and account ids
+What the recording owes its reader:
+
+* no query strings and no long path segments, because these lines are meant to
+  be pasted into an issue and Ally's carry the jwt and the account id
 * one line per endpoint, because a blocked page retries the same call dozens of
   times and the retries would push every other endpoint off the end
-* an explicit line when *nothing* failed, since "the page asked for nothing"
-  points at routing rather than refusal, and silence would read as the
+* an explicit line for each half when it is empty, since "nothing was refused"
+  and "nothing was asked for" are both findings, and silence would read as the
   diagnostic never having been wired up
 """
 
@@ -24,12 +30,25 @@ from unittest.mock import MagicMock
 import etc.browser_connection as browser_mod
 
 
-class FakeResponse:
-    """The two fields the recorder reads off a Playwright response."""
+class FakeRequest:
+    """The one field the recorder reads off a Playwright request."""
 
-    def __init__(self, status: int, url: str) -> None:
+    def __init__(self, resource_type: str) -> None:
+        self.resource_type = resource_type
+
+
+class FakeResponse:
+    """The fields the recorder reads off a Playwright response."""
+
+    def __init__(self, status: int, url: str, resource_type: str = "script") -> None:
         self.status = status
         self.url = url
+        self.request = FakeRequest(resource_type=resource_type)
+
+
+def _xhr(status: int, url: str) -> FakeResponse:
+    """A data call, as opposed to part of the shell arriving."""
+    return FakeResponse(status=status, url=url, resource_type="xhr")
 
 
 def _connection() -> browser_mod.BrowserConnection:
@@ -41,55 +60,90 @@ def _connection() -> browser_mod.BrowserConnection:
 
 
 def _emit(conn: browser_mod.BrowserConnection, *responses: FakeResponse) -> None:
-    """Feed responses to whatever watch_failed_responses() registered."""
+    """Feed responses to whatever watch_responses() registered."""
     handler = conn.page.on.call_args[0][1]  # type: ignore[union-attr]
     for response in responses:
         handler(response)
 
 
-class FailedResponseRecording(unittest.TestCase):
-    """What gets recorded, and in what form."""
+def _messages(conn: browser_mod.BrowserConnection) -> str:
+    return "\n".join(
+        str(call.kwargs.get("msg", ""))
+        for call in conn.logger.fail.call_args_list  # type: ignore[union-attr]
+    )
+
+
+class EndpointRedaction(unittest.TestCase):
+    """What is stripped before anything is written down."""
+
+    def test_the_query_string_goes(self) -> None:
+        """Ally's carries the jwt."""
+        self.assertEqual(
+            browser_mod.endpoint_of(
+                url="https://live.invest.ally.com/api/holdings?jwt=SECRET"
+            ),
+            "https://live.invest.ally.com/api/holdings",
+        )
+
+    def test_long_path_segments_are_masked(self) -> None:
+        """The per-account URL carries a 64-character id in the path."""
+        account = "a" * 64
+
+        self.assertEqual(
+            browser_mod.endpoint_of(
+                url=f"https://live.invest.ally.com/accounts/{account}/holdings"
+            ),
+            "https://live.invest.ally.com/accounts/<id>/holdings",
+        )
+
+    def test_route_names_survive(self) -> None:
+        """Masking everything would leave nothing to diagnose from."""
+        self.assertEqual(
+            browser_mod.endpoint_of(
+                url="https://live.invest.ally.com/accounts/holdings-balances"
+            ),
+            "https://live.invest.ally.com/accounts/holdings-balances",
+        )
+
+
+class FailureRecording(unittest.TestCase):
+    """What lands in the refused list."""
 
     def test_successes_are_not_recorded(self) -> None:
         """Only 4xx and 5xx. A 302 is how the session gets handed around."""
         conn = _connection()
-        conn.watch_failed_responses()
+        conn.watch_responses()
         _emit(
             conn,
-            FakeResponse(status=200, url="https://live.invest.ally.com/api/accounts"),
-            FakeResponse(status=302, url="https://live.invest.ally.com/api/session"),
+            _xhr(status=200, url="https://live.invest.ally.com/api/accounts"),
+            _xhr(status=302, url="https://live.invest.ally.com/api/session"),
         )
 
         self.assertEqual(conn.failed_responses, [])
 
-    def test_query_strings_are_dropped(self) -> None:
-        """The path identifies the endpoint; the query carries the secrets."""
+    def test_the_secret_does_not_survive(self) -> None:
         conn = _connection()
-        conn.watch_failed_responses()
+        conn.watch_responses()
         _emit(
             conn,
-            FakeResponse(
+            _xhr(
                 status=403,
                 url="https://live.invest.ally.com/api/holdings?jwt=SECRET&acct=12345",
             ),
         )
 
         self.assertEqual(
-            conn.failed_responses,
-            ["403 https://live.invest.ally.com/api/holdings"],
+            conn.failed_responses, ["403 https://live.invest.ally.com/api/holdings"]
         )
-        self.assertNotIn("SECRET", conn.failed_responses[0])
 
     def test_one_endpoint_retried_is_one_line(self) -> None:
         """A blocked call retries; twenty retries are still one fact."""
         conn = _connection()
-        conn.watch_failed_responses()
+        conn.watch_responses()
         _emit(
             conn,
             *[
-                FakeResponse(
-                    status=403, url=f"https://live.invest.ally.com/api/holdings?try={n}"
-                )
+                _xhr(status=403, url=f"https://live.invest.ally.com/api/hold?try={n}")
                 for n in range(20)
             ],
         )
@@ -99,20 +153,76 @@ class FailedResponseRecording(unittest.TestCase):
     def test_differing_statuses_are_kept_apart(self) -> None:
         """401 and 403 on one endpoint are different diagnoses."""
         conn = _connection()
-        conn.watch_failed_responses()
+        conn.watch_responses()
         _emit(
             conn,
-            FakeResponse(status=401, url="https://live.invest.ally.com/api/holdings"),
-            FakeResponse(status=403, url="https://live.invest.ally.com/api/holdings"),
+            _xhr(status=401, url="https://live.invest.ally.com/api/holdings"),
+            _xhr(status=403, url="https://live.invest.ally.com/api/holdings"),
         )
 
         self.assertEqual(len(conn.failed_responses), 2)
 
+
+class DataCallRecording(unittest.TestCase):
+    """What lands in the data-call list, which zero failures made necessary."""
+
+    def test_the_shell_is_not_a_data_call(self) -> None:
+        """Scripts and images arriving say nothing about the app asking."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            FakeResponse(
+                status=200,
+                url="https://live.invest.ally.com/main.js",
+                resource_type="script",
+            ),
+        )
+
+        self.assertEqual(conn.data_responses, [])
+
+    def test_a_successful_data_call_is_recorded(self) -> None:
+        """The 200s are the point here: a refused call was never the issue."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _xhr(status=200, url="https://live.invest.ally.com/api/accounts"))
+
+        self.assertEqual(
+            conn.data_responses, ["200 https://live.invest.ally.com/api/accounts"]
+        )
+
+    def test_fetch_counts_as_well_as_xhr(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            FakeResponse(
+                status=200,
+                url="https://live.invest.ally.com/api/v2/accounts",
+                resource_type="fetch",
+            ),
+        )
+
+        self.assertEqual(len(conn.data_responses), 1)
+
+    def test_a_refused_data_call_appears_in_both(self) -> None:
+        """It is both a failure and evidence the app went looking."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _xhr(status=403, url="https://live.invest.ally.com/api/accounts"))
+
+        self.assertEqual(len(conn.failed_responses), 1)
+        self.assertEqual(len(conn.data_responses), 1)
+
+
+class Arming(unittest.TestCase):
+    """When the listener is installed."""
+
     def test_watching_is_installed_once(self) -> None:
         """Re-arming on a second check would double every recorded line."""
         conn = _connection()
-        conn.watch_failed_responses()
-        conn.watch_failed_responses()
+        conn.watch_responses()
+        conn.watch_responses()
 
         self.assertEqual(conn.page.on.call_count, 1)  # type: ignore[union-attr]
 
@@ -120,63 +230,80 @@ class FailedResponseRecording(unittest.TestCase):
         """Recording before the browser starts must not raise."""
         conn = browser_mod.BrowserConnection()
         conn.page = None
-        conn.watch_failed_responses()
+        conn.watch_responses()
 
         self.assertFalse(conn.watching_responses)
 
 
-class FailedResponseReporting(unittest.TestCase):
+class Reporting(unittest.TestCase):
     """What reaches the operator once a capture happens."""
-
-    def _messages(self, conn: browser_mod.BrowserConnection) -> str:
-        return "\n".join(
-            str(call.kwargs.get("msg", ""))
-            for call in conn.logger.fail.call_args_list  # type: ignore[union-attr]
-        )
-
-    def test_nothing_failed_is_stated_not_implied(self) -> None:
-        """A page that asked for nothing is a different bug from one refused."""
-        conn = _connection()
-        conn.watch_failed_responses()
-        conn.report_failed_responses()
-
-        self.assertIn("No request failed", self._messages(conn))
 
     def test_silent_when_never_armed(self) -> None:
         """Captures from flows that do not record must not claim anything."""
         conn = _connection()
-        conn.report_failed_responses()
+        conn.report_responses()
 
         self.assertEqual(conn.logger.fail.call_count, 0)  # type: ignore[union-attr]
 
-    def test_failures_are_listed(self) -> None:
-        """The status and endpoint are the whole point."""
+    def test_both_empty_halves_are_stated(self) -> None:
+        """The live run's actual outcome: nothing refused, nothing asked."""
         conn = _connection()
-        conn.watch_failed_responses()
-        _emit(
-            conn,
-            FakeResponse(status=403, url="https://live.invest.ally.com/api/holdings"),
-        )
-        conn.report_failed_responses()
-        messages = self._messages(conn)
+        conn.watch_responses()
+        conn.report_responses()
+        messages = _messages(conn)
+
+        self.assertIn("No request failed", messages)
+        self.assertIn("no data calls", messages)
+
+    def test_data_calls_are_reported_when_nothing_failed(self) -> None:
+        """The case the failure log alone could not distinguish."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _xhr(status=200, url="https://live.invest.ally.com/api/accounts"))
+        conn.report_responses()
+        messages = _messages(conn)
+
+        self.assertIn("No request failed", messages)
+        self.assertIn("200 https://live.invest.ally.com/api/accounts", messages)
+
+    def test_failures_are_listed(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _xhr(status=403, url="https://live.invest.ally.com/api/holdings"))
+        conn.report_responses()
+        messages = _messages(conn)
 
         self.assertIn("403", messages)
         self.assertIn("/api/holdings", messages)
 
-    def test_long_lists_are_capped_and_say_so(self) -> None:
+    def test_long_failure_lists_are_capped_and_say_so(self) -> None:
         """Truncation that does not announce itself reads as the whole story."""
         conn = _connection()
-        conn.watch_failed_responses()
+        conn.watch_responses()
         _emit(
             conn,
             *[
-                FakeResponse(status=403, url=f"https://live.invest.ally.com/api/{n}")
+                _xhr(status=403, url=f"https://live.invest.ally.com/api/{n}")
                 for n in range(browser_mod.FAILED_RESPONSE_LIMIT + 5)
             ],
         )
-        conn.report_failed_responses()
+        conn.report_responses()
 
-        self.assertIn("and 5 more", self._messages(conn))
+        self.assertIn("and 5 more", _messages(conn))
+
+    def test_long_data_lists_are_capped_too(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            *[
+                _xhr(status=200, url=f"https://live.invest.ally.com/api/{n}")
+                for n in range(browser_mod.DATA_RESPONSE_LIMIT + 3)
+            ],
+        )
+        conn.report_responses()
+
+        self.assertIn("and 3 more", _messages(conn))
 
 
 if __name__ == "__main__":
