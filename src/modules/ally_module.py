@@ -3,6 +3,7 @@
 
 """Module to scrape balances and positions from the Ally Invest holdings page."""
 
+import contextlib
 import datetime
 from typing import Any, ClassVar
 
@@ -15,6 +16,7 @@ from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
 from etc.records import AccountIdentity, Holding
 from helpers.ally import (
     INVESTMENT_KIND,
+    SIDEBAR_SELECTOR,
     account_label,
     account_totals,
     holdings,
@@ -35,6 +37,12 @@ TOTALS_SELECTOR = "holdings-account-totals"
 #: The page is an Angular app behind a redirect; the shell arrives well before
 #: the account data it renders.
 RENDER_TIMEOUT_MS = 30000
+
+#: The account rail renders after the holdings do, and not always inside the
+#: same second. Short, because a rail that has not arrived by now is a rail
+#: worth reporting rather than one worth waiting on -- the run has its
+#: positions either way and an extra half minute buys nothing.
+SIDEBAR_TIMEOUT_MS = 5000
 
 #: Heading of the figure used as the account balance. Ally's own summary, and
 #: the one number that includes uninvested cash as well as positions.
@@ -180,6 +188,17 @@ class AllyModule:
             context.log.exception(msg=f"Could not open the holdings page: {e}")
             return False
 
+        # The rail is not what the wait above covers, and it arrives later.
+        # Without this wait, a rail that had merely not rendered yet looks
+        # exactly like one whose selectors moved -- which is the wrong
+        # conclusion, and it was drawn once already, from a run whose successor
+        # parsed the same rail without complaint. A timeout here is fine: the
+        # branch below reports an absent rail properly.
+        with contextlib.suppress(PlaywrightTimeout):
+            page.wait_for_selector(
+                SIDEBAR_SELECTOR, timeout=SIDEBAR_TIMEOUT_MS, state="attached"
+            )
+
         soup = BeautifulSoup(markup=page.content(), features="html.parser")
         accounts: list[dict[str, Any]] = self.scrape_accounts(
             soup=soup, context=context
@@ -208,9 +227,10 @@ class AllyModule:
             where = f" Page markup saved to {saved}." if saved else ""
             context.log.highlight(
                 msg=(
-                    "The account rail parsed as empty on a page that did "
-                    "render its holdings, so its selectors in helpers/ally.py "
-                    f"have moved. Only the account on screen was read.{where}"
+                    "The account rail was still empty after waiting, on a page "
+                    "that did render its holdings. Only the account on screen "
+                    "was read, so any other account is missing from this run. "
+                    f"Compare the markup against helpers/ally.py.{where}"
                 )
             )
 

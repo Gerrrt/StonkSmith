@@ -593,7 +593,17 @@ class BrowserConnection(Connection):
 
         try:
             self.profile_path.parent.mkdir(parents=True, exist_ok=True)
-            self.context.storage_state(path=str(object=self.profile_path))
+            # indexed_db, because cookies and local storage are not the whole
+            # session. Ally's saved cookies authenticate fine -- a restored run
+            # gets 200 from api/session/checkSession and 759 bytes of real
+            # accounts from api/account/get -- and then the page calls
+            # auth/logout on itself and renders nobody. What it cannot find is
+            # the device Transmit bound the session to, and device-binding SDKs
+            # keep that in IndexedDB, the one store storage_state leaves out by
+            # default.
+            self.context.storage_state(
+                path=str(object=self.profile_path), indexed_db=True
+            )
             # Session cookies: owner-readable only.
             restrict(path=self.profile_path)
 

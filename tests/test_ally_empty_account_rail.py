@@ -11,12 +11,19 @@ That is the failure mode worth catching: not a crash, but a success that is
 quietly incomplete. It has to announce itself and save the markup while the page
 is still rendered, because every existing capture path fires on pages that never
 rendered at all and so can never show what the rail actually looks like.
+
+The rail also has to be waited for. It renders after the holdings do, and the
+module only ever waited on the holdings -- so a rail that had merely not arrived
+yet read exactly like a rail whose selectors had moved. That conclusion was
+drawn once, from a live run, and the very next run parsed the same rail without
+complaint.
 """
 
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from helpers.ally import SIDEBAR_SELECTOR
 from modules.ally_module import AllyModule, capture_holdings
 
 FIXTURE = Path(__file__).resolve().parent / "ally_holdings.html"
@@ -104,6 +111,22 @@ class RailMissing(unittest.TestCase):
         _connection, context = _run(markup=NO_RAIL)
 
         self.assertIn("helpers/ally.py", _highlights(context))
+
+    def test_it_does_not_claim_the_selectors_moved(self) -> None:
+        """A live run disproved that: the next run parsed the same rail."""
+        _connection, context = _run(markup=NO_RAIL)
+
+        self.assertNotIn("have moved", _highlights(context))
+
+    def test_the_rail_is_waited_for_before_being_called_missing(self) -> None:
+        """Waiting only on the holdings is what made the rail look absent."""
+        connection, _context = _run(markup=NO_RAIL)
+        waited = [
+            call.args[0] if call.args else call.kwargs.get("selector")
+            for call in connection.page.wait_for_selector.call_args_list
+        ]
+
+        self.assertIn(SIDEBAR_SELECTOR, waited)
 
     def test_it_is_still_reported_when_the_capture_fails(self) -> None:
         # Losing the markup must not also lose the warning.
