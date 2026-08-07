@@ -656,6 +656,53 @@ class ErrorShape(unittest.TestCase):
             ],
         )
 
+    def test_a_redirect_target_is_reported(self) -> None:
+        """A refusal that answers with somewhere to go describes the fix."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _refused(
+                payload=b'{"redirectUrl": "https://secure.ally.com/acs/sso/start"}'
+            ),
+        )
+
+        self.assertIn(
+            "points to: https://secure.ally.com/acs/sso/start",
+            conn.failed_responses[0],
+        )
+
+    def test_the_target_goes_through_the_same_redaction(self) -> None:
+        """A handoff URL carries its token in the query and its id in the path."""
+        conn = _connection()
+        conn.watch_responses()
+        token = "t" * 40
+        _emit(
+            conn,
+            _refused(
+                payload=(
+                    b'{"redirectUrl": "https://secure.ally.com/sso/'
+                    + token.encode()
+                    + b'/go?jwt=SECRET"}'
+                )
+            ),
+        )
+        line = conn.failed_responses[0]
+
+        self.assertIn("https://secure.ally.com/sso/<id>/go", line)
+        self.assertNotIn("SECRET", line)
+        self.assertNotIn(token, line)
+
+    def test_a_relative_target_is_not_mistaken_for_free_text(self) -> None:
+        """Only absolute http(s) values are URLs; the rest stay withheld."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"redirectUrl": "/accounts/summary"}'))
+        line = conn.failed_responses[0]
+
+        self.assertIn("redirectUrl", line)
+        self.assertNotIn("/accounts/summary", line)
+
     def test_an_unreadable_body_still_leaves_the_status(self) -> None:
         conn = _connection()
         conn.watch_responses()

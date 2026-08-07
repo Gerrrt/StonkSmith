@@ -113,6 +113,12 @@ ERROR_BODY_LIMIT = 4096
 #: can carry a name, an email or a masked account beside its reason.
 REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_.-]{2,40}$")
 
+#: A refusal that answers with somewhere to go is describing the fix. Ally's
+#: invest session check refuses a restored session with a 49-byte body holding
+#: one key, redirectUrl, and where it points is the whole question -- so these
+#: are reported, through the same redaction as any other URL.
+REDIRECT_VALUE = re.compile(r"^https?://", re.IGNORECASE)
+
 #: --browser values mapped to Playwright channels. "chromium" is the bundled
 #: build; "chrome" is the real Google Chrome binary, which fingerprints much
 #: better but has to be installed separately.
@@ -253,16 +259,28 @@ def error_shape(response: PlaywrightResponse) -> str:
         return ""
 
     keys: list[str] = [str(object=k) for k in payload]
-    codes: list[str] = [
-        value
-        for value in payload.values()
-        if isinstance(value, str) and REASON_CODE.match(string=value)
-    ]
+    codes: list[str] = []
+    targets: list[str] = []
+
+    for value in payload.values():
+        if not isinstance(value, str):
+            continue
+
+        if REASON_CODE.match(string=value):
+            codes.append(value)
+
+        # Through endpoint_of, not raw: a handoff URL carries its token in the
+        # query, and where it points is answered by the host and path alone.
+        elif REDIRECT_VALUE.match(string=value):
+            targets.append(endpoint_of(url=value))
 
     parts: list[str] = [f"keys: {', '.join(keys)}"] if keys else []
 
     if codes:
         parts.append(f"codes: {', '.join(codes)}")
+
+    if targets:
+        parts.append(f"points to: {', '.join(targets)}")
 
     return f" {{{' | '.join(parts)}}}" if parts else ""
 
