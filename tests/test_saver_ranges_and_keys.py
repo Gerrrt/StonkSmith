@@ -96,6 +96,7 @@ class SaverWritesTests(unittest.TestCase):
         saver.save_transactions(
             data=[
                 {
+                    "Account": "Ezekiel",
                     "Processed": "2025-12-30",
                     "Traded": "2025-12-29",
                     "Type": "Contribution",
@@ -109,9 +110,65 @@ class SaverWritesTests(unittest.TestCase):
         worksheet.append_rows.assert_not_called()
 
         rows_call = worksheet.update.call_args_list[-1]
-        self.assertEqual(rows_call.args[1], "C17:H17")
+        self.assertEqual(rows_call.args[1], "C17:I17")
 
     def test_the_transaction_range_grows_with_the_data(self) -> None:
+        saver, worksheet = self._saver()
+
+        saver.save_transactions(
+            data=[
+                {
+                    "Account": "Ezekiel",
+                    "Processed": "a",
+                    "Traded": "b",
+                    "Type": "c",
+                    "Units": "1",
+                    "Price": "2",
+                    "Value": "3",
+                },
+                {
+                    "Account": "Naomi",
+                    "Processed": "d",
+                    "Traded": "e",
+                    "Type": "f",
+                    "Units": "4",
+                    "Price": "5",
+                    "Value": "6",
+                },
+            ]
+        )
+
+        self.assertEqual(worksheet.update.call_args_list[-1].args[1], "C17:I18")
+
+    def test_the_account_leads_the_transaction_block(self) -> None:
+        # Attributed transactions interleave several beneficiaries in one
+        # block; without this column the rows do not say whose they are.
+        saver, worksheet = self._saver()
+
+        saver.save_transactions(
+            data=[
+                {
+                    "Account": "Naomi",
+                    "Processed": "a",
+                    "Traded": "b",
+                    "Type": "c",
+                    "Units": "1",
+                    "Price": "2",
+                    "Value": "3",
+                }
+            ]
+        )
+
+        header_call = worksheet.update.call_args_list[-2]
+        self.assertEqual(header_call.args[1], "C16:I16")
+        self.assertEqual(header_call.args[0][0][0], "Account")
+
+        self.assertEqual(worksheet.update.call_args_list[-1].args[0][0][0], "Naomi")
+
+    def test_a_row_without_an_account_still_lines_up(self) -> None:
+        # The pre-history fallback path hands over scraped rows, which have no
+        # Account key. A blank first cell is right; a six-cell row written into
+        # a seven-column block would shift every value one column left.
         saver, worksheet = self._saver()
 
         saver.save_transactions(
@@ -123,19 +180,14 @@ class SaverWritesTests(unittest.TestCase):
                     "Units": "1",
                     "Price": "2",
                     "Value": "3",
-                },
-                {
-                    "Processed": "d",
-                    "Traded": "e",
-                    "Type": "f",
-                    "Units": "4",
-                    "Price": "5",
-                    "Value": "6",
-                },
+                }
             ]
         )
 
-        self.assertEqual(worksheet.update.call_args_list[-1].args[1], "C17:H18")
+        written_row = worksheet.update.call_args_list[-1].args[0][0]
+        self.assertEqual(len(written_row), 7)
+        self.assertIsNone(written_row[0])
+        self.assertEqual(written_row[1], "a")
 
 
 class ParserSaverContractTests(unittest.TestCase):
@@ -164,6 +216,27 @@ class ParserSaverContractTests(unittest.TestCase):
             "Principal",
             "Earnings",
         }
+        self.assertTrue(
+            saver_reads.issubset(parsed[0].keys()),
+            f"parser is missing {saver_reads - parsed[0].keys()}",
+        )
+
+    def test_transaction_keys_cover_every_key_the_saver_reads(self) -> None:
+        # The transaction block never had this pinned, and the parser has just
+        # grown four keys. "Account" is the exception: the saver reads it off
+        # the database, not off a scraped row, so the parser owes only the six.
+        html = """
+        <html><body><div id="txHistDiv"><table><tbody><tr>
+          <td>12/30/2025</td><td>12/29/2025</td><td>Contribution</td>
+          <td>1</td><td>$50.00</td><td>$50.00</td>
+        </tr></tbody></table></div></body></html>
+        """
+        response = type("R", (), {"text": html})()
+        parsed = parser_mod.Parser(response=response).transaction_data()
+
+        self.assertTrue(parsed, "fixture should yield one transaction row")
+
+        saver_reads = {"Processed", "Traded", "Type", "Units", "Price", "Value"}
         self.assertTrue(
             saver_reads.issubset(parsed[0].keys()),
             f"parser is missing {saver_reads - parsed[0].keys()}",

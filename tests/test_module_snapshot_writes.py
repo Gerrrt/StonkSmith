@@ -9,10 +9,15 @@ contract -- including any under ~/.stonksmith/modules that a user wrote
 themselves -- knows only save_account_data, and must keep working exactly as it
 did rather than crashing on a method it never promised.
 
-The Schwab529 transaction case is the one worth stating plainly: the dashboard
-renders a single transaction table for the whole page with nothing naming the
-account a row belongs to. With one account there is one answer; with several
-there is no honest one, so nothing is stored and the run says so.
+The Schwab529 transaction case is the one worth stating plainly: the known
+rendering of the dashboard puts one transaction table on the page with nothing
+naming the account a row belongs to. Attribution therefore takes the strongest
+marker the markup offers -- a row that names its account, failing that a table
+per account paired by position, failing that a page showing a single account --
+and when none of those holds, nothing is stored and the run says so. Attaching
+the movements all to the first account invents history for it and copying them
+to each invents history for every account; both look completely plausible
+afterwards, which is what makes them worse than an empty table and a message.
 """
 
 import unittest
@@ -90,6 +95,7 @@ class _CapturingLog:
 
     def __init__(self) -> None:
         self.failures: list[str] = []
+        self.highlights: list[str] = []
 
     def __getattr__(self, name: str) -> Any:
         del name
@@ -97,6 +103,9 @@ class _CapturingLog:
 
     def fail(self, msg: str, **_kwargs: Any) -> None:
         self.failures.append(msg)
+
+    def highlight(self, msg: str, **_kwargs: Any) -> None:
+        self.highlights.append(msg)
 
 
 def _context(db: Any) -> Any:
@@ -250,32 +259,38 @@ class Schwab529WriteTests(unittest.TestCase):
     def test_a_holding_keeps_the_text_it_was_read_from(self) -> None:
         self.assertEqual(self.holdings(0)[0].raw_value, "$1,234.56")
 
+    def attribute(
+        self,
+        transactions: list[dict[str, Any]],
+        balances: list[dict[str, Any]],
+        log: _CapturingLog,
+    ) -> dict[int, list[Transaction]]:
+        return Schwab529Module.attribute_transactions(
+            transactions=transactions,
+            balances=balances,
+            context=MagicMock(log=log),
+            beneficiaries=self.BENEFICIARIES,
+        )
+
     def test_one_account_takes_the_transactions(self) -> None:
         log = _CapturingLog()
 
-        rows = Schwab529Module.attribute_transactions(
-            transactions=self.TRANSACTIONS,
-            balances=self.BALANCES[:1],
-            context=MagicMock(log=log),
-        )
+        attributed = self.attribute(self.TRANSACTIONS, self.BALANCES[:1], log)
 
-        self.assertEqual(len(rows), 1)
-        self.assertIsInstance(rows[0], Transaction)
+        self.assertEqual(list(attributed), [0])
+        self.assertEqual(len(attributed[0]), 1)
+        self.assertIsInstance(attributed[0][0], Transaction)
         self.assertEqual(log.failures, [], "an attributable table is not a problem")
 
-    def test_several_accounts_store_none_and_say_so(self) -> None:
+    def test_several_accounts_naming_none_store_none_and_say_so(self) -> None:
         # Attaching them all to the first invents history for it; copying them
         # to each invents history for every account. Both look plausible
         # afterwards, which is what makes them worse than storing nothing.
         log = _CapturingLog()
 
-        rows = Schwab529Module.attribute_transactions(
-            transactions=self.TRANSACTIONS,
-            balances=self.BALANCES,
-            context=MagicMock(log=log),
-        )
+        attributed = self.attribute(self.TRANSACTIONS, self.BALANCES, log)
 
-        self.assertEqual(rows, [])
+        self.assertEqual(attributed, {})
         self.assertEqual(len(log.failures), 1)
         self.assertIn("does not say which account", log.failures[0])
         self.assertIn("None were stored", log.failures[0])
@@ -283,12 +298,178 @@ class Schwab529WriteTests(unittest.TestCase):
     def test_no_transactions_is_not_reported_as_a_problem(self) -> None:
         log = _CapturingLog()
 
-        rows = Schwab529Module.attribute_transactions(
-            transactions=[], balances=self.BALANCES, context=MagicMock(log=log)
+        attributed = self.attribute([], self.BALANCES, log)
+
+        self.assertEqual(attributed, {})
+        self.assertEqual(log.failures, [])
+
+    def test_a_row_naming_its_account_goes_to_that_account(self) -> None:
+        log = _CapturingLog()
+        rows: list[dict[str, Any]] = [
+            {**self.TRANSACTIONS[0], "Account": "Naomi"},
+            {**self.TRANSACTIONS[0], "Account": "Ezekiel"},
+        ]
+
+        attributed = self.attribute(rows, self.BALANCES, log)
+
+        self.assertEqual(sorted(attributed), [0, 1])
+        self.assertEqual(len(attributed[0]), 1)
+        self.assertEqual(len(attributed[1]), 1)
+        self.assertEqual(log.failures, [])
+
+    def test_a_masked_account_number_matches_the_account_it_belongs_to(self) -> None:
+        # Schwab masks account numbers. "...5678" and "1000-5678" are not two
+        # different accounts, and a four-digit tail is what a human matches on.
+        log = _CapturingLog()
+        beneficiaries: list[dict[str, Any]] = [
+            {"Name": "Ezekiel", "Account": "1000-1234"},
+            {"Name": "Naomi", "Account": "1000-5678"},
+        ]
+
+        attributed = Schwab529Module.attribute_transactions(
+            transactions=[{**self.TRANSACTIONS[0], "Account": "XXXX-5678"}],
+            balances=self.BALANCES,
+            context=MagicMock(log=log),
+            beneficiaries=beneficiaries,
         )
 
-        self.assertEqual(rows, [])
+        self.assertEqual(list(attributed), [1])
         self.assertEqual(log.failures, [])
+
+    def test_a_section_heading_attributes_the_rows_beneath_it(self) -> None:
+        log = _CapturingLog()
+        rows: list[dict[str, Any]] = [
+            {**self.TRANSACTIONS[0], "Section": "Contributions for Ezekiel"},
+            {**self.TRANSACTIONS[0], "Section": "Contributions for Naomi"},
+        ]
+
+        attributed = self.attribute(rows, self.BALANCES, log)
+
+        self.assertEqual(sorted(attributed), [0, 1])
+
+    def test_rows_that_match_are_stored_and_the_rest_are_reported(self) -> None:
+        # The matched rows are correct. Discarding them as well would lose real
+        # history to protect nothing.
+        log = _CapturingLog()
+        rows: list[dict[str, Any]] = [
+            {**self.TRANSACTIONS[0], "Account": "Ezekiel"},
+            {**self.TRANSACTIONS[0], "Account": "Someone Else"},
+        ]
+
+        attributed = self.attribute(rows, self.BALANCES, log)
+
+        self.assertEqual(list(attributed), [0])
+        self.assertEqual(len(attributed[0]), 1)
+        self.assertEqual(len(log.failures), 1)
+        self.assertIn("1 of 2", log.failures[0])
+        self.assertIn("Someone Else", log.failures[0])
+
+    def test_a_hint_matching_two_accounts_is_not_an_attribution(self) -> None:
+        log = _CapturingLog()
+        beneficiaries: list[dict[str, Any]] = [
+            {"Name": "Smith", "Account": "ACC-1"},
+            {"Name": "Smith", "Account": "ACC-2"},
+        ]
+
+        attributed = Schwab529Module.attribute_transactions(
+            transactions=[{**self.TRANSACTIONS[0], "Account": "Smith"}],
+            balances=self.BALANCES,
+            context=MagicMock(log=log),
+            beneficiaries=beneficiaries,
+        )
+
+        self.assertEqual(attributed, {})
+        self.assertEqual(len(log.failures), 1)
+
+    def test_one_table_per_account_pairs_by_position(self) -> None:
+        # The same rule holdings_for already applies to the fund tables, which
+        # the page renders the same way.
+        log = _CapturingLog()
+        rows: list[dict[str, Any]] = [
+            {**self.TRANSACTIONS[0], "Table": 0},
+            {**self.TRANSACTIONS[0], "Table": 1},
+            {**self.TRANSACTIONS[0], "Table": 1},
+        ]
+
+        attributed = self.attribute(rows, self.BALANCES, log)
+
+        self.assertEqual(sorted(attributed), [0, 1])
+        self.assertEqual(len(attributed[0]), 1)
+        self.assertEqual(len(attributed[1]), 2)
+        self.assertEqual(log.failures, [], "an inference the page supports")
+        self.assertTrue(
+            any("split into 2 tables" in msg for msg in log.highlights),
+            "an inference has to say it was one",
+        )
+
+    def test_tables_that_do_not_match_the_account_count_store_nothing(self) -> None:
+        log = _CapturingLog()
+        rows: list[dict[str, Any]] = [
+            {**self.TRANSACTIONS[0], "Table": 0},
+            {**self.TRANSACTIONS[0], "Table": 1},
+            {**self.TRANSACTIONS[0], "Table": 2},
+        ]
+
+        attributed = self.attribute(rows, self.BALANCES, log)
+
+        self.assertEqual(attributed, {})
+        self.assertIn("None were stored", log.failures[0])
+
+    def test_one_caption_over_one_table_does_not_take_everyones_history(
+        self,
+    ) -> None:
+        # A single table covering both beneficiaries, captioned with one of
+        # their names, is the exact invention this refuses to make.
+        log = _CapturingLog()
+        rows: list[dict[str, Any]] = [
+            {**self.TRANSACTIONS[0], "Table": 0, "Title": "Ezekiel"},
+            {**self.TRANSACTIONS[0], "Table": 0, "Title": "Ezekiel"},
+        ]
+
+        attributed = self.attribute(rows, self.BALANCES, log)
+
+        self.assertEqual(attributed, {})
+        self.assertIn("None were stored", log.failures[0])
+
+    def test_a_caption_per_table_is_trusted(self) -> None:
+        log = _CapturingLog()
+        rows: list[dict[str, Any]] = [
+            {**self.TRANSACTIONS[0], "Table": 0, "Title": "Ezekiel"},
+            {**self.TRANSACTIONS[0], "Table": 1, "Title": "Naomi"},
+        ]
+
+        attributed = self.attribute(rows, self.BALANCES, log)
+
+        self.assertEqual(sorted(attributed), [0, 1])
+        self.assertEqual(log.failures, [])
+
+    def test_the_markup_is_described_when_nothing_can_be_attributed(self) -> None:
+        # Issue #36's blocking question is what the live page renders. A run
+        # that cannot attribute prints the shape so the next one can.
+        log = _CapturingLog()
+
+        Schwab529Module.attribute_transactions(
+            transactions=self.TRANSACTIONS,
+            balances=self.BALANCES,
+            context=MagicMock(log=log),
+            beneficiaries=self.BENEFICIARIES,
+            structure=[
+                {
+                    "Table": 0,
+                    "Caption": None,
+                    "Headers": ["Processed", "Traded"],
+                    "Rows": 1,
+                    "Widths": [6],
+                    "Attributes": ["class"],
+                }
+            ],
+        )
+
+        printed = " ".join(log.highlights)
+        self.assertIn("headers=['Processed', 'Traded']", printed)
+        self.assertIn("cells-per-row=[6]", printed)
+        self.assertIn("attributes=['class']", printed)
+        self.assertNotIn("$50.00", printed, "values do not belong in a diagnostic")
 
     def test_the_beneficiary_is_stored_rather_than_folded_into_a_name(self) -> None:
         from helpers.schwab529plan import beneficiary_field

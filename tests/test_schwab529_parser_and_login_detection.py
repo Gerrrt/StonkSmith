@@ -272,5 +272,192 @@ class Schwab529InvestmentParsingTests(unittest.TestCase):
         self.assertEqual(len(holdings), 1)
 
 
+#: The six columns the transaction table has always printed, in order.
+_TX_ROW: tuple[str, str, str, str, str, str] = (
+    "12/30/2025",
+    "12/29/2025",
+    "Contribution",
+    "1",
+    "$50.00",
+    "$50.00",
+)
+
+
+def _tx_row(cells: tuple[str, ...], attrs: str = "") -> str:
+    """Build one transaction row, optionally carrying attributes."""
+
+    return f"<tr{attrs}>" + "".join(f"<td>{cell}</td>" for cell in cells) + "</tr>"
+
+
+def _tx_table(
+    body: str, headers: tuple[str, ...] | None = None, caption: str | None = None
+) -> str:
+    """Build a transaction table in the shape the dashboard renders."""
+
+    head: str = (
+        "<thead><tr>"
+        + "".join(f"<th>{cell}</th>" for cell in headers)
+        + "</tr></thead>"
+        if headers
+        else ""
+    )
+    top: str = f"<caption>{caption}</caption>" if caption else ""
+
+    return f"<table>{top}{head}<tbody>{body}</tbody></table>"
+
+
+def _tx_div(tables: str) -> str:
+    """Wrap transaction markup in the div the parser looks the table up by."""
+
+    return f'<html><body><div id="txHistDiv">{tables}</div></body></html>'
+
+
+class Schwab529TransactionParsingTests(unittest.TestCase):
+    """What the transaction table says about which account a row belongs to.
+
+    Issue #36: on a multi-beneficiary page the movements were dropped entirely,
+    because the parser read one page-wide selector and stamped nothing onto a
+    row naming its account. It now reads all four places a marker could be --
+    the table's position, its caption, a section heading, and the row itself --
+    and none of them existing is still a valid answer.
+    """
+
+    def parse(self, html: str) -> list[dict[str, Any]]:
+        response = _StubResponse(text=html, url="https://www.schwab529plan.com/")
+        return Parser(response=response).transaction_data()
+
+    def test_the_plain_six_column_table_reads_as_it_always_did(self) -> None:
+        rows = self.parse(_tx_div(_tx_table(_tx_row(_TX_ROW))))
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["Processed"], "12/30/2025")
+        self.assertEqual(rows[0]["Traded"], "12/29/2025")
+        self.assertEqual(rows[0]["Type"], "Contribution")
+        self.assertEqual(rows[0]["Units"], "1")
+        self.assertEqual(rows[0]["Price"], "$50.00")
+        self.assertEqual(rows[0]["Value"], "$50.00")
+
+    def test_a_page_with_no_transaction_table_yields_nothing(self) -> None:
+        self.assertEqual(self.parse(_tx_div("")), [])
+
+    def test_the_known_rendering_names_no_account(self) -> None:
+        # The whole of issue #36 in one assertion: nothing here says whose
+        # movement this is, and the parser must not pretend otherwise.
+        rows = self.parse(_tx_div(_tx_table(_tx_row(_TX_ROW))))
+
+        self.assertIsNone(rows[0]["Account"])
+        self.assertIsNone(rows[0]["Section"])
+        self.assertIsNone(rows[0]["Title"])
+
+    def test_rows_carry_the_index_of_the_table_they_came_from(self) -> None:
+        markup: str = _tx_table(_tx_row(_TX_ROW) * 2) + _tx_table(_tx_row(_TX_ROW))
+
+        rows = self.parse(_tx_div(markup))
+
+        self.assertEqual([row["Table"] for row in rows], [0, 0, 1])
+
+    def test_a_table_wrapped_in_a_container_is_still_found(self) -> None:
+        # The old xpath required the table to be a direct child of the div, so
+        # a page that wraps each account's table yielded nothing at all.
+        rows = self.parse(
+            _tx_div(f"<div><div>{_tx_table(_tx_row(_TX_ROW))}</div></div>")
+        )
+
+        self.assertEqual(len(rows), 1)
+
+    def test_a_nested_table_is_not_counted_twice(self) -> None:
+        # A table wrapping another is layout. Reading both would emit the inner
+        # rows once on their own and once through the wrapper's descendant
+        # rows, doubling every movement.
+        inner: str = _tx_table(_tx_row(_TX_ROW))
+        outer: str = f"<table><tbody><tr><td>{inner}</td></tr></tbody></table>"
+
+        rows = self.parse(_tx_div(outer))
+
+        self.assertEqual([row["Table"] for row in rows], [0])
+        self.assertEqual(rows[0]["Processed"], "12/30/2025")
+
+    def test_a_caption_is_read_as_the_tables_title(self) -> None:
+        rows = self.parse(
+            _tx_div(_tx_table(_tx_row(_TX_ROW), caption="Ezekiel 529 Plan"))
+        )
+
+        self.assertEqual(rows[0]["Title"], "Ezekiel 529 Plan")
+
+    def test_an_account_column_is_read_by_its_header(self) -> None:
+        headers = ("Account", "Processed", "Traded", "Type", "Units", "Price", "Value")
+        rows = self.parse(
+            _tx_div(_tx_table(_tx_row(("ACC-1", *_TX_ROW)), headers=headers))
+        )
+
+        self.assertEqual(rows[0]["Account"], "ACC-1")
+
+    def test_an_extra_column_does_not_shift_the_other_six(self) -> None:
+        # Fixed td[1]..td[6] would have read the account as Processed and slid
+        # every other field one column left, filling the database with
+        # plausible nonsense.
+        headers = ("Account", "Processed", "Traded", "Type", "Units", "Price", "Value")
+        rows = self.parse(
+            _tx_div(_tx_table(_tx_row(("ACC-1", *_TX_ROW)), headers=headers))
+        )
+
+        self.assertEqual(rows[0]["Processed"], "12/30/2025")
+        self.assertEqual(rows[0]["Value"], "$50.00")
+
+    def test_a_header_row_inside_the_body_is_not_a_transaction(self) -> None:
+        # It used to become a movement with every field None.
+        body: str = (
+            "<tr><th>Processed</th><th>Traded</th><th>Type</th>"
+            "<th>Units</th><th>Price</th><th>Value</th></tr>"
+        ) + _tx_row(_TX_ROW)
+
+        rows = self.parse(_tx_div(_tx_table(body)))
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["Processed"], "12/30/2025")
+        self.assertIsNone(rows[0]["Section"], "a header row is not a section")
+
+    def test_a_section_heading_is_carried_onto_the_rows_beneath_it(self) -> None:
+        body: str = (
+            '<tr><td colspan="6">Ezekiel -- Account 1234</td></tr>'
+            + _tx_row(_TX_ROW)
+            + '<tr><td colspan="6">Naomi -- Account 5678</td></tr>'
+            + _tx_row(_TX_ROW)
+        )
+
+        rows = self.parse(_tx_div(_tx_table(body)))
+
+        self.assertEqual(len(rows), 2, "a heading is not itself a movement")
+        self.assertEqual(rows[0]["Section"], "Ezekiel -- Account 1234")
+        self.assertEqual(rows[1]["Section"], "Naomi -- Account 5678")
+
+    def test_an_account_attribute_on_the_row_is_read(self) -> None:
+        rows = self.parse(
+            _tx_div(
+                _tx_table(_tx_row(_TX_ROW, attrs=' data-account-number="XXXX4321"'))
+            )
+        )
+
+        self.assertEqual(rows[0]["Account"], "XXXX4321")
+
+    def test_an_account_attribute_on_a_cell_is_read(self) -> None:
+        row: str = (
+            '<tr><td data-beneficiary="Naomi">12/30/2025</td>'
+            "<td>12/29/2025</td><td>Contribution</td>"
+            "<td>1</td><td>$50.00</td><td>$50.00</td></tr>"
+        )
+
+        rows = self.parse(_tx_div(_tx_table(row)))
+
+        self.assertEqual(rows[0]["Account"], "Naomi")
+
+    def test_a_spacer_row_is_skipped(self) -> None:
+        body: str = "<tr><td></td><td></td></tr>" + _tx_row(_TX_ROW)
+
+        rows = self.parse(_tx_div(_tx_table(body)))
+
+        self.assertEqual(len(rows), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
