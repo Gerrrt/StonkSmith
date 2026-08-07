@@ -58,6 +58,9 @@ from playwright.sync_api import (
 from playwright.sync_api import (
     Error as PlaywrightError,
 )
+from playwright.sync_api import (
+    Response as PlaywrightResponse,
+)
 from playwright_stealth import Stealth
 from requests import Response
 from requests.exceptions import RequestException
@@ -69,6 +72,15 @@ from etc.paths import logs_path, playwright_path
 #: that class is not exported from playwright.sync_api -- only from a private
 #: module. It subclasses the public Error, so it is identified by message.
 BROWSER_CLOSED_TEXT = "has been closed"
+
+#: A response at or above this status is worth reporting when a page comes up
+#: empty. 4xx and 5xx only: the redirects below it are how single-page apps
+#: normally hand a session around.
+FAILED_RESPONSE_FLOOR = 400
+
+#: How many distinct failures to report. A blocked page can fail dozens of
+#: requests for one reason, and the first few name it.
+FAILED_RESPONSE_LIMIT = 12
 
 #: --browser values mapped to Playwright channels. "chromium" is the bundled
 #: build; "chrome" is the real Google Chrome binary, which fingerprints much
@@ -168,6 +180,13 @@ class BrowserConnection(Connection):
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
         self.page: Page | None = None
+
+        # Filled by watch_failed_responses(), reported by capture_page(). A
+        # saved page says what rendered; these say what the page asked for and
+        # did not get, which is the difference between markup that moved and a
+        # request that was refused.
+        self.failed_responses: list[str] = []
+        self.watching_responses: bool = False
 
     def create_conn_obj(self) -> bool:
         """
@@ -499,6 +518,72 @@ class BrowserConnection(Connection):
 
         return True
 
+    def watch_failed_responses(self) -> None:
+        """
+        Start recording requests the site refused.
+
+        A saved page answers "what rendered". It cannot answer "why nothing
+        did", because a single-page app that is signed out, blocked by a bot
+        filter, or simply pointed at the wrong account all render the same
+        empty shell -- the difference is in the XHRs behind it, which never
+        reach the markup. Recording the failures makes the two capture files
+        say different things instead of the same thing.
+
+        Installs once per page. Query strings are dropped: they carry tokens
+        and account ids, and these lines are meant to be pasteable into an
+        issue.
+        :return: None
+        :rtype: None
+        """
+
+        if self.watching_responses or self.page is None:
+            return
+
+        def note(response: PlaywrightResponse) -> None:
+            if response.status < FAILED_RESPONSE_FLOOR:
+                return
+
+            split = urlparse(url=response.url)
+            line: str = f"{response.status} {split.scheme}://{split.netloc}{split.path}"
+
+            # Deduplicated: one refused endpoint retried twenty times is one
+            # fact, and the retries would push the other endpoints off the end.
+            if line not in self.failed_responses:
+                self.failed_responses.append(line)
+
+        self.page.on("response", note)
+        self.watching_responses = True
+
+    def report_failed_responses(self) -> None:
+        """
+        Log whatever ``watch_failed_responses()`` collected.
+
+        Says so explicitly when nothing failed. "The page asked for nothing and
+        got nothing" points at routing or a script that never ran, which is a
+        different problem from "every call came back 403", and silence would
+        read as the diagnostic not being wired up.
+        :return: None
+        :rtype: None
+        """
+
+        if not self.watching_responses:
+            return
+
+        if not self.failed_responses:
+            self.logger.fail(msg="No request failed while the page was loading.")
+            return
+
+        shown: list[str] = self.failed_responses[:FAILED_RESPONSE_LIMIT]
+        self.logger.fail(msg=f"{len(self.failed_responses)} request(s) were refused:")
+
+        for line in shown:
+            self.logger.fail(msg=f"    {line}")
+
+        if len(self.failed_responses) > len(shown):
+            self.logger.fail(
+                msg=f"    ... and {len(self.failed_responses) - len(shown)} more"
+            )
+
     def capture_page(self, reason: str) -> Path | None:
         """
         Save the current page so selectors can be fixed against real markup.
@@ -538,6 +623,10 @@ class BrowserConnection(Connection):
         except Exception:
             # A screenshot is a nice-to-have; the HTML is what matters.
             pass
+
+        # Alongside the markup, not instead of it: an empty page and the calls
+        # that came back refused are only diagnostic together.
+        self.report_failed_responses()
 
         return target
 
