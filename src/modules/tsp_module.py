@@ -19,6 +19,7 @@ from helpers.tsp import (
     CLOSING_UNITS_LABEL,
     fund_values,
     price_on,
+    same_fund,
     statement_funds,
     statement_period,
 )
@@ -249,7 +250,27 @@ class TspModule:
 
         """
         if self.statement:
-            units, fund, as_of = read_statement(path=self.statement)
+            # Not `fund`: rebinding the parameter here read the statement's own
+            # fund, printed it, and threw it away, because only the units are
+            # returned. A statement for one fund was then priced with the
+            # configured fund's price -- 315.789 units of L 2050 marked at L
+            # 2060's $24.6710 came to $7,790.83, where the statement's own fund
+            # gives $14,794.59. Ninety percent wrong, with both names printed
+            # on adjacent lines and nothing said about it.
+            units, statement_fund, as_of = read_statement(path=self.statement)
+
+            if units is not None and not same_fund(statement_fund, fund):
+                context.log.fail(
+                    msg=(
+                        f"{self.statement} is a {statement_fund or 'unnamed'} "
+                        f"statement, but the configured fund is {fund}. Units "
+                        "are per fund and so are prices, so valuing one with "
+                        "the other is meaningless. Correct [TSP] fund in "
+                        "~/.stonksmith/stonksmith.conf, or point -o STATEMENT= "
+                        "at the statement for that fund."
+                    )
+                )
+                return None, "", FROM_STATEMENT
 
             if units is None:
                 context.log.fail(
@@ -267,7 +288,7 @@ class TspModule:
                 dated: str = as_of.isoformat() if as_of else ""
                 context.log.success(
                     msg=(
-                        f"Statement: {format_units(units)} units of {fund} "
+                        f"Statement: {format_units(units)} units of {statement_fund} "
                         f"as of {dated or 'an unstated date'}"
                     )
                 )
