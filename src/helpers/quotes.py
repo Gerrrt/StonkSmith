@@ -174,9 +174,14 @@ def repriced(
     A holding marked at a published close instead of the broker's own.
 
     The units are the broker's, from whenever it was last read; the price is
-    the market's, from today. That pairing is the whole idea -- Ally will not
-    reuse a session, but a unit count does not change between deposits, and a
-    published price does not need a login.
+    the market's, for the day asked about. That pairing is the whole idea --
+    Ally will not reuse a session, but a unit count does not change between
+    deposits, and a published price does not need a login.
+
+    The day is a parameter rather than "now" because the answer is not always
+    today's close and should not pretend to be: a run before the NAV is struck,
+    on a weekend, or over a holiday falls back to the last published price, and
+    a past day can be valued at what it was actually worth.
 
     Returns the date the price came from alongside the holding, so the caller
     can record how old the mark is. Both halves age separately and a run that
