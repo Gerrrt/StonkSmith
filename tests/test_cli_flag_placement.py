@@ -27,11 +27,14 @@ class _RepoOnlyLoader(BrokerLoader):
     """A loader that ignores ~/.stonksmith/brokers.
 
     gen_cli_args() builds a BrokerLoader to register one subparser per broker,
-    and BrokerLoader scans the user's home as well as the repo. Without this,
-    a half-finished broker under ~/.stonksmith/brokers -- one whose
-    broker_args.py raises on import, say -- would fail these tests on the
-    developer's machine over something entirely unrelated to CLI parsing.
-    Same seam tests/test_broker_discovery.py uses.
+    and BrokerLoader scans the user's home as well as the repo. These tests
+    assert what the parser accepts, so whatever a developer happens to have
+    installed under ~/.stonksmith/brokers must not be part of the answer.
+
+    This is about determinism, not survival: a broker that raises on import is
+    now reported and skipped rather than taking the CLI down, which
+    tests/test_broker_load_isolation.py covers. Same seam
+    tests/test_broker_discovery.py uses.
     """
 
     def __init__(self) -> None:
