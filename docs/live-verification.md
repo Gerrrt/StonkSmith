@@ -23,7 +23,7 @@ outcome would mean.
 | --- | --- | --- |
 | Ally — holdings, totals and sidebar parse | One signed-in DOM, redacted to `tests/ally_holdings.html` | No |
 | Ally — sign-in hand-off to `live.invest.ally.com` | Unit tests over a URL predicate | No |
-| Ally — session survives to the next run | `save_session()` writing `~/.stonksmith/playwright/Ally.json` | **Run, and it failed** — see below |
+| Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
 | Ally — masked sidebar number matches the full one | `masked_matches("...0111", "1AB20111")` against the fixture | No |
 | Ally — one row per account across runs | `uq_accounts_broker_key` | No |
 | TSP — statement parser | Real statement layouts | Yes, against real files |
@@ -99,62 +99,57 @@ it. Open the HTML and look for `#allyNavLogOut`. Present means the URL predicate
 right and the signed-in selector is wrong; absent means the hand-off never happened.
 A trace also lands at `~/.stonksmith/playwright/Ally_trace.zip`.
 
-### 2. The session persists
+### 2. The session does not persist
 
-**This is the step that decides whether the broker is usable daily.** Let the first
-run finish, then:
+**This was the step that decided whether the broker is usable daily, and it has an
+answer.** Settled 2026-08-07 across nine runs, both browsers, both persistence
+models: Ally cannot reuse a session. What follows is the evidence, not a procedure to
+repeat.
 
-```bash
-uv run stonksmith ally -M ally
+What is saved is not the problem. `~/.stonksmith/playwright/Ally.json` holds a
+well-stocked jar -- `jwt`, `refreshToken`, `csrf-token` and `tksid` for
+`.invest.ally.com`, `Ally-CIAM-Token` for `.ally.com`, and a `users` key in
+localStorage for the investing origin. `save_session()` writes it, mode `0600`, every
+time.
+
+What happens on the next run is that Ally refuses it and the app signs itself out:
+
+```
+401 https://live.invest.ally.com/api/session/checkSession (49 bytes) {keys: redirectUrl}
+401 https://secure.ally.com/acs/.../auth/login (464 bytes) {codes: error_code=4001}
 ```
 
-Note: no `--manual-login`. Look for:
+One or the other -- the refusal alternates between the investing host and the bank,
+with different bodies, and any claim about which one is "the" cause was wrong twice
+before this was understood. What does not vary: something answers 401, the app then
+calls `auth/anonymous_invoke`, and the shell renders with an empty `<sidebar>`. After
+a manual sign-in the same endpoints answer 200, which is what makes the comparison
+conclusive rather than suggestive.
 
-```
-[+] Reusing the saved Ally session; no sign-in needed.
-```
+Three mechanisms were tried:
 
-**This has been run, and it failed.** First observation, 2026-08-07: the sign-in
-completed and `Ally.json` was written with real data, and the next run did not reuse
-it. It fell through to the five-minute interactive wait and timed out. Twice.
+- **Firefox with `storage_state`** (the default). Refused.
+- **Firefox with `storage_state(indexed_db=True)`.** Device-binding SDKs keep their
+  identity in IndexedDB and `storage_state()` omits it unless asked, so this was the
+  best remaining theory. Refused.
+- **`--browser chrome`, a persistent profile directory.** Refused, and differently:
+  the holdings URL does not reach the investing host at all, landing on
+  `www.ally.com`.
 
-Why was not knowable from the output. `session_is_live()` had four rejection paths
-and none of them said anything — the capture that did land came from the manual-login
-timeout five minutes later, showing the bank login screen nobody had filled in rather
-than the page the session check actually rejected. One cause has since been found and
-fixed: the check read the page the instant `goto()` returned, before Angular had
-rendered the log-out control it requires, so a live session read as a dead one. The
-rejections now name themselves and the undecidable one leaves a capture.
+The page captures cannot show any of this, which is why it took nine runs. Four of
+them are identical to within one byte -- 758550, 758551, 758550 -- including one taken
+from a session that made 25 successful data calls. A session Ally renders for and one
+it does not produce the same markup, so the difference only ever existed in the
+network log.
 
-That fix may not be the whole story, so the step still has to be run. If it asks you
-to sign in again, check whether `~/.stonksmith/playwright/Ally.json` exists and is
-larger than `{}`; it should be mode `0600`. Four outcomes:
+**The outcome: Ally cannot run unattended.** `--manual-login` on every run is the
+correct description, and the README says so. This is not a defect to fix in
+StonkSmith; nothing StonkSmith stores reconstitutes a session Ally will honour.
 
-- **No file.** `save_session()` never wrote. A defect.
-- **Reused.** Re-run once more the next day. A session that survives a process exit
-  but not a night is still not a daily broker.
-- **`... loaded but never rendered a log-out control ...`** — the run is on the
-  investing host and the session is not being honoured, or the markup moved. Open the
-  `ally-session-check-*.html` capture it leaves in `~/.stonksmith/logs/` and look for
-  `allyNavLogOut`. Present means the markup moved and the selector needs updating;
-  absent means Ally did not honour the saved session.
-- **`... landed on secure.ally.com, showing the bank's sign-in form.`** — the session
-  is gone, not mis-detected. Note that `storage_state()` captures cookies and
-  localStorage but never `sessionStorage`, and Ally hands the investing site a token
-  from the bank, which is exactly what a single-page app parks there.
+What *is* proven, every one of those nine runs: the sign-in flow, the holdings parse,
+the account rail, the bank/brokerage split and the database write. The scrape works.
+It is only the unattended part that does not.
 
-If it is the last one, **the honest outcome is that Ally cannot run unattended**,
-`--manual-login` on every run is the correct description, and the README says so
-rather than the claim being left standing. That is the point of running this.
-
-One variable to hold still while diagnosing: the run that *writes* the session is
-headed, because `--manual-login` forces it, while the run that *reuses* it is
-headless. Adding `--headed` to the reuse run is the cheapest way to watch where it
-actually lands.
-
-`--browser chromium` and `--browser cdp` persist differently — a user-data directory
-rather than a storage-state file — so a result on one does not carry to the others.
-The default is Firefox; verify that first, since it is what an unattended run uses.
 
 ### 3. The masked number reconciles against a real account
 
