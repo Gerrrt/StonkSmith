@@ -113,6 +113,27 @@ ERROR_BODY_LIMIT = 4096
 #: can carry a name, an email or a masked account beside its reason.
 REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_.-]{2,40}$")
 
+#: Keys whose value is a reason rather than a description. A refusal that
+#: carries "error_code" is naming something lookup-able, and it is worth
+#: printing even when it is a number or lowercase -- the uppercase-token rule
+#: below was written for SESSION_EXPIRED and silently withheld Ally's 464-byte
+#: refusal, which carries error_code and error_message and matched neither.
+#:
+#: Values under these keys are still bounded: short, and no whitespace, so a
+#: sentence stays a sentence and goes unprinted.
+#:
+#: Matched as whole words, not as substrings. "passcode" and "zipcode" both
+#: contain "code" and neither is a refusal reason -- one of them is a secret --
+#: so the key is split on snake_case and camelCase boundaries and each word
+#: compared outright.
+CODE_WORDS = frozenset({"code", "status", "reason"})
+
+#: Splits error_code, errorCode and error-code alike into their words.
+KEY_WORDS = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
+
+#: How long a value under a code-shaped key may be before it stops being a code.
+CODE_VALUE_LIMIT = 40
+
 #: A refusal that answers with somewhere to go is describing the fix. Ally's
 #: invest session check refuses a restored session with a 49-byte body holding
 #: one key, redirectUrl, and where it points is the whole question -- so that
@@ -217,6 +238,22 @@ def size_suffix(response: PlaywrightResponse) -> str:
     return f" ({size} bytes)"
 
 
+def names_a_code(key: str) -> bool:
+    """
+    Whether a key says its value is a reason rather than a description.
+
+    Whole words only. "passcode" contains "code" and is the last thing that
+    should reach a log, so a substring test is not good enough here.
+    :param key: The field name from a refusal body
+    :return: True when one of its words is code, status or reason
+    :rtype: bool
+    """
+
+    return any(
+        word.lower() in CODE_WORDS for word in KEY_WORDS.split(string=key) if word
+    )
+
+
 def error_shape(response: PlaywrightResponse) -> str:
     """
     Why a refused request was refused, without printing what it refused.
@@ -269,11 +306,28 @@ def error_shape(response: PlaywrightResponse) -> str:
     targets: list[str] = []
 
     for key, value in payload.items():
+        name: str = str(object=key)
+
+        # Numbers and booleans cannot be a name, an email or an account
+        # number, so they are safe to print whatever key they sit under.
+        if isinstance(value, bool | int | float):
+            codes.append(f"{name}={value}")
+            continue
+
         if not isinstance(value, str):
             continue
 
         if REASON_CODE.match(string=value):
             codes.append(value)
+            continue
+
+        # A short, single-token value under a key that says "code" is one.
+        if (
+            names_a_code(key=name)
+            and len(value) <= CODE_VALUE_LIMIT
+            and value.split() == [value]
+        ):
+            codes.append(f"{name}={value}")
             continue
 
         if not REDIRECT_KEY.search(string=str(object=key)):

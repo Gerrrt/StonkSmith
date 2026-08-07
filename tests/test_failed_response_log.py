@@ -656,6 +656,81 @@ class ErrorShape(unittest.TestCase):
             ],
         )
 
+    def test_a_numeric_code_is_reported(self) -> None:
+        """Ally's 464-byte refusal carries error_code, and it is not uppercase."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"error_code": 1032}'))
+
+        self.assertIn("error_code=1032", conn.failed_responses[0])
+
+    def test_a_lowercase_code_under_a_code_key_is_reported(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"error_code": "auth.session.absent"}'))
+
+        self.assertIn("error_code=auth.session.absent", conn.failed_responses[0])
+
+    def test_a_passcode_is_not_a_code_key(self) -> None:
+        """It contains "code" and is the last thing that should be logged."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"passcode": "hunter2"}'))
+        line = conn.failed_responses[0]
+
+        self.assertIn("passcode", line)
+        self.assertNotIn("hunter2", line)
+
+    def test_a_zipcode_is_not_a_code_key_either(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"zipcode": "94103"}'))
+
+        self.assertNotIn("94103", conn.failed_responses[0])
+
+    def test_camel_case_keys_are_split_into_words(self) -> None:
+        """errorCode and error_code are the same field spelled two ways."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"errorCode": "auth.absent"}'))
+
+        self.assertIn("errorCode=auth.absent", conn.failed_responses[0])
+
+    def test_a_sentence_under_a_code_key_stays_a_sentence(self) -> None:
+        """error_message is free text however it is spelled."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _refused(payload=b'{"status_reason": "Jane Q Public is not signed in"}'),
+        )
+        line = conn.failed_responses[0]
+
+        self.assertIn("status_reason", line)
+        self.assertNotIn("Jane", line)
+
+    def test_a_long_token_under_a_code_key_is_withheld(self) -> None:
+        """Past a point it is an identifier, not a code."""
+        conn = _connection()
+        conn.watch_responses()
+        token = "x" * (browser_mod.CODE_VALUE_LIMIT + 1)
+        _emit(
+            conn,
+            _refused(payload=b'{"status_code": "' + token.encode() + b'"}'),
+        )
+
+        self.assertNotIn(token, conn.failed_responses[0])
+
+    def test_free_text_under_an_ordinary_key_is_still_withheld(self) -> None:
+        """Numbers are safe anywhere; strings are not."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"customer": "Jane Q Public", "id": 7}'))
+        line = conn.failed_responses[0]
+
+        self.assertIn("id=7", line)
+        self.assertNotIn("Jane", line)
+
     def test_a_redirect_target_is_reported(self) -> None:
         """A refusal that answers with somewhere to go describes the fix."""
         conn = _connection()
