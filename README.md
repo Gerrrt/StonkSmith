@@ -99,11 +99,16 @@ cd stonksmith
 uv sync
 ```
 
-Fidelity and Ally drive a real browser, so install the Playwright runtime once:
+Fidelity and Ally drive a real browser, so install the Playwright runtime:
 
 ```bash
 uv run playwright install firefox
 ```
+
+Run that again after any `uv sync` that moves Playwright. Each release pins a
+new browser revision, so an already-installed Firefox stops satisfying it and
+the next run fails with `Could not start browser`, naming an executable that is
+not there.
 
 ---
 

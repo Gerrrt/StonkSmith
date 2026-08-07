@@ -52,6 +52,20 @@ has been edited since this was written.
 
 ### 1. The sign-in completes and the hand-off is respected
 
+Install the browser runtime first — and again after any `uv sync` that moves
+Playwright, since each release pins a new browser revision and the previously
+installed one no longer satisfies it:
+
+```bash
+uv run playwright install firefox
+```
+
+Skipping it gives a `Could not start browser for Ally` failure naming a Firefox
+executable that is not there, followed by Playwright's own banner suggesting a bare
+`playwright install` — which needs the `uv run` prefix here or it installs against
+the wrong environment. That failure is the runtime being absent, not the broker; the
+run reports it and exits rather than raising.
+
 ```bash
 uv run stonksmith ally -M ally --manual-login
 ```
