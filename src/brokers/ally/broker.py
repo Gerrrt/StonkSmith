@@ -150,17 +150,19 @@ class Ally(BrowserConnection):
         The hostname the browser is currently on, for reporting.
 
         Naming where a run actually landed is the difference between "it asked
-        me to sign in again" and a diagnosis, so this never raises: a host that
-        cannot be read is itself reportable.
-        :return: The hostname, or "" when there is no readable page
+        me to sign in again" and a diagnosis.
+
+        Deliberately unguarded, in the way page_body() is guarded: Page.url
+        reads a cached string off the main frame rather than crossing to the
+        browser, so unlike content() it does not raise even once the page is
+        closed. Wrapping it would be an except clause that can never run, and
+        would suggest on_invest_site() -- which reads the same property -- is
+        missing one.
+        :return: The hostname, lowercased, or "" when the URL carries none
         :rtype: str
         """
 
-        try:
-            return (urlparse(url=self.active_page.url).hostname or "").lower()
-
-        except PlaywrightError:
-            return ""
+        return (urlparse(url=self.active_page.url).hostname or "").lower()
 
     def shows_sign_in_form(self) -> bool:
         """
