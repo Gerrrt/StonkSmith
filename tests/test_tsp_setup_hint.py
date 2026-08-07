@@ -45,17 +45,30 @@ class SetupHint(unittest.TestCase):
         self.assertIn("stonksmith.conf", self.hint)
 
     def test_it_names_the_section_and_the_key(self) -> None:
+        """The key as written, not the word in passing.
+
+        "fund" alone turns up in any sentence about funds, so asserting on it
+        would pass a hint that never says what to actually type.
+        """
         self.assertIn("[TSP]", self.hint)
-        self.assertIn("fund", self.hint)
+        self.assertIn("fund = ", self.hint)
 
     def test_it_shows_what_a_fund_name_looks_like(self) -> None:
         """ "C Fund" is not guessable from "fund"; it is a column heading."""
-        self.assertIn("C Fund", self.hint)
+        self.assertIn("fund = C Fund", self.hint)
 
     def test_it_lists_every_way_units_can_arrive(self) -> None:
         """Units are not config-only, and a hint that implied so would mislead."""
-        for route in ("--units", "--balance", "STATEMENT"):
+        for route in ("--units", "--balance", "--balance-as-of", "STATEMENT"):
             self.assertIn(route, self.hint)
+
+    def test_the_balance_route_keeps_its_required_companion(self) -> None:
+        """--balance without its date cannot be converted at all.
+
+        The same dollars buy a different number of units on a different day, so
+        offering one without the other would send a run to a second error.
+        """
+        self.assertIn("--balance with --balance-as-of", self.hint)
 
 
 if __name__ == "__main__":
