@@ -232,12 +232,17 @@ the session, and reports whether the save succeeded — the intent is that Ally
 remembers a device once it has seen one, so later runs skip the sign-in until
 the session expires.
 
-**That last part is unverified.** No Ally run has yet happened against a real
-account, so whether the saved session actually survives to the next run is
-designed behaviour, not observed behaviour. It is the claim that decides
-whether this broker is usable daily rather than only interactively. If it does
-not hold, `--manual-login` on every run is the honest description and this
-section is what changes. `docs/live-verification.md` has the procedure.
+**That last part did not hold on its first real run.** The sign-in completed and
+the session file was written, and the next run did not reuse it. One cause has
+been found and fixed — the check read the page before Ally's shell had rendered
+the control it looks for, so a live session read as a dead one — and the check
+now reports which of its rejections fired instead of failing silently. Whether
+that was the only cause is still unobserved.
+
+So treat daily unattended operation as unproven. If the session turns out not
+to survive at all, `--manual-login` on every run is the honest description and
+this section is what changes. `docs/live-verification.md` has the procedure and
+what each failure would mean.
 
 Ally runs Akamai, Dynatrace and Transmit on that login page, so the same
 attach-to-your-own-Chrome path Fidelity documents above applies here, pointed at

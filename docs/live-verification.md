@@ -23,7 +23,7 @@ outcome would mean.
 | --- | --- | --- |
 | Ally — holdings, totals and sidebar parse | One signed-in DOM, redacted to `tests/ally_holdings.html` | No |
 | Ally — sign-in hand-off to `live.invest.ally.com` | Unit tests over a URL predicate | No |
-| Ally — session survives to the next run | `save_session()` writing `~/.stonksmith/playwright/Ally.json` | No |
+| Ally — session survives to the next run | `save_session()` writing `~/.stonksmith/playwright/Ally.json` | **Run, and it failed** — see below |
 | Ally — masked sidebar number matches the full one | `masked_matches("...0111", "1AB20111")` against the fixture | No |
 | Ally — one row per account across runs | `uq_accounts_broker_key` | No |
 | TSP — statement parser | Real statement layouts | Yes, against real files |
@@ -114,19 +114,43 @@ Note: no `--manual-login`. Look for:
 [+] Reusing the saved Ally session; no sign-in needed.
 ```
 
-If instead it asks you to sign in again, check whether
-`~/.stonksmith/playwright/Ally.json` exists and is larger than `{}`; it should be
-mode `0600`. Three outcomes, three different meanings:
+**This has been run, and it failed.** First observation, 2026-08-07: the sign-in
+completed and `Ally.json` was written with real data, and the next run did not reuse
+it. It fell through to the five-minute interactive wait and timed out. Twice.
+
+Why was not knowable from the output. `session_is_live()` had four rejection paths
+and none of them said anything — the capture that did land came from the manual-login
+timeout five minutes later, showing the bank login screen nobody had filled in rather
+than the page the session check actually rejected. One cause has since been found and
+fixed: the check read the page the instant `goto()` returned, before Angular had
+rendered the log-out control it requires, so a live session read as a dead one. The
+rejections now name themselves and the undecidable one leaves a capture.
+
+That fix may not be the whole story, so the step still has to be run. If it asks you
+to sign in again, check whether `~/.stonksmith/playwright/Ally.json` exists and is
+larger than `{}`; it should be mode `0600`. Four outcomes:
 
 - **No file.** `save_session()` never wrote. A defect.
-- **File present, still asked.** `session_is_live()` fails closed by design: it
-  navigates to the holdings page and requires the log-out control to be *present*,
-  not merely the login form to be absent. Either Ally did not honour the cookie, or
-  it bounced to `secure.ally.com`. If Ally does not remember the device, that is a
-  fact about Ally, and the README's "later runs skip the sign-in" claim is the thing
-  that has to change.
 - **Reused.** Re-run once more the next day. A session that survives a process exit
   but not a night is still not a daily broker.
+- **`... loaded but never rendered a log-out control ...`** — the run is on the
+  investing host and the session is not being honoured, or the markup moved. Open the
+  `ally-session-check-*.html` capture it leaves in `~/.stonksmith/logs/` and look for
+  `allyNavLogOut`. Present means the markup moved and the selector needs updating;
+  absent means Ally did not honour the saved session.
+- **`... landed on secure.ally.com, showing the bank's sign-in form.`** — the session
+  is gone, not mis-detected. Note that `storage_state()` captures cookies and
+  localStorage but never `sessionStorage`, and Ally hands the investing site a token
+  from the bank, which is exactly what a single-page app parks there.
+
+If it is the last one, **the honest outcome is that Ally cannot run unattended**,
+`--manual-login` on every run is the correct description, and the README says so
+rather than the claim being left standing. That is the point of running this.
+
+One variable to hold still while diagnosing: the run that *writes* the session is
+headed, because `--manual-login` forces it, while the run that *reuses* it is
+headless. Adding `--headed` to the reuse run is the cheapest way to watch where it
+actually lands.
 
 `--browser chromium` and `--browser cdp` persist differently — a user-data directory
 rather than a storage-state file — so a result on one does not carry to the others.
