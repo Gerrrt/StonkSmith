@@ -223,6 +223,13 @@ class Ally(BrowserConnection):
                 return False
 
         else:
+            # Before navigating, so the check's own requests are recorded. The
+            # holdings URL renders for a live session -- ally_module opens the
+            # same one -- so when it comes up empty the answer is in what the
+            # page asked for and was refused, not in the markup it managed to
+            # render.
+            self.watch_failed_responses()
+
             try:
                 self.active_page.goto(url=self.holdings_url)
 
