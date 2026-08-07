@@ -127,11 +127,12 @@ def endpoint_of(url: str) -> str:
     """
     A URL reduced to something safe to log and useful to compare.
 
-    Two things are dropped. The query string, because Ally's carries the jwt
-    and the account id and these lines are meant to be pasted into an issue.
-    And any path segment long enough to be an id rather than a route name, both
-    for the same reason and so that twenty polls of one endpoint under twenty
-    account ids collapse to one line instead of filling the log.
+    Two things are dropped. The query string, because Ally's query strings
+    carry the jwt and the account id and these lines are meant to be pasted
+    into an issue. And any path segment long enough to be an id rather than a
+    route name, both for the same reason and so that twenty polls of one
+    endpoint under twenty account ids collapse to one line instead of filling
+    the log.
     :param url: The full request URL
     :return: scheme://host/path with long segments masked
     :rtype: str
@@ -694,8 +695,9 @@ class BrowserConnection(Connection):
             # A screenshot is a nice-to-have; the HTML is what matters.
             pass
 
-        # Alongside the markup, not instead of it: an empty page and the calls
-        # that came back refused are only diagnostic together.
+        # Alongside the markup, not instead of it: an empty page, the calls it
+        # made, and the ones that came back refused are only diagnostic
+        # together -- and the absence of any of the three is itself a reading.
         self.report_responses()
 
         return target

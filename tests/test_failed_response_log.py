@@ -16,7 +16,7 @@ guard that never ran. So the calls themselves are recorded too.
 What the recording owes its reader:
 
 * no query strings and no long path segments, because these lines are meant to
-  be pasted into an issue and Ally's carry the jwt and the account id
+  be pasted into an issue and Ally's URLs carry the jwt and the account id
 * one line per endpoint, because a blocked page retries the same call dozens of
   times and the retries would push every other endpoint off the end
 * an explicit line for each half when it is empty, since "nothing was refused"
@@ -77,7 +77,7 @@ class EndpointRedaction(unittest.TestCase):
     """What is stripped before anything is written down."""
 
     def test_the_query_string_goes(self) -> None:
-        """Ally's carries the jwt."""
+        """Ally's query string carries the jwt."""
         self.assertEqual(
             browser_mod.endpoint_of(
                 url="https://live.invest.ally.com/api/holdings?jwt=SECRET"
