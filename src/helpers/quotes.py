@@ -23,9 +23,12 @@ happens to agree for a US market, whose bars land mid-afternoon UTC, and would
 quietly disagree for one that does not.
 """
 
+import dataclasses
 import datetime as dt
 import json
 from typing import Any
+
+from etc.records import Holding
 
 #: Where the daily closes live in the payload, and the offset that dates them.
 CHART_ROOT = "chart"
@@ -162,3 +165,46 @@ def value_of(units: float, price: float) -> float:
     """
 
     return round(number=units * price, ndigits=2)
+
+
+def repriced(
+    holding: Holding, prices: dict[dt.date, float], day: dt.date
+) -> tuple[Holding, dt.date] | None:
+    """
+    A holding marked at a published close instead of the broker's own.
+
+    The units are the broker's, from whenever it was last read; the price is
+    the market's, from today. That pairing is the whole idea -- Ally will not
+    reuse a session, but a unit count does not change between deposits, and a
+    published price does not need a login.
+
+    Returns the date the price came from alongside the holding, so the caller
+    can record how old the mark is. Both halves age separately and a run that
+    reports neither is asserting a freshness it does not have.
+
+    Nothing is invented. A holding with no units cannot be valued and comes
+    back None rather than as a zero, because zero is a real balance and "we do
+    not know" is not.
+    :param holding: The position as last observed
+    :param prices: Published closes for that holding's symbol
+    :param day: The date being valued
+    :return: (repriced holding, price date), or None when it cannot be valued
+    :rtype: tuple[Holding, dt.date] | None
+    """
+
+    if holding.units is None:
+        return None
+
+    found = close_on(prices=prices, day=day)
+
+    if found is None:
+        return None
+
+    when, price = found
+
+    return (
+        dataclasses.replace(
+            holding, price=price, value=value_of(units=holding.units, price=price)
+        ),
+        when,
+    )

@@ -27,7 +27,14 @@ import datetime as dt
 import json
 import unittest
 
-from helpers.quotes import QuotesUnavailable, close_on, daily_closes, value_of
+from etc.records import Holding
+from helpers.quotes import (
+    QuotesUnavailable,
+    close_on,
+    daily_closes,
+    repriced,
+    value_of,
+)
 
 #: 2026-08-05, 2026-08-06 and 2026-08-07 at 09:30 New York.
 _STAMPS: tuple[int, ...] = (1785936600, 1786023000, 1786109400)
@@ -236,6 +243,91 @@ class Valuing(unittest.TestCase):
 
     def test_no_units_is_no_value(self) -> None:
         self.assertEqual(value_of(units=0.0, price=19.88), 0.0)
+
+
+class Repricing(unittest.TestCase):
+    """The units are the broker's; the price is the market's.
+
+    Ally will not reuse a session, but a unit count does not change between
+    deposits and a published price does not need a login. The real position is
+    123.519 units of SWPPX, which Ally itself marked at $19.88 for $2,455.56 --
+    the same close the feed publishes, to the cent.
+    """
+
+    def _swppx(self, units: float | None = 123.519) -> Holding:
+        return Holding(
+            symbol="SWPPX",
+            name="Schwab S&P 500 Index",
+            units=units,
+            price=19.88,
+            value=2455.56,
+            cost_basis=2237.74,
+        )
+
+    def test_it_agrees_with_the_broker_on_the_broker_s_own_numbers(self) -> None:
+        """The check that matters: same units, same close, same total."""
+        prices = daily_closes(payload=_payload())
+        found = repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 7))
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found[0].value, 2455.56)
+
+    def test_the_price_date_comes_back_with_it(self) -> None:
+        """Both halves age separately, so both have to be reportable."""
+        prices = daily_closes(payload=_payload())
+        found = repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 7))
+
+        self.assertEqual(found[1], dt.date(2026, 8, 6))
+
+    def test_the_units_are_left_alone(self) -> None:
+        """This values a position; it does not pretend to know it changed."""
+        prices = daily_closes(payload=_payload())
+        found = repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 7))
+
+        self.assertEqual(found[0].units, 123.519)
+
+    def test_everything_else_survives(self) -> None:
+        """A reprice must not quietly drop the cost basis it did not compute."""
+        prices = daily_closes(payload=_payload())
+        found = repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 7))
+
+        self.assertEqual(found[0].symbol, "SWPPX")
+        self.assertEqual(found[0].cost_basis, 2237.74)
+
+    def test_a_new_price_moves_the_value(self) -> None:
+        prices = daily_closes(payload=_payload())
+        found = repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 5))
+
+        self.assertEqual(found[0].price, 19.91)
+        self.assertEqual(found[0].value, 2459.26)
+
+    def test_the_original_is_untouched(self) -> None:
+        """Holding is frozen; repricing returns a new one."""
+        prices = daily_closes(payload=_payload())
+        original = self._swppx()
+        repriced(holding=original, prices=prices, day=dt.date(2026, 8, 5))
+
+        self.assertEqual(original.price, 19.88)
+
+    def test_unknown_units_is_none_not_zero(self) -> None:
+        """Zero is a real balance. "We do not know" is not, and must not
+        be made to look like one.
+        """
+        prices = daily_closes(payload=_payload())
+
+        self.assertIsNone(
+            repriced(
+                holding=self._swppx(units=None), prices=prices, day=dt.date(2026, 8, 7)
+            )
+        )
+
+    def test_no_published_price_is_none(self) -> None:
+        """Before the fund had a price, it had no value to report."""
+        prices = daily_closes(payload=_payload())
+
+        self.assertIsNone(
+            repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 1))
+        )
 
 
 if __name__ == "__main__":
