@@ -4,6 +4,7 @@
 """Module to login and scrape data from https://www.schwab529plan.com."""
 
 import datetime
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 from requests import Response
@@ -22,10 +23,12 @@ from helpers.normalize import (
     to_iso_date,
 )
 from helpers.schwab529plan import (
+    account_hint,
     account_label,
     beneficiary_field,
     clean_up,
     holding_from_row,
+    match_account,
     transaction_from_row,
 )
 from helpers.sheets import SheetsUnavailable
@@ -83,49 +86,271 @@ class Schwab529Module:
         ]
 
     @staticmethod
+    def account_candidates(
+        beneficiaries: list[dict[str, Any]], balances: list[dict[str, Any]]
+    ) -> list[list[str]]:
+        """Collect every string that identifies each account on the page.
+
+        What a transaction row calls an account and what the balance headings
+        call it need not be the same word: a row might name the beneficiary, or
+        print a masked account number. All three known spellings go into the
+        pool and ``match_account`` decides.
+
+        Args:
+            beneficiaries (list[dict[str, Any]]): Parsed beneficiary rows.
+            balances (list[dict[str, Any]]): Parsed balance rows, one per account.
+
+        Returns:
+            list[list[str]]: Identifying strings per account, in balance order.
+
+        """
+        return [
+            [
+                value
+                for value in (
+                    account_label(
+                        beneficiaries=beneficiaries, balance=item, index=index
+                    ),
+                    beneficiary_field(
+                        beneficiaries=beneficiaries, index=index, key="Name"
+                    ),
+                    beneficiary_field(
+                        beneficiaries=beneficiaries, index=index, key="Account"
+                    ),
+                )
+                if value
+            ]
+            for index, item in enumerate(balances)
+        ]
+
+    @classmethod
     def attribute_transactions(
+        cls,
         transactions: list[dict[str, Any]],
         balances: list[dict[str, Any]],
         context: Context,
-    ) -> list[Transaction]:
-        """Decide whether the scraped transactions can be assigned to an account.
+        beneficiaries: list[dict[str, Any]] | None = None,
+        structure: Callable[[], list[dict[str, Any]]] | None = None,
+    ) -> dict[int, list[Transaction]]:
+        """Work out which account each scraped transaction belongs to.
 
-        The dashboard renders one transaction table for the whole page, with
-        nothing in it naming the account a row belongs to. With a single account
-        on the page there is only one answer. With several there is no honest
-        one: attaching them all to the first invents history for it, and copying
-        them to each invents history for every account. Both look completely
-        plausible afterwards, which is what makes them worse than storing
-        nothing and saying so.
+        Four rules, tried in order and each weaker than the one before:
 
-        Not fatal. The balances and holdings are the run's main product and they
-        are unaffected.
+        1. **The page said so.** A row that carries an account -- in a column, a
+           section heading above it, an attribute, or its table's caption --
+           goes to the account it names. Rows whose marker matches nothing, or
+           matches two accounts, are dropped and reported: the ones that did
+           match are still correct, and throwing them away as well would lose
+           real history to protect nothing.
+        2. **One table per account.** Failing that, when the page renders as
+           many transaction tables as it shows balances, they pair by position
+           -- the same rule ``holdings_for`` already applies to the fund tables,
+           which the page renders the same way.
+        3. **One account.** Failing that, a page showing a single balance has
+           only one answer.
+        4. **Nothing.** Otherwise none are stored and the run says so. Attaching
+           them all to the first account invents history for it, and copying
+           them to each invents history for every account. Both look completely
+           plausible afterwards, which is what makes them worse than an empty
+           table and a message.
+
+        Not fatal in any case. The balances and holdings are the run's main
+        product and they are unaffected.
 
         Args:
             transactions (list[dict[str, Any]]): Parsed transaction rows.
             balances (list[dict[str, Any]]): Parsed balance rows, one per account.
             context (Context): Used for logging.
+            beneficiaries (list[dict[str, Any]] | None): Parsed beneficiary rows,
+            used to recognise an account a row names.
+            structure (Callable[[], list[dict[str, Any]]] | None): Reads the
+            shape of the transaction markup. Deferred rather than a value
+            because it walks every row, and it is only ever wanted on the paths
+            where attribution falls short -- which is neither the single-account
+            path nor the one where the page names its accounts.
 
         Returns:
-            list[Transaction]: The transactions when they can be attributed,
-            otherwise nothing.
+            dict[int, list[Transaction]]: Transactions keyed by the position of
+            the account they belong to. Accounts with none are absent.
 
         """
         if not transactions:
-            return []
+            return {}
 
-        if len(balances) != 1:
-            context.log.fail(
+        candidates: list[list[str]] = cls.account_candidates(
+            beneficiaries=beneficiaries or [], balances=balances
+        )
+        tables: list[int] = sorted(
+            {row["Table"] for row in transactions if row.get("Table") is not None}
+        )
+
+        # A table's caption identifies an account only when the page renders a
+        # table per account. One table covering everybody, captioned with one
+        # beneficiary's name, would hand that beneficiary everybody's history --
+        # exactly the invention this whole function exists to refuse.
+        keys: tuple[str, ...] = (
+            ("Account", "Section")
+            if len(tables) <= 1 and len(balances) > 1
+            else ("Account", "Section", "Title")
+        )
+
+        # 1. The page named the account.
+        named: dict[int, list[Transaction]] = {}
+        unresolved: list[str] = []
+
+        for row in transactions:
+            hint: str | None = account_hint(row=row, keys=keys)
+
+            if hint is None:
+                unresolved.append("")
+                continue
+
+            index: int | None = match_account(hint=hint, candidates=candidates)
+
+            if index is None:
+                unresolved.append(hint)
+                continue
+
+            named.setdefault(index, []).append(transaction_from_row(row=row))
+
+        if named:
+            if unresolved:
+                cls._report_unattributed(
+                    context=context,
+                    count=len(unresolved),
+                    total=len(transactions),
+                    hints=unresolved,
+                    structure=structure,
+                )
+
+            return dict(sorted(named.items()))
+
+        # 2. One table per account, in the same order as the balances.
+        if len(tables) > 1 and len(tables) == len(balances):
+            context.log.highlight(
                 msg=(
-                    f"{len(transactions)} transaction(s) were scraped but the "
-                    f"page shows {len(balances)} accounts and the transaction "
-                    "table does not say which account each row belongs to. "
-                    "None were stored. Balances and holdings are unaffected."
+                    f"The transaction history is split into {len(tables)} tables "
+                    f"and the page shows {len(balances)} accounts, so each table "
+                    "was read as that account's history -- the same pairing the "
+                    "fund tables use. No row named its own account."
                 ),
             )
-            return []
 
-        return [transaction_from_row(row=row) for row in transactions]
+            paired: dict[int, list[Transaction]] = {}
+
+            for position, table in enumerate(iterable=tables):
+                rows: list[Transaction] = [
+                    transaction_from_row(row=row)
+                    for row in transactions
+                    if row.get("Table") == table
+                ]
+
+                if rows:
+                    paired[position] = rows
+
+            return paired
+
+        # 3. A single account on the page leaves one answer.
+        if len(balances) == 1:
+            return {0: [transaction_from_row(row=row) for row in transactions]}
+
+        # 4. No honest attribution.
+        context.log.fail(
+            msg=(
+                f"{len(transactions)} transaction(s) were scraped but the "
+                f"page shows {len(balances)} accounts and the transaction "
+                "table does not say which account each row belongs to. "
+                "None were stored. Balances and holdings are unaffected."
+            ),
+        )
+        cls._log_structure(context=context, structure=structure)
+
+        return {}
+
+    @classmethod
+    def _report_unattributed(
+        cls,
+        context: Context,
+        count: int,
+        total: int,
+        hints: list[str],
+        structure: Callable[[], list[dict[str, Any]]] | None,
+    ) -> None:
+        """Say which rows were dropped when only some could be attributed.
+
+        The rows that did match are stored, so this is not the run failing; it
+        is the part of the history that is missing, named rather than left to be
+        noticed as a gap months later.
+
+        Args:
+            context (Context): Used for logging.
+            count (int): How many rows could not be attributed.
+            total (int): How many were scraped.
+            hints (list[str]): What those rows said about their account.
+            structure (Callable[[], list[dict[str, Any]]] | None): Reads the
+            markup's shape.
+
+        """
+        distinct: list[str] = sorted({hint for hint in hints if hint})
+        named: str = (
+            f" They named: {', '.join(distinct)}."
+            if distinct
+            else " They named no account at all."
+        )
+
+        context.log.fail(
+            msg=(
+                f"{count} of {total} transaction(s) could not be matched to an "
+                f"account on the page and were not stored.{named} The other "
+                f"{total - count} were stored against the account they name."
+            ),
+        )
+        cls._log_structure(context=context, structure=structure)
+
+    @staticmethod
+    def _log_structure(
+        context: Context, structure: Callable[[], list[dict[str, Any]]] | None
+    ) -> None:
+        """Print the shape of the transaction markup, values excluded.
+
+        Issue #36's blocking question is what a multi-beneficiary transaction
+        table actually renders, and it can only be answered from a live login.
+        Printing the shape whenever attribution falls short answers it from a
+        run somebody was doing anyway.
+
+        Args:
+            context (Context): Used for logging.
+            structure (Callable[[], list[dict[str, Any]]] | None): Reads one
+            entry per table. Called here and nowhere else, so a run that
+            attributes cleanly never walks the markup a second time.
+
+        """
+        if structure is None:
+            return
+
+        tables: list[dict[str, Any]] = structure()
+
+        if not tables:
+            return
+
+        context.log.highlight(
+            msg=(
+                "Transaction markup, so the next version can attribute these "
+                "(no cell values are shown):"
+            ),
+        )
+
+        for table in tables:
+            context.log.highlight(
+                msg=(
+                    f"  table {table.get('Table')}: "
+                    f"caption={table.get('Caption')!r} "
+                    f"headers={table.get('Headers')} "
+                    f"rows={table.get('Rows')} "
+                    f"cells-per-row={table.get('Widths')} "
+                    f"attributes={table.get('Attributes')}"
+                ),
+            )
 
     @staticmethod
     def holding_rows(
@@ -183,6 +408,11 @@ class Schwab529Module:
     ) -> list[dict[str, Any]]:
         """Build the transactions block of the worksheet from stored rows.
 
+        The account is a column now rather than something discarded. Once rows
+        are attributed per account the tab interleaves several accounts'
+        movements, and without a column saying whose each one is the block is
+        unreadable.
+
         Args:
             db (BrokerDbProtocol): The broker database.
             scraped (list[dict[str, Any]]): This run's transaction rows, used
@@ -199,6 +429,7 @@ class Schwab529Module:
 
         return [
             {
+                "Account": account,
                 "Processed": processed_on,
                 "Traded": traded_on,
                 "Type": tx_type,
@@ -208,7 +439,7 @@ class Schwab529Module:
             }
             for (
                 _id,
-                _account,
+                account,
                 processed_on,
                 traded_on,
                 tx_type,
@@ -292,8 +523,12 @@ class Schwab529Module:
         db_ok: bool = True
 
         if isinstance(db, SnapshotDbProtocol):
-            attributed: list[Transaction] = self.attribute_transactions(
-                transactions=transactions, balances=balances, context=context
+            attributed: dict[int, list[Transaction]] = self.attribute_transactions(
+                transactions=transactions,
+                balances=balances,
+                context=context,
+                beneficiaries=beneficiaries,
+                structure=schwab529_parser.transaction_structure,
             )
 
             for index, item in enumerate(balances):
@@ -326,9 +561,10 @@ class Schwab529Module:
                     currency=to_currency(amount),
                     raw_value=str(object=amount) if amount is not None else None,
                     holdings=self.holdings_for(investments=investments, index=index),
-                    # Only the account the transaction table can be attributed
-                    # to receives them; see attribute_transactions.
-                    transactions=attributed if len(balances) == 1 else (),
+                    # An account receives only the rows attribute_transactions
+                    # could show belong to it, which for a page that names no
+                    # account at all is none of them.
+                    transactions=attributed.get(index, ()),
                 )
 
         elif callable(getattr(db, "save_account_data", None)):

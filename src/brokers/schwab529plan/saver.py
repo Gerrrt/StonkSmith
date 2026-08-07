@@ -120,7 +120,11 @@ class Saver:
 
         self._prepare_sheet()
         if self.worksheet:
+            # Account leads the block: with transactions attributed per account
+            # (issue #36) the rows below interleave several beneficiaries, and
+            # a date column alone does not say whose movement it was.
             headers: list[str] = [
+                "Account",
                 "Processed",
                 "Traded",
                 "Type",
@@ -128,9 +132,10 @@ class Saver:
                 "Price",
                 "Value",
             ]
-            self.worksheet.update([headers], "C16:H16")
+            self.worksheet.update([headers], "C16:I16")
             rows: list[list[str | None]] = [
                 [
+                    a.get("Account"),
                     a.get("Processed"),
                     a.get("Traded"),
                     a.get("Type"),
@@ -149,6 +154,6 @@ class Saver:
                 self.worksheet.update(
                     rows,
                     _a1_range(
-                        first_col="C", last_col="H", first_row=17, row_count=len(rows)
+                        first_col="C", last_col="I", first_row=17, row_count=len(rows)
                     ),
                 )
