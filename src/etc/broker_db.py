@@ -878,6 +878,42 @@ class BrokerDatabase:
             {"account_id": account_id, "limit": limit},
         )
 
+    def delete_snapshot(self, snapshot_id: int) -> bool:
+        """
+        Remove one mark, and the holdings recorded under it.
+
+        A mark can be wrong in a way no re-run corrects. A placeholder typed
+        into a command line, or a real number computed from mismatched inputs,
+        lands in history as an ordinary row and stays there -- the next sync
+        adds a snapshot beside it rather than replacing it, because snapshots
+        are the record of what was observed when, not a current-value cache.
+        Leaving one in place puts a wrong number in every chart drawn from the
+        table.
+
+        Deliberately one row at a time, by id read off ``show snapshots``.
+        Anything broader -- by account, by date range -- would delete history
+        that is merely old rather than wrong, and there is no undo here.
+
+        The account is left alone. It is the thing the next run reuses, and
+        removing it would turn a bad mark into a duplicate account.
+
+        Holdings go with it through ON DELETE CASCADE, which SQLite enforces
+        only because create_db_engine() turns foreign keys on.
+        :param snapshot_id: The account_snapshots.id to remove
+        :return: True if a row was deleted, False if there was no such id
+        :rtype: bool
+        """
+
+        c = self.snapshots_table.c
+
+        with self.db_engine.connect() as conn:
+            result = conn.execute(
+                self.snapshots_table.delete().where(c.id == snapshot_id)
+            )
+            conn.commit()
+
+        return bool(result.rowcount)
+
     def get_latest_snapshots(self) -> list[tuple[Any, ...]]:
         """
         The newest value for each account, one row apiece.

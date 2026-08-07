@@ -524,7 +524,8 @@ uv run stonksmithdb
 ```
 
 Inside that shell: `broker schwab529plan`, then `add creds <username>`,
-`show creds`, `show accounts`, `export creds <file>`, `back`, `exit`.
+`show creds`, `show accounts`, `export creds <file>`, `delete creds <id>`,
+`delete snapshot <id>`, `back`, `exit`.
 SnapTrade stores no credentials there; its keys live in the config file and the
 keyring, so `add creds` points at the setup script instead.
 
@@ -562,7 +563,16 @@ show holdings [<snapshot id>]  the positions behind a snapshot
 show transactions [<account>]  recorded movements
 show deltas                    the change between consecutive snapshots
 export <category> <file>       any of the above, as CSV
+delete snapshot <snapshot id>  remove one wrong mark and its holdings
 ```
+
+`delete snapshot` is there because a wrong mark does not correct itself. The
+next sync writes a row *beside* it, not over it — snapshots record what was
+observed when — so a placeholder run verbatim off a command line, or a value
+computed from mismatched inputs, stays a data point in every chart until it is
+removed. It takes one id at a time, and it leaves the account alone: deleting
+that would cascade away the real history and let the next run recreate the
+account beside itself.
 
 Google Sheets is a view of this, not the other way round. Each tab is cleared
 and rewritten from what the database holds, so what you see there is what

@@ -106,6 +106,22 @@ HISTORY_FILTERS: dict[str, str] = {
     "transactions": "account_id",
 }
 
+#: What `delete` can remove, as {word: (method, keyword)}.
+#:
+#: Snapshots are here because a wrong mark is not self-correcting. The next sync
+#: adds a row beside it rather than replacing it -- snapshots record what was
+#: observed when -- so a placeholder typed into a command line, or a real number
+#: computed from mismatched inputs, stays in every chart drawn from the table
+#: until it is removed by hand.
+#:
+#: Accounts are deliberately absent. Deleting one cascades away every snapshot
+#: under it, which is the opposite of the narrow correction this is for, and the
+#: next run would recreate the account anyway.
+DELETERS: dict[str, tuple[str, str]] = {
+    "creds": ("delete_credential", "cred_id"),
+    "snapshot": ("delete_snapshot", "snapshot_id"),
+}
+
 
 class DatabaseLike(typing.Protocol):
     """The database surface the navigator relies on."""
@@ -162,6 +178,7 @@ class BrokerNavigator(cmd.Cmd):
             "    export <category> <file> also accounts, snapshots, holdings,\n"
             "                             transactions or deltas\n"
             "    delete creds <id>        remove a credential\n"
+            "    delete snapshot <id>     remove one wrong mark and its holdings\n"
             "    broker <name>            switch straight to another broker\n"
             "    brokers                  leave and list the available brokers\n"
             "    back                     return to the broker list\n"
@@ -263,28 +280,46 @@ class BrokerNavigator(cmd.Cmd):
 
     def do_delete(self, line: str) -> None:
         """
-        Delete a credential and its keyring entry.
-        Usage: delete creds <id>
+        Delete a credential, or a single snapshot and its holdings.
+        Usage: delete creds <id> | delete snapshot <id>
         :param line:
         """
 
         args: list[str] = line.split()
+        target: str = args[0].lower() if args else ""
 
-        if len(args) < 2 or args[0].lower() != "creds":
-            stonksmith_logger.fail(msg="Usage: delete creds <id>")
+        if len(args) < 2 or target not in DELETERS:
+            stonksmith_logger.fail(
+                msg=f"Usage: {' | '.join(f'delete {name} <id>' for name in DELETERS)}"
+            )
             return
 
         try:
-            cred_id: int = int(args[1])
+            row_id: int = int(args[1])
 
         except ValueError:
-            stonksmith_logger.fail(msg=f"Not a credential id: {args[1]}")
+            stonksmith_logger.fail(msg=f"Not a {target} id: {args[1]}")
             return
 
-        if self.db.delete_credential(cred_id=cred_id):
-            stonksmith_logger.success(msg=f"Deleted credential {cred_id}")
+        method, parameter = DELETERS[target]
+        remove = getattr(self.db, method, None)
+
+        # Probed for the same reason history_rows() probes its readers: a
+        # database written against the older contract has no snapshot tables at
+        # all, and saying so beats an AttributeError.
+        if not callable(remove):
+            stonksmith_logger.fail(
+                msg=(
+                    f"This broker's database cannot delete a {target}. "
+                    "Re-run a sync to build the newer tables."
+                )
+            )
+            return
+
+        if remove(**{parameter: row_id}):
+            stonksmith_logger.success(msg=f"Deleted {target} {row_id}")
         else:
-            stonksmith_logger.fail(msg=f"No credential with id {cred_id}")
+            stonksmith_logger.fail(msg=f"No {target} with id {row_id}")
 
     def history_rows(
         self, category: str, argument: str = ""
