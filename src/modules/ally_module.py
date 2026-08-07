@@ -188,12 +188,12 @@ class AllyModule:
             context.log.exception(msg=f"Could not open the holdings page: {e}")
             return False
 
-        # The rail is not what the wait above covers, and it arrives later. Read
-        # without this, a rail that simply had not rendered yet is
-        # indistinguishable from one whose selectors moved -- which is exactly
-        # the wrong conclusion, drawn once already from a run where the very
-        # next run parsed the same rail without complaint. Failure is fine here:
-        # the branch below reports an absent rail properly.
+        # The rail is not what the wait above covers, and it arrives later.
+        # Without this wait, a rail that had merely not rendered yet looks
+        # exactly like one whose selectors moved -- which is the wrong
+        # conclusion, and it was drawn once already, from a run whose successor
+        # parsed the same rail without complaint. A timeout here is fine: the
+        # branch below reports an absent rail properly.
         with contextlib.suppress(PlaywrightTimeout):
             page.wait_for_selector(
                 SIDEBAR_SELECTOR, timeout=SIDEBAR_TIMEOUT_MS, state="attached"
