@@ -305,7 +305,7 @@ class AllyModule:
             # another not since Thursday makes a Thursday total, whatever order
             # the rows arrive in. Taking whichever came last would date the
             # account by iteration order, which is not a fact about anything.
-            dates[account] = when
+            dates[account] = min(dates.get(account, when), when)
 
             context.log.success(
                 msg=(
