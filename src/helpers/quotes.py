@@ -75,7 +75,14 @@ def daily_closes(payload: str) -> dict[dt.date, float]:
         raise QuotesUnavailable("the price feed returned no series for that symbol")
 
     series: Any = results[0]
-    stamps: list[int] = series.get(TIMESTAMP) or []
+    stamps: Any = series.get(TIMESTAMP)
+
+    # Not "or []": a series with no timestamps produces no rows, which would
+    # come back as the empty dict that means "nothing published yet". Those are
+    # a broken payload and an ordinary mid-session run, and they must not look
+    # the same.
+    if stamps is None:
+        raise QuotesUnavailable("the price series carried no timestamps")
 
     try:
         closes: list[float | None] = series[INDICATORS][QUOTE][0][CLOSE]
@@ -83,22 +90,31 @@ def daily_closes(payload: str) -> dict[dt.date, float]:
     except KeyError, IndexError, TypeError:
         raise QuotesUnavailable("the price series carried no closes") from None
 
-    # Stated by the feed rather than assumed: see the module docstring. An
-    # offset outside a day is not a zone, and quietly falling back to UTC would
-    # date every bar plausibly and wrongly, so it is reported instead.
-    offset: int = int(series.get(META, {}).get(GMT_OFFSET) or 0)
+    # A short array pairs some other day's price with this day's date, which is
+    # wrong in the way that looks right.
+    if len(stamps) != len(closes):
+        raise QuotesUnavailable(
+            f"the price series carried {len(stamps)} timestamps "
+            f"and {len(closes)} closes"
+        )
 
+    # Stated by the feed rather than assumed: see the module docstring. Reading
+    # it is inside the guard because every way it can be wrong -- absent, not a
+    # number, not a zone, or a meta that is not a mapping at all -- ends the
+    # same way: dates that cannot be trusted. Falling back to UTC would date
+    # every bar plausibly and wrongly.
     try:
+        offset: int = int(series.get(META, {}).get(GMT_OFFSET) or 0)
         zone = dt.timezone(dt.timedelta(seconds=offset))
 
-    except ValueError as e:
+    except (TypeError, ValueError, AttributeError) as e:
         raise QuotesUnavailable(
-            f"the price feed dated its bars with an impossible offset ({e})"
+            f"the price feed dated its bars with an unusable offset ({e})"
         ) from e
 
     prices: dict[dt.date, float] = {}
 
-    for stamp, close in zip(stamps, closes, strict=False):
+    for stamp, close in zip(stamps, closes, strict=True):
         if close is None:
             continue
 

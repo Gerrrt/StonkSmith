@@ -131,11 +131,12 @@ class Fallback(unittest.TestCase):
         )
 
     def test_the_date_comes_back_so_staleness_can_be_reported(self) -> None:
-        found = close_on(prices=self.prices, day=dt.date(2026, 8, 30))
-        assert found is not None
-        when, _price = found
+        asked = dt.date(2026, 8, 30)
+        found = close_on(prices=self.prices, day=asked)
 
-        self.assertEqual((dt.date(2026, 8, 30) - when).days, 24)
+        # The date comes back with the price, so the caller can subtract.
+        self.assertEqual(found, (dt.date(2026, 8, 6), 19.88))
+        self.assertEqual((asked - dt.date(2026, 8, 6)).days, 24)
 
     def test_a_day_before_anything_published_is_none(self) -> None:
         """Guessing forwards would date a price to before it existed."""
@@ -181,6 +182,39 @@ class BadPayloads(unittest.TestCase):
 
         with self.assertRaises(QuotesUnavailable):
             daily_closes(payload=payload)
+
+    def test_missing_timestamps_are_not_an_empty_day(self) -> None:
+        """The empty dict already means "nothing published yet". This is not that."""
+        payload = json.loads(s=_payload())
+        del payload["chart"]["result"][0]["timestamp"]
+
+        with self.assertRaises(QuotesUnavailable):
+            daily_closes(payload=json.dumps(obj=payload))
+
+    def test_more_timestamps_than_closes_is_reported(self) -> None:
+        """Pairing by position across a short array dates a price to the wrong day."""
+        with self.assertRaises(QuotesUnavailable) as caught:
+            daily_closes(payload=_payload(closes=(19.91,)))
+
+        self.assertIn("3 timestamps", str(object=caught.exception))
+
+    def test_more_closes_than_timestamps_is_reported(self) -> None:
+        with self.assertRaises(QuotesUnavailable):
+            daily_closes(payload=_payload(closes=(19.91, 19.88, 19.7, 19.6)))
+
+    def test_a_non_numeric_offset_is_reported(self) -> None:
+        payload = json.loads(s=_payload())
+        payload["chart"]["result"][0]["meta"]["gmtoffset"] = "eastern"
+
+        with self.assertRaises(QuotesUnavailable):
+            daily_closes(payload=json.dumps(obj=payload))
+
+    def test_a_meta_that_is_not_a_mapping_is_reported(self) -> None:
+        payload = json.loads(s=_payload())
+        payload["chart"]["result"][0]["meta"] = "USD"
+
+        with self.assertRaises(QuotesUnavailable):
+            daily_closes(payload=json.dumps(obj=payload))
 
     def test_the_symbol_is_not_echoed_into_the_message(self) -> None:
         """Messages reach logs; a holding's identity does not belong in one."""
