@@ -78,10 +78,11 @@ has no login at all — its key lives in config and the OS keyring — and
 subclasses `ApiConnection`: SnapTrade, and TSP, which holds no key either
 because the data it reads is published.
 
-Not every broker has been run against a real account. **Ally has not** — none of
-it, including the sign-in and the session it is supposed to save. TSP has in
-part: its parsers, its arithmetic and its price download are verified against
-real data, but its database write and its worksheet are not. Green tests say the
+Not every broker has been run against a real account. **Ally now has** — its
+sign-in, holdings parse and database write are verified, and its session was
+found not to survive between runs at all, so it needs `--manual-login` every
+time. TSP has in part: its parsers, its arithmetic and its price download are
+verified against real data, but its database write and its worksheet are not. Green tests say the
 code does what it was written to do, which is not the same as saying the site
 still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
@@ -228,21 +229,23 @@ uv run stonksmith ally -M ally --manual-login
 A browser window opens at `secure.ally.com`. Sign in, **then click through to
 your investment account** — StonkSmith is still waiting at the bank dashboard
 and will not touch the page until `live.invest.ally.com` loads. It then saves
-the session, and reports whether the save succeeded — the intent is that Ally
-remembers a device once it has seen one, so later runs skip the sign-in until
-the session expires.
+the session, and reports whether the save succeeded — the intent being that
+Ally would remember a device once it had seen one, so later runs could skip the
+sign-in until the session expired.
 
-**That last part did not hold on its first real run.** The sign-in completed and
-the session file was written, and the next run did not reuse it. One cause has
-been found and fixed — the check read the page before Ally's shell had rendered
-the control it looks for, so a live session read as a dead one — and the check
-now reports which of its rejections fired instead of failing silently. Whether
-that was the only cause is still unobserved.
+**That last part does not hold, and `--manual-login` is required every run.**
+Settled over nine runs against a real account: Ally refuses a restored session
+however it is stored. The saved jar is not the problem — it carries `jwt`,
+`refreshToken`, `csrf-token`, `tksid` and `Ally-CIAM-Token` — but on the next
+run either the investing site or the bank answers `401`, the app calls
+`auth/anonymous_invoke`, and the page renders signed out. Firefox with
+`storage_state`, Firefox with IndexedDB included, and a persistent Chrome
+profile were all tried, and all three were refused.
 
-So treat daily unattended operation as unproven. If the session turns out not
-to survive at all, `--manual-login` on every run is the honest description and
-this section is what changes. `docs/live-verification.md` has the procedure and
-what each failure would mean.
+So Ally cannot run unattended, and no amount of stored state changes that. The
+scrape itself is proven — sign-in, holdings, the account rail, the
+bank/brokerage split and the database write all work on every one of those
+runs. `docs/live-verification.md` has the full evidence.
 
 Ally runs Akamai, Dynatrace and Transmit on that login page, so the same
 attach-to-your-own-Chrome path Fidelity documents above applies here, pointed at
