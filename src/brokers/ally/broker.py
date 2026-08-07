@@ -148,6 +148,12 @@ class Ally(BrowserConnection):
 
         if self.from_prices():
             self.username = PRICED_SESSION_LABEL
+
+            # broker_flow() builds the logger before it gets here, so the
+            # records it stamps would carry the username as it was then --
+            # empty. Rebuilt, so a price run's log lines are labelled the way
+            # every other run's are.
+            self.broker_logger()
             return True
 
         return super().create_conn_obj()

@@ -176,6 +176,64 @@ class TheOrdinaryRun(unittest.TestCase):
         self.assertEqual(context.db.saved[0]["account"].account_key, _ACCOUNT)
 
 
+class TwoHoldings(unittest.TestCase):
+    """An account is only as fresh as its stalest holding."""
+
+    #: A second fund whose newest close is two days older than SWPPX's.
+    _STALE_ROW: tuple[Any, ...] = (
+        _ACCOUNT,
+        "OLDFUND",
+        "Something Priced Less Often",
+        10.0,
+        5.0,
+        50.0,
+        None,
+        None,
+        45.0,
+        "USD",
+    )
+
+    def _both(self):
+        """SWPPX prices to 2026-08-06; OLDFUND stops at 2026-08-05."""
+        module = AllyModule()
+        context = MagicMock()
+        # Stalest first, so the last row seen is the *newer* date. Ordered the
+        # other way the assertion holds whether or not the code takes the
+        # minimum, and proves nothing.
+        context.db = _Db(holdings=[self._STALE_ROW, _HOLDING_ROW])
+        context.args.from_prices = True
+
+        connection = MagicMock()
+
+        def answer(url: str, **_kwargs: Any) -> Any:
+            response = MagicMock()
+            response.text = (
+                _payload() if "SWPPX" in url else _payload(closes=(5.0, None, None))
+            )
+            return response
+
+        connection.session.get.side_effect = answer
+        module.on_login(context, connection)
+        return context
+
+    def test_as_of_is_the_oldest_price_date(self) -> None:
+        """Taking the last one seen would date the account by iteration order."""
+        context = self._both()
+
+        self.assertEqual(context.db.saved[0]["as_of"], "2026-08-05")
+
+    def test_both_holdings_are_still_saved(self) -> None:
+        context = self._both()
+
+        self.assertEqual(len(context.db.saved[0]["holdings"]), 2)
+
+    def test_the_total_adds_them_up(self) -> None:
+        """123.519 x 19.88 plus 10 x 5.00."""
+        context = self._both()
+
+        self.assertEqual(context.db.saved[0]["value"], 2505.56)
+
+
 class SayingHowOld(unittest.TestCase):
     """Two halves, two ages, and the units are the one that goes wrong."""
 
