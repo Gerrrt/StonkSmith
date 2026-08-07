@@ -236,8 +236,8 @@ sign-in until the session expired.
 **That last part does not hold, and `--manual-login` is required every run.**
 Settled over nine runs against a real account: Ally refuses a restored session
 however it is stored. The saved jar is not the problem — it carries `jwt`,
-`refreshToken`, `csrf-token` and `Ally-CIAM-Token` — but on the next run either
-the investing site or the bank answers `401`, the app calls
+`refreshToken`, `csrf-token`, `tksid` and `Ally-CIAM-Token` — but on the next
+run either the investing site or the bank answers `401`, the app calls
 `auth/anonymous_invoke`, and the page renders signed out. Firefox with
 `storage_state`, Firefox with IndexedDB included, and a persistent Chrome
 profile were all tried, and all three were refused.

@@ -136,8 +136,8 @@ Three mechanisms were tried:
   the holdings URL does not reach the investing host at all, landing on
   `www.ally.com`.
 
-The page captures cannot show any of this, which is why it took nine runs. Four of
-them are identical to within one byte -- 758550, 758551, 758550 -- including one taken
+The page captures cannot show any of this, which is why it took nine runs. Three of
+them are identical to within one byte -- 758551, 758550, 758550 -- including one taken
 from a session that made 25 successful data calls. A session Ally renders for and one
 it does not produce the same markup, so the difference only ever existed in the
 network log.
