@@ -23,6 +23,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 import etc.browser_connection as browser_mod
 
@@ -70,12 +71,17 @@ def setUpModule() -> None:
     that directory for real. The broker reads the path off its own module
     global at construction, so redirecting it here covers every broker built
     below.
+
+    logs_path goes with it: session_is_live() now captures the page when the
+    investing host renders no log-out control, and capture_page() writes to
+    ~/.stonksmith/logs.
     """
 
     global _profile_home
 
     _profile_home = tempfile.TemporaryDirectory()
     browser_mod.playwright_path = Path(_profile_home.name)
+    browser_mod.logs_path = Path(_profile_home.name) / "logs"
 
 
 def tearDownModule() -> None:
@@ -95,6 +101,18 @@ def _broker(url: str, body: str, attached: bool = False):
     broker.page = MagicMock()
     broker.page.url = url
     broker.page.content.return_value = body
+
+    # Playwright's wait_for_selector resolves only when the selector really is
+    # in the DOM, and raises TimeoutError otherwise. A bare MagicMock returns a
+    # value for any call, which would report every page as signed in --
+    # including the empty shell these tests exist to reject.
+    def _wait(selector: str, **_: object) -> None:
+        markup: str = broker.page.content()
+
+        if selector.removeprefix("#").lower() not in markup.lower():
+            raise PlaywrightTimeoutError(f"Timeout waiting for {selector}")
+
+    broker.page.wait_for_selector.side_effect = _wait
     return broker
 
 
@@ -169,6 +187,85 @@ class SessionIsLiveTests(unittest.TestCase):
         self.assertTrue(broker.session_is_live())
         broker.page.goto.assert_not_called()
 
+    def test_a_shell_that_hydrates_after_the_load_event_is_live(self) -> None:
+        # The first real Ally run failed here. goto() settles at the load
+        # event; Angular renders the nav afterwards. Reading the body at that
+        # instant sees an empty root, and because this check demands the
+        # log-out control be *present* rather than a login form be absent, an
+        # un-rendered page fails it -- so a live session reads as a dead one
+        # and the operator is sent to a five-minute sign-in they did not need.
+        broker = _broker(url=INVEST_URL, body="<html><app-root></app-root></html>")
+
+        def _hydrate(selector: str, **_: object) -> None:
+            broker.page.content.return_value = SIGNED_IN_BODY
+
+        broker.page.wait_for_selector.side_effect = _hydrate
+
+        self.assertTrue(broker.session_is_live())
+
+
+class SessionRejectionReportTests(unittest.TestCase):
+    """Falling back to a manual sign-in must say which failure caused it.
+
+    "It asked me to sign in again" is the same sentence whether the cookies
+    expired, the request bounced or the markup moved, and those have three
+    different answers. Before this, every rejection was silent and the only
+    capture came from the manual-login timeout five minutes later -- a picture
+    of the login screen nobody filled in, not of the page that was rejected.
+    """
+
+    @staticmethod
+    def _said(broker) -> str:
+        return " ".join(str(call) for call in broker.logger.display.call_args_list)
+
+    def test_a_bounce_names_where_it_landed_and_what_was_on_it(self) -> None:
+        broker = _broker(url=BANK_URL, body=LOGIN_BODY)
+
+        self.assertFalse(broker.session_is_live())
+        said: str = self._said(broker=broker)
+        self.assertIn("secure.ally.com", said)
+        self.assertIn("sign-in form", said)
+
+    def test_a_bounce_to_something_other_than_the_login_says_so(self) -> None:
+        # An interstitial or a block page is a different problem from an
+        # expired session, and naming the sign-in form when it is not there
+        # would send the reader after the wrong one.
+        broker = _broker(url=BANK_URL, body="<html><body>maintenance</body></html>")
+
+        self.assertFalse(broker.session_is_live())
+        self.assertIn("something else moved", self._said(broker=broker))
+
+    def test_a_navigation_failure_reports_the_error(self) -> None:
+        broker = _broker(url=INVEST_URL, body=SIGNED_IN_BODY)
+        broker.page.goto.side_effect = PlaywrightError("net::ERR_ABORTED")
+
+        self.assertFalse(broker.session_is_live())
+        said: str = self._said(broker=broker)
+        self.assertIn("would not load", said)
+        self.assertIn("ERR_ABORTED", said)
+
+    def test_a_host_that_never_renders_the_shell_is_captured(self) -> None:
+        # The one rejection that cannot be diagnosed from a log line: whether
+        # the session is genuinely dead or the markup moved is only decidable
+        # from the page itself.
+        broker = _broker(url=INVEST_URL, body="<html><body></body></html>")
+        broker.capture_page = MagicMock()
+
+        self.assertFalse(broker.session_is_live())
+        broker.capture_page.assert_called_once()
+        self.assertEqual(
+            broker.capture_page.call_args.kwargs.get("reason"), "session-check"
+        )
+
+    def test_an_unreadable_page_is_not_reported_as_a_timeout(self) -> None:
+        # TimeoutError subclasses PlaywrightError, so order matters: a page
+        # that went away mid-wait is unreadable, not unrendered.
+        broker = _broker(url=INVEST_URL, body=SIGNED_IN_BODY)
+        broker.page.wait_for_selector.side_effect = PlaywrightError("target closed")
+
+        self.assertFalse(broker.session_is_live())
+        self.assertIn("could not be read", self._said(broker=broker))
+
 
 class SignInMarkerTests(unittest.TestCase):
     def test_the_bank_login_form_is_recognised(self) -> None:
@@ -198,6 +295,15 @@ class ManualLoginTests(unittest.TestCase):
         broker = _broker(url=BANK_URL, body=LOGIN_BODY)
         broker.context = MagicMock()
         broker.persistent_profile = True
+
+        # wait_for_url returns once the operator has clicked through, which is
+        # also the moment the page becomes the investing shell. Modelling that
+        # is what lets the log-out wait after it find anything.
+        def _signed_in(**_: object) -> None:
+            broker.page.url = INVEST_URL
+            broker.page.content.return_value = SIGNED_IN_BODY
+
+        broker.page.wait_for_url.side_effect = _signed_in
 
         self.assertTrue(broker.manual_login())
         # Two navigations, in this order: the holdings probe that decides the
