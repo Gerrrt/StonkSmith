@@ -656,6 +656,89 @@ class ErrorShape(unittest.TestCase):
             ],
         )
 
+    def test_a_redirect_target_is_reported(self) -> None:
+        """A refusal that answers with somewhere to go describes the fix."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _refused(
+                payload=b'{"redirectUrl": "https://secure.ally.com/acs/sso/start"}'
+            ),
+        )
+
+        self.assertIn(
+            "points to: https://secure.ally.com/acs/sso/start",
+            conn.failed_responses[0],
+        )
+
+    def test_the_target_goes_through_the_same_redaction(self) -> None:
+        """A handoff URL carries its token in the query and its id in the path."""
+        conn = _connection()
+        conn.watch_responses()
+        token = "t" * 40
+        _emit(
+            conn,
+            _refused(
+                payload=(
+                    b'{"redirectUrl": "https://secure.ally.com/sso/'
+                    + token.encode()
+                    + b'/go?jwt=SECRET"}'
+                )
+            ),
+        )
+        line = conn.failed_responses[0]
+
+        self.assertIn("https://secure.ally.com/sso/<id>/go", line)
+        self.assertNotIn("SECRET", line)
+        self.assertNotIn(token, line)
+
+    def test_a_relative_target_stays_free_text(self) -> None:
+        """A path with no host is indistinguishable from any other string."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"redirectUrl": "/accounts/summary"}'))
+        line = conn.failed_responses[0]
+
+        self.assertIn("redirectUrl", line)
+        self.assertNotIn("/accounts/summary", line)
+
+    def test_a_scheme_without_a_host_is_not_a_destination(self) -> None:
+        """ "https:///path" carries a scheme and nowhere to go."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"redirectUrl": "https:///path"}'))
+        line = conn.failed_responses[0]
+
+        self.assertNotIn("points to", line)
+        self.assertNotIn("/path", line)
+
+    def test_a_url_under_another_key_is_still_free_text(self) -> None:
+        """A support link beside the reason is not a destination."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _refused(
+                payload=b'{"helpLink": "https://www.ally.com/help/jane-q-public"}'
+            ),
+        )
+        line = conn.failed_responses[0]
+
+        self.assertIn("helpLink", line)
+        self.assertNotIn("points to", line)
+        self.assertNotIn("jane-q-public", line)
+
+    def test_other_redirect_key_names_qualify(self) -> None:
+        """redirectUrl is Ally's spelling; location is the other common one."""
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _refused(payload=b'{"location": "https://secure.ally.com/sso"}'))
+
+        self.assertIn(
+            "points to: https://secure.ally.com/sso", conn.failed_responses[0]
+        )
+
     def test_an_unreadable_body_still_leaves_the_status(self) -> None:
         conn = _connection()
         conn.watch_responses()
