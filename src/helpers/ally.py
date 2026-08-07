@@ -51,6 +51,12 @@ HOLDING_ROW_SELECTOR = "tr[holding-row]"
 QUANTITY_HEADER = "Qty"
 COST_BASIS_HEADER = "Cost Basis"
 
+#: The left-hand account rail. Two anchors because the component and the id
+#: fail differently. Named here rather than written inline so the module can
+#: wait for the same thing this file parses -- the rail renders after the
+#: holdings do, and reading it early is indistinguishable from it being gone.
+SIDEBAR_SELECTOR = "ally-accounts-list li, #allyAccountsList li"
+
 #: Sidebar entries carry a ``<kind>-account`` class: "investments-account",
 #: "savings-account". The suffix is stripped to get the kind.
 ACCOUNT_CLASS_SUFFIX = "-account"
@@ -166,7 +172,7 @@ def sidebar_accounts(soup: BeautifulSoup) -> list[dict[str, str]]:
 
     accounts: list[dict[str, str]] = []
 
-    for item in soup.select(selector="ally-accounts-list li, #allyAccountsList li"):
+    for item in soup.select(selector=SIDEBAR_SELECTOR):
         classes: list[str] = [str(object=c) for c in cast(Any, item.get("class")) or []]
         kind: str = next(
             (
