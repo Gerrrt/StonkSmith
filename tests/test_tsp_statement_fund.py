@@ -105,6 +105,27 @@ class MismatchedStatement(unittest.TestCase):
 
         self.assertEqual(units, 315.789)
 
+    def test_an_unnamed_fund_does_not_leave_a_gap_in_the_line(self) -> None:
+        """ "units of  as of ..." says nothing about which price was used."""
+        _result, context = self._units("", "L 2060")
+        said = " ".join(str(object=c) for c in context.log.success.call_args_list)
+
+        self.assertNotIn("units of  ", said)
+
+    def test_it_says_which_fund_an_unnamed_statement_is_valued_as(self) -> None:
+        """The configured fund is what prices it, so the line has to name it."""
+        _result, context = self._units("", "L 2060")
+        said = " ".join(str(object=c) for c in context.log.success.call_args_list)
+
+        self.assertIn("L 2060", said)
+        self.assertIn("names no fund", said)
+
+    def test_a_named_statement_still_reads_plainly(self) -> None:
+        _result, context = self._units("L 2060", "L 2060")
+        said = " ".join(str(object=c) for c in context.log.success.call_args_list)
+
+        self.assertIn("units of L 2060", said)
+
 
 if __name__ == "__main__":
     unittest.main()

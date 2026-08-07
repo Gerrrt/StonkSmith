@@ -286,9 +286,21 @@ class TspModule:
                 # like the missing date it is -- on the one line whose whole
                 # job is to say how current the number is.
                 dated: str = as_of.isoformat() if as_of else ""
+
+                # Two phrasings, because an unnamed fund is not a blank one.
+                # "units of  as of ..." leaves a gap where the fund should be
+                # and says nothing about which fund's price the run is about to
+                # use -- on the line whose job is to say where the number came
+                # from. When the statement names no fund the configured one is
+                # used, so that is what the line reports, and it says why.
+                whose: str = (
+                    f"units of {statement_fund}"
+                    if statement_fund
+                    else f"units, valued as {fund} because the statement names no fund"
+                )
                 context.log.success(
                     msg=(
-                        f"Statement: {format_units(units)} units of {statement_fund} "
+                        f"Statement: {format_units(units)} {whose} "
                         f"as of {dated or 'an unstated date'}"
                     )
                 )
