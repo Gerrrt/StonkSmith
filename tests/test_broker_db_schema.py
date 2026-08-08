@@ -25,6 +25,8 @@ from sqlalchemy import text
 
 from etc.broker_db import LEGACY_ACCOUNTS_TABLE, BrokerDatabase
 from etc.infrastructure import create_db_engine
+from etc.records import AccountIdentity, Holding
+from etc.secrets import get_secret
 from keyring_isolation import MemoryKeyringMixin
 
 LEGACY_SCHEMA = """
@@ -328,6 +330,251 @@ class LegacyMigrationTests(_DbTestCase):
 
         ezekiel = [row for row in db.get_snapshots() if row[1] == "Ezekiel"]
         self.assertEqual(len(ezekiel), 3)
+
+
+class HoldingUnitsDateMigrationTests(_DbTestCase):
+    """The units date gets a column, and the databases in the wild get it too.
+
+    create_all never alters an existing table, so a column added to the Python
+    schema does not reach a file anyone already has. That would not be quiet
+    about it -- save_snapshot names every column unconditionally, so the next
+    sync would die on "table holdings has no column named units_as_of" -- but it
+    would die after a login and a scrape, and Ally needs a fresh sign-in every
+    run. Hence a migration, and hence these.
+
+    Nothing tested any ALTER in this project before this class. The one that
+    already existed, in migrate_plaintext_secrets, went unexercised because the
+    legacy fixture below has no ``password`` column for it to find.
+    """
+
+    def older_database(
+        self, broker: str, raw_value: str | None, name: str = "broker.db"
+    ) -> Path:
+        """
+        A database shaped the way one written before this column was.
+
+        Built by opening a current one and dropping the column again, rather
+        than by hand-writing the old CREATE TABLE. A literal would be a second
+        copy of the schema that drifts the day anything else is added, and the
+        thing under test is the migration, not my typing.
+        :param broker: The broker the database belongs to
+        :param raw_value: What to leave in the holding's raw_value
+        :param name: The database file name
+        :return: The path to it
+        :rtype: Path
+        """
+
+        db = BrokerDatabase(create_db_engine(db_path=self.tmp / name), broker)
+        db.save_snapshot(
+            account=AccountIdentity(
+                account_key="TSP L 2060", display_name="TSP L 2060"
+            ),
+            scraped_at="2026-08-08 09:00:00",
+            as_of="2026-08-07",
+            value=2473.44,
+            holdings=[
+                Holding(
+                    fund_code="L 2060",
+                    units=100.0,
+                    price=24.7344,
+                    value=2473.44,
+                    raw_value=raw_value,
+                )
+            ],
+        )
+        db.shutdown_db()
+
+        con = sqlite3.connect(self.tmp / name)
+        try:
+            con.execute("ALTER TABLE holdings DROP COLUMN units_as_of")
+            con.commit()
+        finally:
+            con.close()
+
+        return self.tmp / name
+
+    def holding(self, name: str = "broker.db") -> tuple[Any, ...]:
+        con = sqlite3.connect(self.tmp / name)
+        try:
+            return con.execute("SELECT units_as_of, raw_value FROM holdings").fetchone()
+        finally:
+            con.close()
+
+    def columns(self, name: str = "broker.db") -> list[str]:
+        con = sqlite3.connect(self.tmp / name)
+        try:
+            return [row[1] for row in con.execute("PRAGMA table_info(holdings)")]
+        finally:
+            con.close()
+
+    def test_an_older_database_gains_the_column(self) -> None:
+        self.older_database(broker="tsp", raw_value="2026-06-30")
+        self.assertNotIn("units_as_of", self.columns())
+
+        self.open_db(broker="tsp")
+
+        self.assertIn("units_as_of", self.columns())
+
+    def test_a_write_against_an_older_database_no_longer_fails(self) -> None:
+        # The one that proves the migration is not decorative. Without it this
+        # raises OperationalError, because the insert names every column.
+        self.older_database(broker="tsp", raw_value="2026-06-30")
+        db = self.open_db(broker="tsp")
+
+        db.save_snapshot(
+            account=AccountIdentity(account_key="TSP C", display_name="TSP C"),
+            scraped_at="2026-08-09 09:00:00",
+            value=100.0,
+            holdings=[Holding(fund_code="C", units=1.0, units_as_of="2026-06-30")],
+        )
+
+        self.assertEqual(len(db.get_current_holdings()), 2)
+
+    def test_a_stranded_units_date_moves_into_its_own_column(self) -> None:
+        self.older_database(broker="tsp", raw_value="2026-06-30")
+
+        self.open_db(broker="tsp")
+
+        self.assertEqual(self.holding()[0], "2026-06-30")
+
+    def test_the_original_text_is_kept_beside_it(self) -> None:
+        # Same reasoning as the legacy accounts table being renamed rather than
+        # dropped: a migration that has to guess should not destroy its input.
+        self.older_database(broker="tsp", raw_value="2026-06-30")
+
+        self.open_db(broker="tsp")
+
+        self.assertEqual(self.holding()[1], "2026-06-30")
+
+    def test_a_value_that_is_not_a_date_is_left_where_it_is(self) -> None:
+        # What every other broker keeps in raw_value. Reading one of these as a
+        # date would put a date column full of nonsense on the sheet.
+        self.older_database(broker="ally", raw_value="$1,500.00")
+
+        self.open_db(broker="ally")
+
+        self.assertIsNone(self.holding()[0])
+        self.assertEqual(self.holding()[1], "$1,500.00")
+
+    def test_a_broker_that_never_stored_a_date_there_is_not_searched(self) -> None:
+        # The 529 parser puts the value text here too. Even when one happens to
+        # parse, it is not a units date and must not become one.
+        self.older_database(broker="schwab529plan", raw_value="2026-06-30")
+
+        self.open_db(broker="schwab529plan")
+
+        self.assertIsNone(self.holding()[0])
+
+    def test_a_holding_with_no_raw_value_survives_the_migration(self) -> None:
+        self.older_database(broker="tsp", raw_value=None)
+
+        self.open_db(broker="tsp")
+
+        self.assertIsNone(self.holding()[0])
+
+    def test_opening_the_same_database_twice_changes_nothing(self) -> None:
+        self.older_database(broker="tsp", raw_value="2026-06-30")
+
+        first = self.open_db(broker="tsp")
+        first.shutdown_db()
+        before: tuple[Any, ...] = self.holding()
+
+        self.open_db(broker="tsp")
+
+        self.assertEqual(self.holding(), before)
+
+    def test_a_hand_set_date_is_not_clobbered_by_a_later_open(self) -> None:
+        self.older_database(broker="tsp", raw_value="2026-06-30")
+        self.open_db(broker="tsp").shutdown_db()
+
+        con = sqlite3.connect(self.tmp / "broker.db")
+        try:
+            con.execute("UPDATE holdings SET units_as_of = '2026-03-31'")
+            con.commit()
+        finally:
+            con.close()
+
+        self.open_db(broker="tsp")
+
+        self.assertEqual(self.holding()[0], "2026-03-31")
+
+    def test_a_fresh_database_migrates_nothing(self) -> None:
+        db = self.open_db(broker="tsp")
+
+        self.assertIn("units_as_of", self.columns())
+        self.assertEqual(db.migrate_holding_dates(), 0)
+
+    def test_a_migrated_schema_matches_a_fresh_one(self) -> None:
+        # The column goes last in the table definition for this reason: ALTER
+        # can only append, so a migrated file and a new one would otherwise
+        # disagree about column order forever.
+        self.older_database(broker="tsp", raw_value="2026-06-30")
+        self.open_db(broker="tsp")
+        self.open_db(name="fresh.db", broker="tsp")
+
+        self.assertEqual(self.columns(), self.columns(name="fresh.db"))
+
+
+class PlaintextSecretMigrationTests(_DbTestCase):
+    """The other silent ALTER, which had no test at all until now.
+
+    LEGACY_SCHEMA above gives ``credentials`` a keyring_key and no password, so
+    migrate_plaintext_secrets returned 0 on every run of this suite and its
+    ALTER never executed. This is a database that actually predates the keyring.
+    """
+
+    PRE_KEYRING = """
+    CREATE TABLE credentials (
+        id INTEGER PRIMARY KEY,
+        username TEXT,
+        password TEXT,
+        type TEXT,
+        pillaged_from TEXT
+    );
+    """
+
+    def write_pre_keyring(self, name: str = "broker.db") -> None:
+        con = sqlite3.connect(self.tmp / name)
+        try:
+            con.executescript(self.PRE_KEYRING)
+            con.execute(
+                "INSERT INTO credentials (username, password, type, pillaged_from) "
+                "VALUES ('someone', 'hunter2', 'plaintext', 'manual')"
+            )
+            con.commit()
+        finally:
+            con.close()
+
+    def credential(self, name: str = "broker.db") -> tuple[Any, ...]:
+        con = sqlite3.connect(self.tmp / name)
+        try:
+            return con.execute(
+                "SELECT password, keyring_key FROM credentials"
+            ).fetchone()
+        finally:
+            con.close()
+
+    def test_the_keyring_key_column_is_added(self) -> None:
+        self.write_pre_keyring()
+
+        self.open_db()
+
+        self.assertIsNotNone(self.credential()[1])
+
+    def test_the_secret_leaves_the_database_for_the_keyring(self) -> None:
+        self.write_pre_keyring()
+
+        self.open_db()
+
+        password, key = self.credential()
+        self.assertIsNone(password, "the plaintext must not survive")
+        self.assertEqual(get_secret(key=key), "hunter2")
+
+    def test_a_second_open_migrates_nothing(self) -> None:
+        self.write_pre_keyring()
+        db = self.open_db()
+
+        self.assertEqual(db.migrate_plaintext_secrets(), 0)
 
 
 if __name__ == "__main__":

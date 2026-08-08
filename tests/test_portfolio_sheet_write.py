@@ -65,7 +65,7 @@ class ColumnLetterTests(unittest.TestCase):
 
     def test_the_contract_ends_where_it_says_it_does(self) -> None:
         self.assertEqual(last_column(columns=ACCOUNT_COLUMNS), "J")
-        self.assertEqual(last_column(columns=HOLDING_COLUMNS), "O")
+        self.assertEqual(last_column(columns=HOLDING_COLUMNS), "P")
 
     def test_it_keeps_working_past_z(self) -> None:
         # Append-only makes a twenty-seventh column a question of when, not
@@ -148,7 +148,7 @@ class WriteRowsTests(unittest.TestCase):
 
         write_rows(worksheet=tab, tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, rows=[])
 
-        self.assertIn(([list(HOLDING_COLUMNS)], "A2:O2"), written(worksheet=tab))
+        self.assertIn(([list(HOLDING_COLUMNS)], "A2:P2"), written(worksheet=tab))
 
     def test_the_banner_goes_in_before_the_data(self) -> None:
         # First in, so a write that dies partway leaves a tab that still
@@ -310,11 +310,11 @@ class WriteRowsTests(unittest.TestCase):
         data = [
             (values, range_name)
             for values, range_name in written(worksheet=tab)
-            if range_name not in (BANNER_CELL, "A2:O2")
+            if range_name not in (BANNER_CELL, "A2:P2")
         ]
         self.assertEqual([len(values) for values, _ in data], [CHUNK_ROWS, 500])
-        self.assertEqual(data[0][1], f"A3:O{CHUNK_ROWS + 2}")
-        self.assertEqual(data[1][1], f"A{CHUNK_ROWS + 3}:O{CHUNK_ROWS + 502}")
+        self.assertEqual(data[0][1], f"A3:P{CHUNK_ROWS + 2}")
+        self.assertEqual(data[1][1], f"A{CHUNK_ROWS + 3}:P{CHUNK_ROWS + 502}")
 
     def test_a_grid_that_exactly_fits_the_write_is_not_grown(self) -> None:
         # N data rows end on HEADER_ROW + N, because the header takes row 2 and

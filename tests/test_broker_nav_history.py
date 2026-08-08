@@ -64,8 +64,14 @@ class _LegacyDb:
         return None
 
 
-class HeaderContractTests(unittest.TestCase):
-    """Headers and readers describe the same set of categories."""
+class HeaderContractTests(MemoryKeyringMixin, unittest.TestCase):
+    """Headers and readers describe the same set of categories.
+
+    The mixin is not decoration: these open a real BrokerDatabase, and opening
+    one runs migrate_plaintext_secrets against whatever keyring is installed.
+    It was safe here only because a fresh database has no password column for
+    that migration to find.
+    """
 
     def test_every_reader_has_headers(self) -> None:
         self.assertEqual(set(HISTORY_READERS), set(CATEGORY_HEADERS) - {"creds"})
@@ -177,7 +183,19 @@ class RenderTests(unittest.TestCase):
 
     def test_non_money_columns_are_left_alone(self) -> None:
         rows = [
-            ("Ezekiel", "VTI", "Vanguard", 3.0, 250.0, 750.0, None, None, 600.0, "USD")
+            (
+                "Ezekiel",
+                "VTI",
+                "Vanguard",
+                3.0,
+                250.0,
+                750.0,
+                None,
+                None,
+                600.0,
+                "USD",
+                "2026-06-30",
+            )
         ]
 
         cells = BrokerNavigator.render(category="holdings", rows=rows)
@@ -185,6 +203,28 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(cells[0][1], "VTI")
         self.assertEqual(cells[0][3], "3.0", "units are a count, not money")
         self.assertEqual(cells[0][5], "$750.00")
+        self.assertEqual(cells[0][10], "2026-06-30", "a date, not money")
+
+    def test_a_holding_with_no_units_date_renders_an_empty_cell(self) -> None:
+        rows = [
+            (
+                "Ezekiel",
+                "VTI",
+                "Vanguard",
+                3.0,
+                250.0,
+                750.0,
+                None,
+                None,
+                600.0,
+                "USD",
+                None,
+            )
+        ]
+
+        cells = BrokerNavigator.render(category="holdings", rows=rows)
+
+        self.assertEqual(cells[0][10], "")
 
 
 class HistoryRowsTests(MemoryKeyringMixin, unittest.TestCase):

@@ -39,12 +39,6 @@ FROM_BALANCE = "--balance"
 FROM_FLAG = "--units"
 FROM_CONFIG = "config"
 
-#: What a holding's raw_value says when the units in it are an estimate rather
-#: than a count. The anchored row carries the date its count was true; this row
-#: has no such date to carry, and leaving it empty would make the two rows look
-#: like the same kind of thing.
-ESTIMATED = "estimated"
-
 #: Beyond this the unit count has almost certainly missed a contribution, since
 #: TSP posts monthly for uniformed members and no less often for civilians.
 UNITS_STALE_DAYS = 40
@@ -682,13 +676,13 @@ class TspModule:
 
         price_date, price = found
 
-        self.report(context=context, as_of=as_of, source=source, today=today)
-        accrued: float = self.accrue(
+        self.report(context=context, units_as_of=as_of, source=source, today=today)
+        accrued, accrued_as_of = self.accrue(
             context=context,
             connection=connection,
             prices=prices,
             fund=fund,
-            as_of=as_of,
+            units_as_of=as_of,
             today=today,
         )
         total: float = units + accrued
@@ -716,7 +710,8 @@ class TspModule:
             price=price,
             value=value,
             price_date=price_date,
-            as_of=as_of,
+            units_as_of=as_of,
+            accrued_as_of=accrued_as_of,
         )
         sheets_ok: bool = sync(context=context)
 
@@ -735,9 +730,9 @@ class TspModule:
         connection: Connection,
         prices: dict[dt.date, dict[str, float]],
         fund: str,
-        as_of: str,
+        units_as_of: str,
         today: dt.date,
-    ) -> float:
+    ) -> tuple[float, str]:
         """Estimate the units bought since the unit count was last true.
 
         The gap this closes is the broker's one known inaccuracy: units move
@@ -759,11 +754,14 @@ class TspModule:
             the canonical grade and the service date the broker validated.
             prices (dict[dt.date, dict[str, float]]): The parsed price file.
             fund (str): The fund the contributions buy into.
-            as_of (str): The date the anchoring unit count was true.
+            units_as_of (str): The date the anchoring unit count was true.
             today (dt.date): The run date.
 
         Returns:
-            float: Estimated units accrued, or 0.0 when none could be.
+            tuple[float, str]: Estimated units accrued and the date they run
+            through -- the last contribution that could be priced, not the run
+            date, since a month that could not be priced is not in the number.
+            (0.0, "") when no estimate could be made.
 
         """
         table: Any = getattr(connection, "pay_table", None)
@@ -785,14 +783,14 @@ class TspModule:
             or not isinstance(grade, str)
             or not grade
         ):
-            return 0.0
+            return 0.0, ""
 
         member, agency = get_tsp_contributions()
 
         if member is None or agency is None:
-            return 0.0
+            return 0.0, ""
 
-        if not as_of:
+        if not units_as_of:
             context.log.highlight(
                 msg=(
                     "Contributions cannot be accounted for without a date the "
@@ -800,21 +798,21 @@ class TspModule:
                     "months since. Set units_as_of."
                 )
             )
-            return 0.0
+            return 0.0, ""
 
         try:
-            start: dt.date = dt.date.fromisoformat(as_of)
+            start: dt.date = dt.date.fromisoformat(units_as_of)
 
         except ValueError:
             # report() has already said the date is unreadable, in those words.
-            return 0.0
+            return 0.0, ""
 
         dates: list[dt.date] = posting_dates(
             start=start, end=today, day=get_tsp_contribution_day()
         )
 
         if not dates:
-            return 0.0
+            return 0.0, ""
 
         accruals, notes = accrue_units(
             prices=prices,
@@ -847,7 +845,7 @@ class TspModule:
             )
 
         if not accruals:
-            return 0.0
+            return 0.0, ""
 
         for one in accruals:
             context.log.display(
@@ -863,15 +861,18 @@ class TspModule:
         spent: float = sum(one.dollars for one in accruals)
         context.log.success(
             msg=(
-                f"Contributions since {as_of}: {len(accruals)} month(s), "
+                f"Contributions since {units_as_of}: {len(accruals)} month(s), "
                 f"${spent:,.2f} at {member:g}% member + {agency:g}% agency "
                 f"= {format_units(total)} estimated units"
             )
         )
-        return total
+        # Dated to the last contribution it could price, not to the run. A month
+        # that was skipped is not in the number, so saying the estimate runs
+        # through today would date it past what it actually covers.
+        return total, accruals[-1].posted_on.isoformat()
 
     @staticmethod
-    def report(context: Context, as_of: str, source: str, today: dt.date) -> None:
+    def report(context: Context, units_as_of: str, source: str, today: dt.date) -> None:
         """Say how old the unit count is before reporting a value from it.
 
         The whole point of the broker. A mark carried on a three-month-old unit
@@ -881,12 +882,12 @@ class TspModule:
 
         Args:
             context (Context): Used for logging.
-            as_of (str): The date the unit count was true, as written.
+            units_as_of (str): The date the unit count was true, as written.
             source (str): Which input supplied it.
             today (dt.date): The run date.
 
         """
-        if not as_of:
+        if not units_as_of:
             context.log.highlight(
                 msg=(
                     f"Unit count came from {source} with no as-of date, so how "
@@ -896,25 +897,27 @@ class TspModule:
             return
 
         try:
-            age: int = (today - dt.date.fromisoformat(as_of)).days
+            age: int = (today - dt.date.fromisoformat(units_as_of)).days
 
         except ValueError:
             context.log.highlight(
-                msg=f"Unreadable units_as_of {as_of!r}; expected YYYY-MM-DD."
+                msg=f"Unreadable units_as_of {units_as_of!r}; expected YYYY-MM-DD."
             )
             return
 
         if age > UNITS_STALE_DAYS:
             context.log.highlight(
                 msg=(
-                    f"Unit count is from {as_of} ({age} days). TSP posts "
+                    f"Unit count is from {units_as_of} ({age} days). TSP posts "
                     "contributions at least monthly, so this mark is probably "
                     "short by one or more of them. Import a newer statement "
                     "with -o STATEMENT=<path> to reset it."
                 )
             )
         else:
-            context.log.display(msg=f"Unit count from {source}, true as of {as_of}.")
+            context.log.display(
+                msg=f"Unit count from {source}, true as of {units_as_of}."
+            )
 
     @staticmethod
     def save(
@@ -925,14 +928,20 @@ class TspModule:
         price: float,
         value: float,
         price_date: dt.date,
-        as_of: str,
+        units_as_of: str,
+        accrued_as_of: str = "",
     ) -> bool:
         """Write the mark to the broker database.
 
-        ``scraped_at`` is when the run happened; ``as_of`` is the price date the
-        value is true for. They differ whenever the run lands on a weekend or
-        before the day's price publishes, and collapsing them would date a
-        Friday price as Sunday's.
+        Three dates, and none of them is the same fact. ``scraped_at`` is when
+        the run happened. The snapshot's ``as_of`` is the price date the value is
+        true for -- they differ whenever the run lands on a weekend or before the
+        day's price publishes, and collapsing them would date a Friday price as
+        Sunday's. The holding's ``units_as_of`` is when the unit count was true,
+        which is a statement old and moves only on a contribution.
+
+        The last of those used to be called ``as_of`` here while the line below
+        wrote the *price* date to the column of that name, eleven lines apart.
 
         An estimated accrual is written as its own holding rather than added
         into the anchored one. Two rows that sum to the account's value keep the
@@ -949,7 +958,9 @@ class TspModule:
             price (float): Share price used.
             value (float): The resulting mark, over both.
             price_date (dt.date): The date that price was published.
-            as_of (str): The date the unit count was true.
+            units_as_of (str): The date the anchoring unit count was true.
+            accrued_as_of (str): The date the estimate runs through, which is
+            the last contribution it could price rather than the run date.
 
         Returns:
             bool: False on a database contract violation.
@@ -966,22 +977,29 @@ class TspModule:
                 price=price,
                 value=units * price,
                 currency="USD",
-                # The unit count's own date, kept beside the position
-                # so a stored mark stays self-describing.
-                raw_value=as_of or None,
+                # Its own column now. This used to ride in raw_value, which
+                # means "the value exactly as the source wrote it" for every
+                # other broker -- and which nothing ever read back, so the date
+                # was stored and invisible.
+                units_as_of=units_as_of or None,
             )
         ]
 
         if accrued:
+            # Its own row, and its own date. The anchored count is true as of a
+            # statement; this one is true through the last contribution it could
+            # price, which is a different day and a different kind of number.
+            # Now that units_as_of exists, both rows can say which -- where
+            # before there was one column for two facts.
             holdings.append(
                 Holding(
                     fund_code=fund,
-                    name=f"{fund} (estimated contributions since {as_of})",
+                    name=f"{fund} (estimated contributions since {units_as_of})",
                     units=accrued,
                     price=price,
                     value=accrued * price,
                     currency="USD",
-                    raw_value=ESTIMATED,
+                    units_as_of=accrued_as_of or None,
                 )
             )
 

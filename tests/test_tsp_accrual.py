@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 
 from helpers.dfas import basic_pay_table
 from helpers.tsp import fund_prices, price_on
-from modules.tsp_module import ESTIMATED, TspModule, accrue_units, posting_dates
+from modules.tsp_module import TspModule, accrue_units, posting_dates
 
 HERE = Path(__file__).resolve().parent
 PRICES = HERE / "tsp_prices.csv"
@@ -231,13 +231,13 @@ class AccrualReportTests(unittest.TestCase):
                 connection=connection,
                 prices=_prices(),
                 fund="L 2060",
-                as_of=str(object=context.args.units_as_of or ""),
+                units_as_of=str(object=context.args.units_as_of or ""),
                 today=TODAY,
             )
 
     def test_four_months_of_contributions_come_back_as_units(self) -> None:
         context = _context()
-        accrued = self._accrue(context=context, connection=_connection())
+        accrued, accrued_as_of = self._accrue(context=context, connection=_connection())
 
         prices = _prices()
         expected = sum(
@@ -252,6 +252,10 @@ class AccrualReportTests(unittest.TestCase):
 
         self.assertAlmostEqual(accrued, expected, places=9)
         self.assertIn("4 month(s)", _said(context.log.success))
+        # Dated to the last contribution it could price, not to the run: a
+        # month that was skipped is not in the number, so dating the estimate
+        # to today would claim it covers ground it does not.
+        self.assertEqual(accrued_as_of, "2026-07-31")
 
     def test_the_run_prints_its_working(self) -> None:
         # A lone "12.04 units" is unauditable. The same number beside the grade,
@@ -271,7 +275,9 @@ class AccrualReportTests(unittest.TestCase):
         connection = _connection(table={})
         connection.pay_table = None
 
-        self.assertEqual(self._accrue(context=context, connection=connection), 0.0)
+        self.assertEqual(
+            self._accrue(context=context, connection=connection), (0.0, "")
+        )
         self.assertEqual(_said(context.log.highlight), "")
         self.assertEqual(_said(context.log.fail), "")
 
@@ -279,21 +285,27 @@ class AccrualReportTests(unittest.TestCase):
         # A bare MagicMock answers every getattr with a truthy mock, which is
         # exactly what a duck-typed connection does in the wild -- so the guard
         # has to be on the type, not on the truthiness.
-        self.assertEqual(self._accrue(context=_context(), connection=MagicMock()), 0.0)
+        self.assertEqual(
+            self._accrue(context=_context(), connection=MagicMock()), (0.0, "")
+        )
 
     def test_no_anchor_date_refuses_rather_than_guessing_a_window(self) -> None:
         # Without a date the unit count was true there is nothing to measure the
         # months since, and any window picked would be invented.
         context = _context(as_of="")
 
-        self.assertEqual(self._accrue(context=context, connection=_connection()), 0.0)
+        self.assertEqual(
+            self._accrue(context=context, connection=_connection()), (0.0, "")
+        )
         self.assertIn("units_as_of", _said(context.log.highlight))
 
     def test_an_unreadable_anchor_date_is_left_to_report(self) -> None:
         # report() already says the date is unreadable, in those words.
         context = _context(as_of="June")
 
-        self.assertEqual(self._accrue(context=context, connection=_connection()), 0.0)
+        self.assertEqual(
+            self._accrue(context=context, connection=_connection()), (0.0, "")
+        )
 
     def test_a_window_before_the_pay_raise_is_flagged_not_hidden(self) -> None:
         # DFAS publishes only the current year, so contributions from before 1
@@ -316,10 +328,10 @@ class AccrualReportTests(unittest.TestCase):
                     connection=_connection(),
                     prices=_prices(),
                     fund="L 2060",
-                    as_of=ANCHOR,
+                    units_as_of=ANCHOR,
                     today=TODAY,
                 ),
-                0.0,
+                (0.0, ""),
             )
 
 
@@ -366,10 +378,21 @@ class MarkWithAnEstimateTests(unittest.TestCase):
 
         anchored, estimated = context.db.save_snapshot.call_args.kwargs["holdings"]
         self.assertEqual(anchored.units, 100.0)
-        self.assertEqual(anchored.raw_value, ANCHOR)
+        self.assertEqual(anchored.units_as_of, ANCHOR)
         self.assertIn("estimated contributions", estimated.name)
-        self.assertEqual(estimated.raw_value, ESTIMATED)
         self.assertEqual(estimated.price, anchored.price)
+
+        # Each row dates its own count. The anchored one is true as of the
+        # statement; the estimate runs through the last contribution it could
+        # price, which is a different day -- and before units_as_of existed
+        # there was one column between them and no way to say so.
+        self.assertEqual(estimated.units_as_of, "2026-07-31")
+        self.assertNotEqual(estimated.units_as_of, anchored.units_as_of)
+
+        # raw_value means "the value exactly as the source wrote it". Neither
+        # row has one: both were computed, and no source wrote either down.
+        self.assertIsNone(anchored.raw_value)
+        self.assertIsNone(estimated.raw_value)
 
     def test_the_mark_line_separates_the_two_counts(self) -> None:
         context = _context()
