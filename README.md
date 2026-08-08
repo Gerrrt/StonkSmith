@@ -84,8 +84,9 @@ Not every broker has been run against a real account. **Ally now has** — its
 sign-in hand-off, holdings parse, masked-number reconciliation, bank/brokerage
 split and database write were all exercised across nine live runs, and its
 session was found not to survive between runs at all, so it needs
-`--manual-login` every time. Those runs saw one account state, though, so
-anything plural about an Ally account is still inference. TSP has in part: its
+`--manual-login` every time it scrapes — `--from-prices` values it between
+scrapes without one. Those runs saw one account state, though, so anything
+plural about an Ally account is still inference. TSP has in part: its
 parsers, its arithmetic and its price download are verified against real data,
 but its database write and the sheet it feeds are not. Green tests say the code
 does what it was written to do, which is not the same as saying the site still
@@ -256,7 +257,8 @@ the session, and reports whether the save succeeded — the intent being that
 Ally would remember a device once it had seen one, so later runs could skip the
 sign-in until the session expired.
 
-**That last part does not hold, and `--manual-login` is required every run.**
+**That last part does not hold, and `--manual-login` is required every time Ally
+is scraped.**
 Settled over nine runs against a real account: Ally refuses a restored session
 however it is stored. The saved jar is not the problem — it carries `jwt`,
 `refreshToken`, `csrf-token`, `tksid` and `Ally-CIAM-Token` — but on the next
@@ -265,10 +267,46 @@ run either the investing site or the bank answers `401`, the app calls
 `storage_state`, Firefox with IndexedDB included, and a persistent Chrome
 profile were all tried, and all three were refused.
 
-So Ally cannot run unattended, and no amount of stored state changes that. The
-scrape itself is proven — sign-in, holdings, the account rail, the
+So the *scrape* cannot run unattended, and no amount of stored state changes
+that. The scrape itself is proven — sign-in, holdings, the account rail, the
 bank/brokerage split and the database write all work on every one of those
 runs. `docs/live-verification.md` has the full evidence.
+
+**But a daily number does not need a scrape.** Units only change when a deposit
+lands, and a published price needs no login — so `--from-prices` multiplies the
+units the last signed-in run recorded by today's close, opening no browser and
+signing in to nothing:
+
+```bash
+uv run stonksmith ally -M ally --from-prices
+```
+
+```text
+[+] Valuing from published prices; no sign-in needed.
+[+] Individual (...0847): 123.519 SWPPX x $19.88 (2026-08-06) = $2,455.56
+[*] Individual (...0847): priced at 2026-08-06; units as recorded 2026-08-07 20:40:18. Re-run with --manual-login after a deposit.
+```
+
+It reads the units out of the database, not out of config, so **a signed-in run
+has to have happened first**. Against an empty database it refuses rather than
+valuing the account at nothing:
+
+```text
+[-] No holdings on record to value. Run with --manual-login once so a signed-in run can record the units.
+```
+
+The mark is dated by the *price*, not by the run — and by the oldest price
+across the account, since one fund priced this morning and another not since
+Thursday makes a Thursday total. That date lands in `as_of`, which no other Ally
+path fills. The units' own age is the half that goes quietly wrong: a deposit
+adds units this run cannot see, so the total drifts low and keeps drifting until
+somebody signs in again. The run says so on every account, which is what the
+second line above is for — though it only *says* it, and the stored holding does
+not yet carry that date.
+
+Two things it does not do. It does not touch the sheet — only a scrape syncs, so
+`stonksmithdb`'s `sheet` command is what refreshes the tabs afterwards. And it
+does not notice new accounts, since it values what is already on record.
 
 Ally runs Akamai, Dynatrace and Transmit on that login page, so the same
 attach-to-your-own-Chrome path Fidelity documents above applies here, pointed at
