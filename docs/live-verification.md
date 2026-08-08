@@ -24,12 +24,14 @@ outcome would mean.
 
 ## Where each claim stands
 
-**`Observed live` means a run of StonkSmith itself against the live site, start to
-finish, that exercised the claim.** A DOM captured from a real account and replayed
-as a fixture does not count, however real the data inside it — that is what the
-`Rests on` column is for, and a capture and a run are not the same evidence. A row
-can also be settled the other way: **Run, and it cannot** is an observation, not a
-gap.
+**`Observed live` means StonkSmith itself was run, start to finish, against the real
+thing** — the live site for a broker that has one, or a real file as its source
+published or issued it for a broker that does not. What does *not* count is a copy
+captured once and committed under `tests/`, however real the data inside it: a
+fixture is replayed, and replaying shows the parser has not changed rather than that
+the source has not. That is what the `Rests on` column is for, and a capture and a
+run are not the same evidence. A row can also be settled the other way: **Run, and it
+cannot** is an observation, not a gap.
 
 *10 of 17 claims have been settled by a live run — 9 confirmed, 1 disproved. The
 remaining 7 rest on unit tests or on fixtures.*
@@ -43,8 +45,8 @@ remaining 7 rest on unit tests or on fixtures.*
 | Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one | Yes |
 | Ally — one row per account across runs | `uq_accounts_broker_key`; the row count was never checked across those runs | No |
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
-| TSP — statement parser | Real statement layouts | Yes, against real files |
-| TSP — share price parser | A real slice of the published file, `tests/tsp_prices.csv` | Yes, against real files |
+| TSP — statement parser | Real statements, read as issued through `-o STATEMENT=` | Yes, against real files |
+| TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files |
 | TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
 | TSP — share price download | A real request on 2026-08-07; response written up in #48 | Yes |
 | TSP — DFAS pay table parse | `tests/dfas_basic_pay_em.html`, a **reconstruction** of the live page | No |
