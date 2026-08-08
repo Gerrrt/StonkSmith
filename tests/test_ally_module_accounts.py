@@ -16,10 +16,12 @@ excluding overlapping SnapTrade accounts exists to prevent.
 
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 from bs4 import BeautifulSoup
 
+from etc.context import SnapshotDbProtocol
 from modules.ally_module import AllyModule
 
 FIXTURE = Path(__file__).resolve().parents[0] / "ally_holdings.html"
@@ -313,6 +315,66 @@ class HoldingRecordTests(unittest.TestCase):
         self.assertEqual(held.symbol, "EXMPL")
         self.assertEqual(held.value, 1500.0)
         self.assertIsInstance(held.value, float)
+
+
+class _SavingDb:
+    """A database that records what it was handed, as the snapshot path needs."""
+
+    def __init__(self) -> None:
+        self.saved: list[dict[str, Any]] = []
+
+    def get_credentials(self, filter_term: str | None = None) -> list[tuple[str, ...]]:
+        return []
+
+    def save_account_data(self, account_name, balance, timestamp) -> None:
+        return None
+
+    def shutdown_db(self) -> None:
+        return None
+
+    def save_transactions(self, *args: Any, **kwargs: Any) -> int:
+        return 0
+
+    def save_snapshot(self, **kwargs: Any) -> int:
+        self.saved.append(kwargs)
+        return len(self.saved)
+
+
+class UnitsAreDatedWhenTheyAreRead(unittest.TestCase):
+    """A scrape is the moment the units were true, so it is what dates them.
+
+    On a scrape the units and the value are true at the same instant, which makes
+    the stamp look like a duplicate of scraped_at. It stops being one the moment
+    --from-prices reprices the row: the value becomes today's and the units stay
+    the scrape's. Recording it here is what lets that run say how old the units
+    are rather than inferring it from snapshots it is itself adding to.
+    """
+
+    def _saved(self) -> dict[str, Any]:
+        connection = MagicMock()
+        connection.page.content.return_value = FIXTURE.read_text(encoding="utf-8")
+
+        db = _SavingDb()
+        context = MagicMock()
+        context.db = db
+        context.args.from_prices = False
+
+        with patch("modules.ally_module.sync", return_value=True):
+            AllyModule().on_login(context, connection)
+
+        return db.saved[0]
+
+    def test_the_protocol_is_satisfied(self) -> None:
+        """Otherwise on_login takes the save_account_data branch and saves nothing."""
+
+        self.assertIsInstance(_SavingDb(), SnapshotDbProtocol)
+
+    def test_a_saved_holding_carries_the_date_its_units_were_read(self) -> None:
+        saved = self._saved()
+        held = saved["holdings"][0]
+
+        self.assertEqual(held.units_as_of, saved["scraped_at"])
+        self.assertIsNotNone(held.units_as_of)
 
 
 if __name__ == "__main__":

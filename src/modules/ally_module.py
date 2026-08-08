@@ -5,6 +5,7 @@
 
 import contextlib
 import datetime
+from dataclasses import replace
 from typing import Any, ClassVar
 
 from bs4 import BeautifulSoup
@@ -214,8 +215,14 @@ class AllyModule:
             )
             return False
 
-        # When each account was last actually read, for the units half of the
-        # staleness report. Newest first, so the first sighting is the newest.
+        # The fallback only, for holdings written before the units carried their
+        # own date. Newest first, so the first sighting is the newest.
+        #
+        # It cannot be the primary source: this run writes a snapshot of its own,
+        # so from the next run on the newest snapshot is a price run rather than
+        # the last sign-in. Inferring from it would report the units a day old
+        # however old they are -- drifting younger while the units drift older,
+        # which reads as fact and is the opposite of the truth.
         last_seen: dict[str, str] = {}
 
         for row in db.get_snapshots(limit=SNAPSHOT_SCAN_LIMIT):
@@ -257,6 +264,12 @@ class AllyModule:
                     units=units,
                     cost_basis=row[8],
                     currency=str(object=row[9] or "USD"),
+                    # When the units were last actually observed, carried through
+                    # rather than re-derived. repriced() replaces the price and
+                    # the value and nothing else, so it survives to be written
+                    # back -- which is what keeps it from being re-derived next
+                    # run from a snapshot this run is about to add.
+                    units_as_of=row[10],
                 ),
                 prices=closes[symbol],
                 day=today,
@@ -306,7 +319,13 @@ class AllyModule:
             # are the half that goes quietly wrong. A deposit adds units this
             # run cannot see, so the total drifts low and keeps drifting until
             # somebody signs in again.
-            observed: str = last_seen.get(account, "")
+            #
+            # The rows' own date first, and the oldest of them, for the same
+            # reason the price date is the oldest: an account's units are only as
+            # current as its stalest holding. The snapshot is consulted only when
+            # no row carries one.
+            stamps: list[str] = [p.units_as_of for p in positions if p.units_as_of]
+            observed: str = min(stamps) if stamps else last_seen.get(account, "")
             context.log.display(
                 msg=(
                     f"{account}: priced at {when}; units as recorded "
@@ -473,7 +492,17 @@ class AllyModule:
                     value=to_amount(balance),
                     currency=to_currency(balance),
                     raw_value=balance,
-                    holdings=account.get("Holdings") or (),
+                    # Stamped here rather than in helpers/ally.py, which parses a
+                    # DOM and has no clock. This is when the units were read off
+                    # the page, which on a scrape is also when the value was --
+                    # so it looks redundant until --from-prices reprices the row
+                    # and the two dates come apart. Recording it now is what lets
+                    # that run say how old the units are instead of guessing from
+                    # snapshots it has itself been adding to.
+                    holdings=tuple(
+                        replace(holding, units_as_of=timestamp)
+                        for holding in account.get("Holdings") or ()
+                    ),
                 )
 
         elif callable(getattr(db, "save_account_data", None)):

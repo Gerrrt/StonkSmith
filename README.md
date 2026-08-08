@@ -301,8 +301,12 @@ Thursday makes a Thursday total. That date lands in `as_of`, which no other Ally
 path fills. The units' own age is the half that goes quietly wrong: a deposit
 adds units this run cannot see, so the total drifts low and keeps drifting until
 somebody signs in again. The run says so on every account, which is what the
-second line above is for — though it only *says* it, and the stored holding does
-not yet carry that date.
+second line above is for, and the date it names is the holding's own: a scrape
+stamps each position with the moment its units were read, and repricing carries
+that stamp through rather than replacing it. So the units' age is a stored fact
+that stops where the last sign-in did, not one inferred from the newest snapshot
+— which, since these runs write snapshots too, would otherwise report the units
+a day old however old they really were.
 
 Two things it does not do. It does not touch the sheet — only a scrape syncs, so
 `stonksmithdb`'s `sheet` command is what refreshes the tabs afterwards. And it
