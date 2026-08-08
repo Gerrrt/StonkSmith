@@ -27,6 +27,10 @@ from modules.ally_module import AllyModule
 _ACCOUNT = "Individual (...0847)"
 
 #: The real position, as the database holds it after a signed-in run.
+#: Eleven columns, because get_holdings() selects eleven. It was ten here for as
+#: long as the last one went unread, which is exactly how long the bug lasted: a
+#: fixture one column short of the query cannot fail when the code ignores that
+#: column. None is the pre-stamp state -- Ally rows carried no units_as_of at all.
 _HOLDING_ROW: tuple[Any, ...] = (
     _ACCOUNT,
     "SWPPX",
@@ -38,6 +42,7 @@ _HOLDING_ROW: tuple[Any, ...] = (
     None,
     2237.74,
     "USD",
+    None,
 )
 
 #: (id, account, as_of, scraped_at, value, currency)
@@ -191,6 +196,7 @@ class TwoHoldings(unittest.TestCase):
         None,
         45.0,
         "USD",
+        None,
     )
 
     def _both(self):
@@ -265,6 +271,43 @@ class SayingHowOld(unittest.TestCase):
         _ok, context, _connection = _run(db=_Db(snapshots=[]))
 
         self.assertIn("unknown time", self._said(context))
+
+    def test_a_recorded_units_date_is_preferred_to_the_newest_snapshot(self) -> None:
+        """
+        The whole point. A price run writes a snapshot, so the newest snapshot
+        stops being the last sign-in the moment one has happened -- and inferring
+        the units' age from it reports yesterday's price run instead of the
+        scrape. Every price run then makes the units look a day old however old
+        they are, which is the wrong direction: the report drifts younger while
+        the units drift older.
+
+        The stamp here is a week older than the snapshot, so an implementation
+        that infers reports 08-07 and fails. Dated the other way round the
+        assertion would hold either way and prove nothing.
+        """
+
+        stamped = (*_HOLDING_ROW[:10], "2026-08-01 09:15:00")
+        _ok, context, _connection = _run(db=_Db(holdings=[stamped]))
+        said = self._said(context)
+
+        self.assertIn("2026-08-01 09:15:00", said)
+        self.assertNotIn("2026-08-07", said)
+
+    def test_a_recorded_units_date_survives_the_repricing(self) -> None:
+        """Repricing changes the price and the value, not when the units were true."""
+
+        stamped = (*_HOLDING_ROW[:10], "2026-08-01 09:15:00")
+        _ok, context, _connection = _run(db=_Db(holdings=[stamped]))
+
+        saved = context.db.saved[0]["holdings"][0]
+        self.assertEqual(saved.units_as_of, "2026-08-01 09:15:00")
+
+    def test_an_unstamped_row_still_falls_back_to_the_snapshot(self) -> None:
+        """Databases written before the stamp existed keep the old behaviour."""
+
+        _ok, context, _connection = _run()
+
+        self.assertIn("2026-08-07", self._said(context))
 
 
 class WhenItCannot(unittest.TestCase):

@@ -42,7 +42,7 @@ remaining 9 rest on unit tests or on fixtures.*
 | Ally — holdings, totals and sidebar parse | The same nine runs; `tests/ally_holdings.html` is one redacted DOM from that same account | Yes |
 | Ally — masked sidebar number matches the full one | The same nine runs; `masked_matches("...0111", "1AB20111")` in unit tests | Yes |
 | Ally — Ally Bank deposit accounts skipped, not filed as brokerage | The same nine runs | Yes |
-| Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one | Yes |
+| Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one. The `units_as_of` stamp on each holding postdates those runs and has not been written to a real one | Yes |
 | Ally — one row per account across runs | `uq_accounts_broker_key`; the row count was never checked across those runs | No |
 | Ally — valuing from published prices without a login | Unit tests over a fake DB and a canned payload, `tests/test_ally_from_prices.py` | No |
 | Ally — the published price feed answers | Yahoo's chart endpoint, one symbol at a time; no record of a real request | No |
@@ -267,11 +267,21 @@ uv run stonksmith ally -M ally --from-prices
 Playwright starts and before the preflight request to the bank, so a run that opens a
 window has taken the scrape branch instead.
 
-Two things to check in `stonksmithdb` afterwards. `show snapshots` should have one more
-row, and its `as_of` should carry the **price** date rather than being empty — this is
-the only Ally path that fills that column, so an empty `as_of` here means the value was
-dated by the run. And `show holdings` should show the same unit count step 1 recorded,
-unchanged: this run reprices units, it does not rediscover them.
+Three things to check in `stonksmithdb` afterwards. `show snapshots` should have one
+more row, and its `as_of` should carry the **price** date rather than being empty — this
+is the only Ally path that fills that column, so an empty `as_of` here means the value
+was dated by the run. `show holdings` should show the same unit count step 1 recorded,
+unchanged: this run reprices units, it does not rediscover them. And its `Units As Of`
+should carry **step 1's** date, not this run's — that is the scrape stamping the moment
+its units were read, and the price run carrying the stamp through rather than
+replacing it.
+
+Then run it a **second** time, and check `Units As Of` again. It must not have moved.
+A date that advances to the previous price run is the failure this step exists to
+catch: these runs write snapshots, so an age inferred from the newest snapshot reports
+the units a day old however old they are — drifting younger while the units drift
+older, and reading as fact the whole way. An unchanged date is the units' age still
+being the last sign-in's.
 
 Then the failure that matters more than the success. Against a database with no Ally
 holdings on record:
