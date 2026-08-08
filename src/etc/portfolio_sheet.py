@@ -72,6 +72,19 @@ DASHBOARD_TAB: str = "Dashboard"
 MACHINE_OWNED_TABS: tuple[str, ...] = (ACCOUNTS_TAB, HOLDINGS_TAB, DASHBOARD_TAB)
 
 BANNER_CELL: str = "A1"
+
+#: Where claim() remembers that it has already vetted a worksheet handle. Set on
+#: the gspread object rather than kept in a module-level set, so that it cannot
+#: outlive the handle and quietly vouch for a later one.
+CLAIMED_ATTR: str = "_stonksmith_claimed"
+
+#: What that attribute has to hold. A private sentinel rather than True, because
+#: the check is the one thing standing between a sync and somebody's data, and
+#: "any truthy attribute of that name" is a bypass anything could trip into --
+#: a test double that invents attributes on demand does exactly that. Only this
+#: module can produce this object, so only this module can vouch for a handle.
+_CLAIMED: object = object()
+
 HEADER_ROW: int = 2
 FIRST_DATA_ROW: int = 3
 
@@ -213,15 +226,27 @@ def claim(worksheet: Any, tab: str) -> None:
     layout has, and exactly the shape a person's own tab has if they started
     below the top row. Only then is the whole tab read, which is the first sync
     of a tab and no other.
+
+    Asked once per worksheet object. refresh() claims all three tabs up front so
+    that a tab which is not ours costs nothing, and each write then claims the
+    tab it is about to clear so that no write path can exist without the guard
+    on it. Those two are both worth having and would otherwise mean two rounds
+    of reads -- and on a first adoption, two whole-tab downloads. So the answer
+    is remembered on the handle it was asked about: same object, same tab, same
+    answer, and a handle lives exactly as long as the sync that opened it.
     :param worksheet: The tab about to be cleared
     :param tab: Its name, for the message
     :return: None
     :raises SheetNotOwned: when the tab holds anything StonkSmith did not write
     """
 
+    if getattr(worksheet, CLAIMED_ATTR, None) is _CLAIMED:
+        return
+
     first: Any = worksheet.acell(BANNER_CELL).value
 
     if str(object=first or "").strip() == BANNER:
+        setattr(worksheet, CLAIMED_ATTR, _CLAIMED)
         return
 
     if str(object=first or "").strip():
@@ -230,6 +255,8 @@ def claim(worksheet: Any, tab: str) -> None:
     for row in worksheet.get_all_values() or ():
         if any(str(object=cell or "").strip() for cell in row):
             raise SheetNotOwned(_refusal(tab=tab))
+
+    setattr(worksheet, CLAIMED_ATTR, _CLAIMED)
 
 
 def _refusal(tab: str) -> str:

@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import gspread.exceptions
+from google.auth.exceptions import RefreshError
 
 from helpers.sheets import (
     SheetsUnavailable,
@@ -55,6 +56,66 @@ class OpenSpreadsheetTests(unittest.TestCase):
             open_worksheet(worksheet_name="Accounts")
 
         self.assertIn("Accounts", str(caught.exception))
+
+
+class WorksheetLookupFailureTests(unittest.TestCase):
+    """Looking a tab up reaches the network, so it can fail like anything else.
+
+    Spreadsheet.worksheet() is not a dictionary lookup -- it fetches the book's
+    metadata first. An APIError or an expired token coming out of there used to
+    escape as a raw gspread or google-auth exception, which is the traceback
+    this module exists to replace, and which sends a caller down its
+    "something unexpected broke" path rather than its "Sheets is unavailable"
+    one.
+    """
+
+    def _api_error(self) -> gspread.exceptions.APIError:
+        return gspread.exceptions.APIError(
+            MagicMock(
+                status_code=429,
+                json=lambda: {
+                    "code": 429,
+                    "message": "quota exceeded",
+                    "status": "RESOURCE_EXHAUSTED",
+                },
+            )
+        )
+
+    def test_a_rejected_lookup_reports_as_sheets_unavailable(self) -> None:
+        client = MagicMock()
+        client.open.return_value.worksheet.side_effect = self._api_error()
+
+        with (
+            patch("helpers.sheets.gspread.oauth", return_value=client),
+            self.assertRaises(SheetsUnavailable) as caught,
+        ):
+            open_worksheet(worksheet_name="Accounts")
+
+        self.assertIn("Sheets API", str(caught.exception))
+
+    def test_an_expired_token_during_lookup_says_so(self) -> None:
+        client = MagicMock()
+        client.open.return_value.worksheet.side_effect = RefreshError("expired")
+
+        with (
+            patch("helpers.sheets.gspread.oauth", return_value=client),
+            self.assertRaises(SheetsUnavailable) as caught,
+        ):
+            open_worksheet(worksheet_name="Accounts")
+
+        self.assertIn("Accounts", str(caught.exception))
+
+    def test_ensure_worksheet_does_not_create_a_tab_over_a_failed_lookup(self) -> None:
+        # The dangerous version of this bug: a lookup that failed for a reason
+        # other than absence, treated as absence, makes a second tab beside one
+        # that is already there.
+        book = MagicMock()
+        book.worksheet.side_effect = self._api_error()
+
+        with self.assertRaises(SheetsUnavailable):
+            ensure_worksheet(worksheet_name="Holdings", book=book)
+
+        book.add_worksheet.assert_not_called()
 
 
 class EnsureWorksheetTests(unittest.TestCase):

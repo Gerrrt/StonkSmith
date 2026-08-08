@@ -101,6 +101,47 @@ def open_spreadsheet(spreadsheet: str = SPREADSHEET_NAME) -> Any:
         ) from e
 
 
+def _find_worksheet(book: Any, worksheet_name: str, spreadsheet: str) -> Any:
+    """
+    Look one tab up, translating everything but its absence.
+
+    Spreadsheet.worksheet() is not a dictionary lookup: it calls
+    fetch_sheet_metadata() first, so it reaches the network and can fail every
+    way a request can. Left unwrapped those came out as raw gspread and
+    google-auth exceptions -- which is the traceback this module exists to
+    replace with one actionable line, and which a caller distinguishing a Sheets
+    problem from a real one would misfile.
+
+    WorksheetNotFound is deliberately not handled here. It is the one outcome
+    whose right answer differs by caller: open_worksheet reports it, and
+    ensure_worksheet creates the tab.
+    :param book: An open spreadsheet
+    :param worksheet_name: The tab to look for
+    :param spreadsheet: The spreadsheet's name, for the message
+    :return: The worksheet
+    :rtype: Any
+    :raises gspread.exceptions.WorksheetNotFound: if there is no such tab
+    :raises SheetsUnavailable: if the lookup itself fails
+    """
+
+    try:
+        return book.worksheet(worksheet_name)
+
+    except GoogleAuthError as e:
+        raise SheetsUnavailable(
+            f"Google authorization failed while looking for the tab "
+            f"'{worksheet_name}' ({e})."
+        ) from e
+
+    except gspread.exceptions.APIError as e:
+        raise SheetsUnavailable(
+            f"Google rejected the request for the tabs in '{spreadsheet}' "
+            f"({e}). Check that the Sheets API and the Drive API are both "
+            "enabled for this project, and that the authorized account may "
+            "read the spreadsheet."
+        ) from e
+
+
 def open_worksheet(worksheet_name: str, spreadsheet: str = SPREADSHEET_NAME) -> Any:
     """
     Authenticate once and return a worksheet handle.
@@ -113,7 +154,9 @@ def open_worksheet(worksheet_name: str, spreadsheet: str = SPREADSHEET_NAME) -> 
     book: Any = open_spreadsheet(spreadsheet=spreadsheet)
 
     try:
-        return book.worksheet(worksheet_name)
+        return _find_worksheet(
+            book=book, worksheet_name=worksheet_name, spreadsheet=spreadsheet
+        )
 
     except gspread.exceptions.WorksheetNotFound as e:
         raise SheetsUnavailable(
@@ -153,7 +196,9 @@ def ensure_worksheet(
     )
 
     try:
-        return opened.worksheet(worksheet_name)
+        return _find_worksheet(
+            book=opened, worksheet_name=worksheet_name, spreadsheet=spreadsheet
+        )
 
     except gspread.exceptions.WorksheetNotFound:
         pass

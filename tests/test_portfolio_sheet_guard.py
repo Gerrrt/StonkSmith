@@ -113,6 +113,66 @@ class ClaimTests(unittest.TestCase):
         tab.batch_update.assert_not_called()
 
 
+class ClaimIsAskedOnceTests(unittest.TestCase):
+    """refresh() claims every tab up front; each write claims the tab it clears.
+
+    Both are worth having -- the first so a tab that is not ours costs nothing
+    instead of leaving one tab rewritten beside a stale one, the second so no
+    write path can exist with the guard missing from it. Together they would
+    otherwise mean two rounds of reads, and on a first adoption two whole-tab
+    downloads. So the answer is remembered on the handle it was asked about.
+    """
+
+    def test_the_second_claim_on_one_handle_reads_nothing(self) -> None:
+        tab = worksheet(first_cell=BANNER)
+
+        claim(worksheet=tab, tab=ACCOUNTS_TAB)
+        claim(worksheet=tab, tab=ACCOUNTS_TAB)
+        claim(worksheet=tab, tab=ACCOUNTS_TAB)
+
+        tab.acell.assert_called_once_with(BANNER_CELL)
+
+    def test_adopting_an_empty_tab_downloads_it_once(self) -> None:
+        # The expensive path. Twice would be two full reads of the same tab.
+        tab = worksheet(first_cell=None)
+
+        claim(worksheet=tab, tab=HOLDINGS_TAB)
+        claim(worksheet=tab, tab=HOLDINGS_TAB)
+
+        tab.get_all_values.assert_called_once()
+
+    def test_a_refused_tab_is_never_remembered_as_ours(self) -> None:
+        # The failure that would matter: a tab that said no once, then went
+        # unchecked. Every later ask must ask again, and must still refuse.
+        tab = worksheet(first_cell="my notes")
+
+        for _ in range(3):
+            with self.assertRaises(SheetNotOwned):
+                claim(worksheet=tab, tab=ACCOUNTS_TAB)
+
+        self.assertEqual(tab.acell.call_count, 3)
+
+    def test_a_fresh_handle_is_vetted_again(self) -> None:
+        # The memo rides on the handle, never on the tab's name, so a later run
+        # opening the same tab cannot inherit an earlier run's answer.
+        claim(worksheet=worksheet(first_cell=BANNER), tab=ACCOUNTS_TAB)
+        second = worksheet(first_cell="somebody typed here")
+
+        with self.assertRaises(SheetNotOwned):
+            claim(worksheet=second, tab=ACCOUNTS_TAB)
+
+    def test_an_attribute_that_merely_looks_right_does_not_vouch(self) -> None:
+        # The reason the memo is a private sentinel rather than True. A handle
+        # that invents attributes on demand -- a MagicMock is exactly that --
+        # would otherwise answer "already claimed" to its very first ask, and
+        # the guard would be off for anything that behaved like one.
+        tab = worksheet(first_cell="my notes")
+        tab._stonksmith_claimed = True
+
+        with self.assertRaises(SheetNotOwned):
+            claim(worksheet=tab, tab=ACCOUNTS_TAB)
+
+
 class OwnershipContractTests(unittest.TestCase):
     def test_a_refusal_is_a_kind_of_sheets_unavailable(self) -> None:
         # Why no caller needed a new except clause: for the run, declining to
