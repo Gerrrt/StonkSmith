@@ -9,6 +9,11 @@ This file records which broker claims have been observed against a live account 
 which have not, and gives the procedure for closing the gap. It is meant to be worked
 through, not read.
 
+**This file is the record.** The README summarises it in two places — the paragraph
+under *Project Structure* and the end of the *Ally Invest* section — and both are
+derived from the table below rather than maintained alongside it. Change a row here
+and change those there in the same pass; do not edit them on their own.
+
 **A failed step here is information, not a defect.** Session persistence and an
 unattended price download are load-bearing for the claim that a broker runs daily
 without a human. If one does not hold, the right response is to say so in the README
@@ -19,13 +24,25 @@ outcome would mean.
 
 ## Where each claim stands
 
+**`Observed live` means a run of StonkSmith itself against the live site, start to
+finish, that exercised the claim.** A DOM captured from a real account and replayed
+as a fixture does not count, however real the data inside it — that is what the
+`Rests on` column is for, and a capture and a run are not the same evidence. A row
+can also be settled the other way: **Run, and it cannot** is an observation, not a
+gap.
+
+*10 of 17 claims have been settled by a live run — 9 confirmed, 1 disproved. The
+remaining 7 rest on unit tests or on fixtures.*
+
 | Claim | Rests on | Observed live |
 | --- | --- | --- |
-| Ally — holdings, totals and sidebar parse | One signed-in DOM, redacted to `tests/ally_holdings.html` | No |
-| Ally — sign-in hand-off to `live.invest.ally.com` | Unit tests over a URL predicate | No |
+| Ally — sign-in hand-off to `live.invest.ally.com` | Nine runs against a real account, 2026-08-07; unit tests over the URL predicate | Yes |
+| Ally — holdings, totals and sidebar parse | The same nine runs; `tests/ally_holdings.html` is one redacted DOM from that same account | Yes |
+| Ally — masked sidebar number matches the full one | The same nine runs; `masked_matches("...0111", "1AB20111")` in unit tests | Yes |
+| Ally — Ally Bank deposit accounts skipped, not filed as brokerage | The same nine runs | Yes |
+| Ally — database write | The same nine runs; unit tests write to a fake DB, never to a real `ally.db` | Yes |
+| Ally — one row per account across runs | `uq_accounts_broker_key`; the row count was never checked across those runs | No |
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
-| Ally — masked sidebar number matches the full one | `masked_matches("...0111", "1AB20111")` against the fixture | No |
-| Ally — one row per account across runs | `uq_accounts_broker_key` | No |
 | TSP — statement parser | Real statement layouts | Yes, against real files |
 | TSP — share price parser | A real slice of the published file, `tests/tsp_prices.csv` | Yes, against real files |
 | TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
@@ -37,10 +54,12 @@ outcome would mean.
 | The sheet — three machine-owned tabs | Unit tests with a faked spreadsheet | No |
 | The sheet — refusing a tab it does not own | Unit tests with a faked spreadsheet | No |
 
-The Ally parser row is the one worth reading twice. It is proven against *one snapshot
-of one account state*: one investment account, one holding, one deposit account. Every
-plural case — a second brokerage account, a second position, an account with no
-holdings — is inference.
+The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
+*one account state*: one investment account, one holding, one deposit account. So the
+parse has met a live site, but only ever that shape of it. Every plural case — a
+second brokerage account, a second position, an account with no holdings — is still
+inference, and `tests/ally_holdings.html` is a redaction of that same single state
+rather than a second witness to it.
 
 ---
 
@@ -178,9 +197,10 @@ full number should be alongside it. Both routes into a row, sidebar and heading,
 supposed to agree on that one identity; if a single account shows up twice, once with
 a balance and once with positions, they did not.
 
-This logic has only ever seen the pasted DOM. Ally account numbers are alphanumeric,
-which is why the comparison upper-cases both sides. A real number with a lowercase
-letter or an unexpected separator is exactly the case the fixture cannot rule out.
+This logic has met a real account, but exactly one. Ally account numbers are
+alphanumeric, which is why the comparison upper-cases both sides. A number with a
+lowercase letter or an unexpected separator is exactly the case that neither that
+account nor the fixture rules out.
 
 ### 4. More than one investment account
 
@@ -482,6 +502,14 @@ down what was returned, not just whether it passed — the #48 write-up is the m
 status, headers, sizes, and the exact conditions under which the thing did and did not
 work. A "yes" with nothing behind it is the state this document exists to end.
 
-If a claim turns out to be false, change the README in the same pass. A claim that has
-been disproved and left standing is worse than one that was never checked, because the
-next reader has no way to tell them apart.
+**Record the claims that passed, not only the one that failed.** A single run settles
+several rows at once, and the failure is the one that writes itself up — it demands a
+post-mortem, and the successes are merely the run working. That asymmetry is how the
+table and the README come apart: #83 was five claims settled in one sitting, one of
+them written into the table and four of them left in prose. Update every row the run
+touched before closing the issue, and bring the count above the table into line.
+
+Then change the README in the same pass, whichever way it went. A claim that has been
+disproved and left standing is worse than one that was never checked, because the next
+reader has no way to tell them apart — and a claim that has been *proved* and left
+reading as unchecked sends them off to redo a run that has already been done.

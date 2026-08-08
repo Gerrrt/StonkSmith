@@ -81,14 +81,18 @@ subclasses `ApiConnection`: SnapTrade, and TSP, which holds no key either
 because the data it reads is published.
 
 Not every broker has been run against a real account. **Ally now has** — its
-sign-in, holdings parse and database write are verified, and its session was
-found not to survive between runs at all, so it needs `--manual-login` every
-time. TSP has in part: its parsers, its arithmetic and its price download are
-verified against real data, but its database write and the sheet it feeds are
-not. Green tests say the code does what it was written to do, which is not the
-same as saying the site still looks the way it did when the parser was written.
+sign-in hand-off, holdings parse, masked-number reconciliation, bank/brokerage
+split and database write were all exercised across nine live runs, and its
+session was found not to survive between runs at all, so it needs
+`--manual-login` every time. Those runs saw one account state, though, so
+anything plural about an Ally account is still inference. TSP has in part: its
+parsers, its arithmetic and its price download are verified against real data,
+but its database write and the sheet it feeds are not. Green tests say the code
+does what it was written to do, which is not the same as saying the site still
+looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
-gives the procedure for the rest.
+gives the procedure for the rest — it is the record, and this paragraph
+summarises it rather than being maintained beside it.
 
 ---
 
@@ -286,13 +290,15 @@ there is more than one. Select another account in the browser and re-run to
 store its positions too. Ally *Bank* deposit accounts appear in the same
 sidebar; they are reported as skipped rather than filed under a brokerage.
 
-All of that is built and tested against a signed-in page captured once and
-committed redacted as `tests/ally_holdings.html` — one account state, one
-investment account, one holding, one deposit account. Reconciling a masked
-sidebar number like `...0847` against a full `3LD20847`, and everything that
-happens when there is more than one investment account, has never met a real
-page. Treat this section as what the code is written to do until a live run
-says otherwise.
+All of that has met a real page. The parse, the account rail, the reconciliation
+of a masked sidebar number like `...0847` against a full `3LD20847`, and the
+bank/brokerage split were each exercised on every one of those nine runs. But
+they were nine runs against **one account state** — one investment account, one
+holding, one deposit account — and `tests/ally_holdings.html`, the signed-in page
+captured once and committed redacted, is a redaction of that same state rather
+than a second one. So everything that happens when there is more than one
+investment account is still what the code is written to do rather than what it
+has been seen to do. `docs/live-verification.md` says which is which.
 
 ### SnapTrade
 
