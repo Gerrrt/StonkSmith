@@ -233,11 +233,26 @@ def header_bands(rows: list[Tag]) -> tuple[int, list[str]]:
     Grade" column, and whether those arrive as one row or two is a detail of the
     markup -- the one thing that is stable is that the columns are called what
     the pay tables have always called them.
+
+    The row carrying the *most* labels wins, not the first row carrying a
+    couple. Taking the first would let any row that happens to hold two band
+    strings -- a footnote, a nested caption, a "see Over 20" cross-reference --
+    stand in for the header, and the consequence is not a parse failure: every
+    rate is then matched against two columns instead of eleven, which reads as a
+    grade with almost no published pay rather than as a table read wrongly.
+    Preferring the maximum cannot be fooled while a real header is present, and
+    it needs no threshold tuned to how many columns DFAS currently splits
+    across -- which they have changed before and may change again.
+
+    Two labels remain the floor, so a table with one incidental "Over 20" in it
+    and no header at all is reported as headerless rather than parsed.
     :param rows: Every row in one table, in order
     :return: (index of the header row, the band labels it carries in order); the
-        index is -1 and the list empty when no row names any band
+        index is -1 and the list empty when no row names at least two bands
     :rtype: tuple[int, list[str]]
     """
+
+    best: tuple[int, list[str]] = (-1, [])
 
     for index, row in enumerate(iterable=rows):
         labels: list[str] = [
@@ -246,12 +261,10 @@ def header_bands(rows: list[Tag]) -> tuple[int, list[str]]:
             if (text := cell.get_text(strip=True)) in BAND_LABELS
         ]
 
-        # Two, so a stray cell reading "Over 20" in a footnote cannot pass for a
-        # header. No real table has fewer than eleven.
-        if len(labels) >= 2:
-            return index, labels
+        if len(labels) > len(best[1]):
+            best = (index, labels)
 
-    return -1, []
+    return best if len(best[1]) >= 2 else (-1, [])
 
 
 def basic_pay_table(html: str) -> dict[str, dict[str, float]]:

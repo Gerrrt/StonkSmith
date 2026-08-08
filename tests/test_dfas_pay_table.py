@@ -133,6 +133,32 @@ class PayTableTests(unittest.TestCase):
         self.assertEqual(basic_pay_table(html=denied), {})
         self.assertIsNone(effective_date(html=denied))
 
+    def test_a_stray_pair_of_band_words_does_not_pass_for_the_header(self) -> None:
+        # The header is the row carrying the most band labels, not the first
+        # row carrying a couple. Taking the first here would match every rate
+        # against two columns instead of three -- which reads as a grade with
+        # almost no published pay rather than as a table read wrongly.
+        page = """
+        <table>
+          <tr><td>See Over 20 and Over 22 below</td></tr>
+          <tr><th>Pay Grade</th><th>2 or less</th><th>Over 2</th><th>Over 3</th></tr>
+          <tr><td>E-5</td><td>$1.00</td><td>$2.00</td><td>$3.00</td></tr>
+        </table>
+        """
+
+        self.assertEqual(
+            basic_pay_table(html=page),
+            {"E-5": {"2 or less": 1.00, "Over 2": 2.00, "Over 3": 3.00}},
+        )
+
+    def test_a_lone_band_word_is_not_a_header_at_all(self) -> None:
+        page = (
+            "<table><tr><td>Over 20</td></tr>"
+            "<tr><td>E-5</td><td>$1.00</td></tr></table>"
+        )
+
+        self.assertEqual(basic_pay_table(html=page), {})
+
     def test_does_not_depend_on_the_leading_header_cells(self) -> None:
         # The two fixtures head their tables differently on purpose: a spanning
         # row above the labels in one, a single row in the other, and a missing
