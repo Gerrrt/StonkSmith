@@ -48,7 +48,8 @@ all the accounts you own.
 StonkSmith/
 |--- src/
 |    |--- main.py            # CLI entry point
-|    |--- etc/               # config, logging, connection, shells, paths
+|    |--- etc/               # config, logging, connection, shells, paths,
+|    |                       #   records, database, the canonical row shape
 |    |--- brokers/           # one package per broker (broker.py + helpers)
 |    |--- modules/           # per-broker scrape/sync modules
 |    |--- loaders/           # dynamic broker and module loading
@@ -410,6 +411,19 @@ config rather than replacing it. The config is the right home for a standing
 overlap — a run from cron has nobody to remember the flag. Every excluded
 account is reported, like every other skip.
 
+**This setting is permanent, not a workaround.** The reasonable-sounding hope is
+that a single reader over all the databases would make it unnecessary — that it
+could recognise the duplicate and drop one. It cannot, and the reason is
+structural rather than a missing feature. `account_key` is unique *within* one
+broker's database and means nothing outside it: the same Schwab-held 529 is
+`Schwab - Ezekiel 529 Plan` to SnapTrade and `Ezekiel` to the `schwab529plan`
+scraper. Different key, different external id, different display name, and
+nothing stored anywhere links the two. Any reader opening both files sees two
+unrelated accounts and would total them exactly as two tabs do.
+
+Which broker owns which account is a fact about **your** setup that no amount of
+scraped data contains. This config is where you state it, and it stays.
+
 For each account that survives, StonkSmith also reads its positions and its
 recent transactions. Both calls are per account, so both are bounded and both
 fail soft: `--history-days` (default 90) sets the transaction window,
@@ -576,7 +590,8 @@ account beside itself.
 
 Google Sheets is a view of this, not the other way round. Each tab is cleared
 and rewritten from what the database holds, so what you see there is what
-`stonksmithdb` reports.
+`stonksmithdb` reports. That has a consequence worth stating outright — see
+[The sheet is output](#the-sheet-is-output) below.
 
 **Upgrading an existing database.** Databases written before account history
 have a single `accounts` table of per-run rows with a text balance. Opening one
@@ -584,6 +599,86 @@ migrates it: the old table is renamed to `accounts_legacy_v1` and **kept**, and
 every row is replayed as a snapshot with its balance parsed into a number.
 Accounts keep the same identity they had, so existing history continues rather
 than starting over. It runs once and reports how many rows it moved.
+
+### The sheet is output
+
+**Broker tabs are machine-owned. Nothing hand-written ever lives on one.**
+
+Every saver calls `worksheet.clear()` before it writes. That is correct
+behaviour — the tab is a rendering of the database, and a stale row left behind
+would be a number that no longer has a source. But it means a note, an
+override, a formula or a column you added to a broker tab is gone at the next
+sync. Not flagged, not backed up, not recoverable: the sync had no idea it was
+there, so it reports success, because from its side nothing went wrong.
+
+This is written down rather than left as a convention because that is the worst
+shape a failure can take — silent, total, and indistinguishable from things
+working.
+
+So: the five broker tabs (`Fidelity`, `SnapTrade`, `TSP`, `Ally`, `529 Plan`)
+are output. They are allowed to stay ugly. Anything you want to keep — your own
+notes, targets, allocations, a chart, arithmetic of your own — goes on a tab
+StonkSmith never opens, and pulls what it needs across with a formula. A tab is
+only ever touched if some broker names it, so any tab you invent is safe.
+
+### What a tab may promise
+
+Those five tabs each grew their own layout, and nothing shared a column:
+`Balance` in one tab and `Value` in another named the same thing, while
+`Synced`, `Price date` and `Units as of` were three answers to one question. A
+formula pointing at `SnapTrade!D:D` broke the day a column moved.
+
+`src/etc/portfolio.py` settles that. It reads every broker database in the
+workspace and produces two row shapes, shared across all brokers:
+
+**Accounts** — one row per account. Summing `Value` gives the portfolio total.
+
+| # | Column | |
+| --- | --- | --- |
+| 1 | `Broker` | which StonkSmith broker produced it |
+| 2 | `Source` | the brokerage behind it, for an aggregator; the broker otherwise |
+| 3 | `Account` | the display name — free to change, and not identity |
+| 4 | `Account Key` | the stable identity. Key formulas on this |
+| 5 | `Kind` | `529`, `INVESTMENT`, `LOC`, whatever the source calls it |
+| 6 | `Beneficiary` | 529 plans have one; most accounts do not |
+| 7 | `Value` | |
+| 8 | `Currency` | |
+| 9 | `As Of` | the date **the source** says the value is for |
+| 10 | `Scraped At` | when the run happened |
+
+**Holdings** — one row per position behind each account's newest snapshot. The
+first four columns are the same, so the two join on `Broker` + `Account Key`.
+
+| # | Column | |
+| --- | --- | --- |
+| 1-4 | `Broker`, `Source`, `Account`, `Account Key` | as above |
+| 5 | `Symbol` | the ticker, or the fund code for sources without tickers |
+| 6 | `Name` | |
+| 7-10 | `Units`, `Price`, `Value`, `Cost Basis` | |
+| 11-12 | `Principal`, `Earnings` | 529 plans report growth separately |
+| 13-15 | `Currency`, `As Of`, `Scraped At` | |
+
+Three rules make that a contract rather than a list:
+
+- **Columns are append-only.** A new one goes on the end, never in the middle.
+  Everything reading these addresses a column by position, so inserting one
+  silently repoints every formula at its neighbour. A test pins both tuples
+  exactly, so that change fails in CI instead of in your spreadsheet.
+- **One name per meaning.** `Value` is what things are worth, everywhere.
+  `As Of` is the source's own date and `Scraped At` is when the run happened —
+  two different facts, and a source that never says the first is common.
+- **Money and quantities are numbers, not text.** No `"$1,234.56"` in a cell
+  you then cannot add up. Formatting is the cell's job. A value the source never
+  gave stays empty rather than becoming `0`, because an account that reported no
+  number is not an account worth nothing.
+
+**Two shapes rather than one flat table**, because an account's value and the
+sum of its positions are different numbers — uninvested cash sits in the balance
+and in no holding. One table doing both would understate every account holding
+cash while looking like it totalled correctly.
+
+Nothing writes these to the sheet yet; the shape is settled first, because
+formatting is cheap to redo and a column contract is not.
 
 ---
 

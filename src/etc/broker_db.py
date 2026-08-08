@@ -966,6 +966,65 @@ class BrokerDatabase:
             {"snapshot_id": snapshot_id, "limit": limit},
         )
 
+    def get_current_accounts(self) -> list[tuple[Any, ...]]:
+        """
+        Every account at its newest snapshot, carrying its identity.
+
+        The read path behind the canonical row shape (see etc.portfolio). It
+        exists beside get_latest_snapshots rather than replacing it because that
+        one is unpacked positionally by two modules and the shell, so its shape
+        is a published contract -- and it returns the display name only, which
+        is explicitly *not* identity (see records.AccountIdentity). A view that
+        joins across brokers needs the key.
+
+        Deliberately unlimited. Every other reader here takes a ``limit``
+        because it backs a shell command a human is scrolling; this one backs a
+        total, and a total that silently drops its five-hundred-and-first row is
+        worse than no total.
+        :return: Rows of (account_key, source, display_name, beneficiary, kind,
+            value, currency, as_of, scraped_at), one per account
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        return self._select(
+            "SELECT a.account_key, a.source, a.display_name, a.beneficiary, "
+            "a.kind, s.value, s.currency, s.as_of, s.scraped_at "
+            "FROM account_snapshots s JOIN accounts a ON a.id = s.account_id "
+            "WHERE s.id = ("
+            "  SELECT id FROM account_snapshots "
+            "  WHERE account_id = a.id ORDER BY scraped_at DESC, id DESC LIMIT 1"
+            ") ORDER BY a.source, a.display_name"
+        )
+
+    def get_current_holdings(self) -> list[tuple[Any, ...]]:
+        """
+        The positions behind every account's newest snapshot.
+
+        Keyed by ``account_key`` so a caller can join these to
+        get_current_accounts without going through the display name, and
+        carrying ``symbol`` and ``fund_code`` separately rather than coalesced,
+        because which one a source fills says something about the source.
+
+        One query for the whole database rather than one per account, and
+        unlimited for the same reason as get_current_accounts.
+        :return: Rows of (account_key, position, symbol, fund_code, name, units,
+            price, value, principal, earnings, cost_basis, currency, as_of,
+            scraped_at), in source order within each account
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        return self._select(
+            "SELECT a.account_key, h.position, h.symbol, h.fund_code, h.name, "
+            "h.units, h.price, h.value, h.principal, h.earnings, h.cost_basis, "
+            "h.currency, s.as_of, s.scraped_at FROM holdings h "
+            "JOIN account_snapshots s ON s.id = h.snapshot_id "
+            "JOIN accounts a ON a.id = s.account_id "
+            "WHERE s.id = ("
+            "  SELECT id FROM account_snapshots "
+            "  WHERE account_id = a.id ORDER BY scraped_at DESC, id DESC LIMIT 1"
+            ") ORDER BY a.source, a.display_name, h.position"
+        )
+
     def get_transactions(
         self, account_id: int | None = None, limit: int = 500
     ) -> list[tuple[Any, ...]]:

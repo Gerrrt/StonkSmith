@@ -19,6 +19,7 @@ __all__ = [
     "BrokerDbProtocol",
     "Context",
     "Holding",
+    "PortfolioDbProtocol",
     "SnapshotDbProtocol",
     "SnapshotReadDbProtocol",
     "Transaction",
@@ -100,6 +101,30 @@ class SnapshotReadDbProtocol(SnapshotDbProtocol, Protocol):
     def get_holdings(
         self, snapshot_id: int | None = None, limit: int = 500
     ) -> list[tuple[Any, ...]]: ...
+
+
+@runtime_checkable
+class PortfolioDbProtocol(Protocol):
+    """
+    A database that can describe its current state by account identity.
+
+    The interface etc.portfolio reads through. Unlike the three above, this one
+    does not extend the chain -- it stands alone, and deliberately. Those are
+    layered because a *module* holds one database and asks how much of the
+    contract it supports before deciding what to write. Nothing here writes. A
+    reader that demanded save_snapshot in order to answer a question about
+    balances would be asking for a capability it never uses, and would shut out
+    exactly the read-only consumers this exists to serve.
+
+    Also distinct from SnapshotReadDbProtocol, which asks what a *particular*
+    snapshot held so a module can reprice it. This asks what every account is
+    worth *now*, keyed on the identity that survives a display name changing --
+    which is what a view spanning several brokers has to join on.
+    """
+
+    def get_current_accounts(self) -> list[tuple[Any, ...]]: ...
+
+    def get_current_holdings(self) -> list[tuple[Any, ...]]: ...
 
 
 class Context:
