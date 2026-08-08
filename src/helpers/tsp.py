@@ -89,6 +89,19 @@ ACTIVITY_HEADING = "Activity Detail by Fund"
 #: storing rather than a default worth hardcoding.
 EMPLOYER_LABEL = "Employer"
 
+#: The activity table's first column on a real multi-fund statement: an
+#: account-wide total that is not a fund and carries no fund name.
+#:
+#:     Fund Name       All Funds Total  L 2050  L 2060
+#:     Closing Balance $7,810.84        $0.00   $7,810.84
+#:
+#: Three numbers, two fund names. Read positionally that puts the account total
+#: against the first fund and drops the last fund entirely -- which on the
+#: statement above reports the emptied fund as holding everything and the fund
+#: actually held as holding nothing, an exact inversion that looks like an
+#: ordinary row. Neither test fixture had this column, which is why it shipped.
+AGGREGATE_LABEL = "All Funds Total"
+
 
 def to_number(text: str) -> float | None:
     """
@@ -224,6 +237,35 @@ def activity_detail(text: str) -> str:
     return text if index < 0 else text[index:]
 
 
+def fund_name_row(text: str) -> str:
+    """
+    The activity table's column header, with its label stripped off.
+
+    Everything read per fund is read positionally against this row, so it is
+    the one place that knows how many columns there are and what each is. The
+    first row naming a fund wins: a statement carries other "Fund Name" rows --
+    the allocation summary has one -- and activity_detail() already excludes
+    the ones above the table.
+    :param text: Extracted statement text
+    :return: The header after "Fund Name", e.g. " All Funds Total L 2050
+        L 2060", or "" when the table has no such row
+    :rtype: str
+    """
+
+    for line in activity_detail(text=text).splitlines():
+        stripped: str = line.strip()
+
+        if not stripped.startswith(FUND_NAME_LABEL):
+            continue
+
+        rest: str = stripped[len(FUND_NAME_LABEL) :]
+
+        if any(fund in rest for fund in TSP_FUNDS):
+            return rest
+
+    return ""
+
+
 def statement_funds(text: str) -> list[str]:
     """
     Which funds the statement's per-fund activity table covers.
@@ -236,21 +278,38 @@ def statement_funds(text: str) -> list[str]:
     :rtype: list[str]
     """
 
-    for line in activity_detail(text=text).splitlines():
-        stripped: str = line.strip()
+    rest: str = fund_name_row(text=text)
+    found: list[tuple[int, str]] = [
+        (rest.index(fund), fund) for fund in TSP_FUNDS if fund in rest
+    ]
 
-        if not stripped.startswith(FUND_NAME_LABEL):
-            continue
+    return [fund for _position, fund in sorted(found)]
 
-        rest: str = stripped[len(FUND_NAME_LABEL) :]
-        found: list[tuple[int, str]] = [
-            (rest.index(fund), fund) for fund in TSP_FUNDS if fund in rest
-        ]
 
-        if found:
-            return [fund for _position, fund in sorted(found)]
+def leading_columns(text: str) -> int:
+    """
+    How many columns of the activity table come before the first fund.
 
-    return []
+    One on a real multi-fund statement, which leads with an account-wide "All
+    Funds Total"; none on a single-fund one. It matters because every value row
+    carries a figure for that column too, so a row is one longer than the fund
+    list and reading it from the left assigns the account total to the first
+    fund -- see AGGREGATE_LABEL for what that does.
+
+    Counted from the header rather than inferred from a row's length, so a row
+    that is long for some other reason is not silently re-aligned.
+    :param text: Extracted statement text
+    :return: 0 or 1
+    :rtype: int
+    """
+
+    rest: str = fund_name_row(text=text)
+    positions: list[int] = [rest.index(fund) for fund in TSP_FUNDS if fund in rest]
+
+    if not positions:
+        return 0
+
+    return 1 if AGGREGATE_LABEL in rest[: min(positions)] else 0
 
 
 def fund_values(text: str, label: str, count: int) -> list[float]:
@@ -264,13 +323,25 @@ def fund_values(text: str, label: str, count: int) -> list[float]:
 
     Scoped to the activity table, never the account summary above it -- see
     activity_detail(), which exists because both use these same labels.
+
+    A row carrying the account-wide total as well as the funds is trimmed from
+    the left, not the right. Taking the first `count` values off such a row
+    reads the total as the first fund's figure and drops the last fund; see
+    AGGREGATE_LABEL, where doing so inverts a two-fund statement exactly.
+
+    A row that matches neither length is returned as-is and short. It cannot be
+    aligned -- a lone figure on a two-fund table belongs to whichever fund the
+    statement had something to say about, and position does not say which --
+    so the caller is handed the ambiguity rather than a guess at it.
     :param text: Extracted statement text
     :param label: The row label, e.g. "Closing Units"
     :param count: How many funds the table covers
-    :return: One value per fund, in fund order; possibly fewer if the row is
-        malformed
+    :return: One value per fund, in fund order, when the row aligns; otherwise
+        the row as printed
     :rtype: list[float]
     """
+
+    offset: int = leading_columns(text=text)
 
     for line in activity_detail(text=text).splitlines():
         stripped: str = line.strip()
@@ -285,10 +356,57 @@ def fund_values(text: str, label: str, count: int) -> list[float]:
             if (value := to_number(text=token)) is not None
         ]
 
-        if values:
-            return values[:count]
+        if not values:
+            continue
+
+        if len(values) == count + offset:
+            return values[offset:]
+
+        return values[:count]
 
     return []
+
+
+def sole_position(text: str) -> tuple[str, float] | None:
+    """
+    The one fund still holding money at the close, when there is exactly one.
+
+    A statement spanning an interfund transfer covers both funds: the one moved
+    out of, closing at $0.00, and the one moved into, closing at everything.
+    The per-fund rows below the balances then have nothing to say about the
+    emptied fund and print a single figure -- one number under a two-fund
+    header, belonging to a fund that position alone cannot name.
+
+    Closing balances can name it. They are printed per fund and one of them is
+    zero, so "which fund does the lone unit count belong to" has an answer on
+    the page rather than needing a guess.
+
+    Refuses whenever the answer is not unique -- no funds with a balance, or
+    more than one -- because then the lone figure genuinely is ambiguous and a
+    unit count attached to the wrong fund is priced with the wrong fund's
+    price, which is the whole failure this exists to stop.
+    :param text: Extracted statement text
+    :return: (fund, its closing balance), or None when it is not unique
+    :rtype: tuple[str, float] | None
+    """
+
+    funds: list[str] = statement_funds(text=text)
+    balances: list[float] = fund_values(
+        text=text, label=CLOSING_BALANCE_LABEL, count=len(funds)
+    )
+
+    # Only a fully aligned balance row can name anything. A short one is the
+    # same ambiguity one level down.
+    if not funds or len(balances) != len(funds):
+        return None
+
+    held: list[tuple[str, float]] = [
+        (fund, balance)
+        for fund, balance in zip(funds, balances, strict=True)
+        if balance
+    ]
+
+    return held[0] if len(held) == 1 else None
 
 
 def employer_total(text: str) -> float | None:

@@ -359,7 +359,15 @@ class UnitSourceTests(unittest.TestCase):
         self.assertEqual(
             module.units_for(context=context), (7.0, "2026-06-30", FROM_FLAG)
         )
-        self.assertIn("Could not read a unit count", _said(context.log.fail))
+        # Names both reasons a statement yields no unit count: unreadable, or
+        # read fine but covering two live funds with nothing saying which the
+        # closing units belong to. From here they are indistinguishable, and
+        # claiming the first sends a run to check a file that is not the
+        # problem.
+        said = _said(context.log.fail)
+        self.assertIn("Could not take a unit count", said)
+        self.assertIn("not a TSP statement", said)
+        self.assertIn("more than one fund", said)
 
 
 class StalenessReportTests(unittest.TestCase):
