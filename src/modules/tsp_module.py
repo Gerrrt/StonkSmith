@@ -17,9 +17,11 @@ from helpers.normalize import format_amount, format_units
 from helpers.sheets import SheetsUnavailable
 from helpers.tsp import (
     CLOSING_UNITS_LABEL,
+    UNIT_PRICE_LABEL,
     fund_values,
     price_on,
     same_fund,
+    sole_position,
     statement_funds,
     statement_period,
 )
@@ -38,6 +40,12 @@ FROM_CONFIG = "config"
 #: Beyond this the unit count has almost certainly missed a contribution, since
 #: TSP posts monthly for uniformed members and no less often for civilians.
 UNITS_STALE_DAYS = 40
+
+#: The smallest unit count a statement can print. Everything below the third
+#: decimal is rounded away before the page is typeset, so a printed count stands
+#: for a real one up to half a step either side -- which is what a check against
+#: the printed balance has to allow for.
+UNIT_PRINT_STEP = 0.001
 
 #: How far a balance's date may run ahead of the newest price available to
 #: convert it. A long weekend plus a federal holiday is the widest ordinary gap
@@ -111,20 +119,55 @@ def read_statement(path: str) -> tuple[float | None, str, dt.date | None]:
         # the caller, not a traceback. Missing pypdf lands here too.
         return None, "", None
 
+    # Read before anything can return, because the period is a property of the
+    # statement rather than of its fund table. Reading it later meant every path
+    # that gave up before reaching it reported no period -- not because the
+    # statement stated none, but because nobody had looked yet.
+    period = statement_period(text=text)
+    ends: dt.date | None = period[1] if period else None
+
     funds: list[str] = statement_funds(text=text)
 
     if not funds:
-        return None, "", None
+        return None, "", ends
 
     units: list[float] = fund_values(
         text=text, label=CLOSING_UNITS_LABEL, count=len(funds)
     )
-    period = statement_period(text=text)
 
     if not units:
-        return None, funds[0], None
+        return None, funds[0], ends
 
-    return units[0], funds[0], (period[1] if period else None)
+    # The rows line up, so position names the fund the way it always has.
+    if len(units) == len(funds):
+        return units[0], funds[0], ends
+
+    # They do not, which on a real statement means one fund was emptied into
+    # another during the period and the rows below the balances have nothing to
+    # say about the empty one. Taking units[0] with funds[0] here paired the
+    # remaining fund's unit count with the abandoned fund's name -- the units
+    # were right and only the label was wrong, so the mark it produced was
+    # nearly correct and the refusal it triggered pointed at the wrong fix.
+    held = sole_position(text=text)
+
+    if held is None or len(units) != 1:
+        return None, "", ends
+
+    fund, closing = held
+    prices: list[float] = fund_values(
+        text=text, label=UNIT_PRICE_LABEL, count=len(funds)
+    )
+
+    # Confirmed against the statement's own arithmetic rather than assumed. If
+    # the lone unit count and the lone price multiply out to the balance of the
+    # fund the balances named, then all three describe the same position and
+    # nothing has been inferred.
+    if len(prices) != 1 or not statement_reconciles(
+        text_units=units[0], price=prices[0], closing=closing
+    ):
+        return None, "", ends
+
+    return units[0], fund, ends
 
 
 def units_from_balance(
@@ -176,16 +219,30 @@ def statement_reconciles(text_units: float, price: float, closing: float) -> boo
     parser read a row it should not have -- which is a different problem from a
     file that simply would not open, and is worth telling apart.
 
+    The tolerance comes from what the statement prints, not from a round number.
+    Units are printed to three decimals, so the count on the page stands for
+    anything within half a thousandth of the real one, and at $24.73 a unit that
+    is already more than a cent of balance. A real statement reading 315.789
+    units at $24.734400 against $7,810.84 misses by 1.1 cents -- the arithmetic
+    is right and a cent of tolerance would have called it broken. The fixtures
+    never showed this because their figures are round: 100.000 x 20.000000 is
+    exactly 2000.00 and reconciles under any tolerance at all.
+
     Args:
         text_units (float): Closing units as parsed.
         price (float): Unit price as parsed.
         closing (float): Closing balance as parsed.
 
     Returns:
-        bool: True when the three agree to the cent.
+        bool: True when the three agree as closely as the printing allows.
 
     """
-    return abs(text_units * price - closing) < 0.01
+    # Half a printed unit either way, plus the half-cent the balance is itself
+    # rounded to. Not a tolerance on how wrong the numbers may be -- a tolerance
+    # on how much the page rounded them before printing.
+    allowed: float = UNIT_PRINT_STEP / 2 * abs(price) + 0.005
+
+    return abs(text_units * price - closing) <= allowed
 
 
 class TspModule:
@@ -273,10 +330,18 @@ class TspModule:
                 return None, "", FROM_STATEMENT
 
             if units is None:
+                # Both reasons, because the caller cannot tell them apart from
+                # here and naming only the first sends a run to check a file
+                # that is perfectly fine. That is the mistake #75 was about: an
+                # otherwise true message that offers the wrong next step costs
+                # a round trip to find out it was the wrong one.
                 context.log.fail(
                     msg=(
-                        f"Could not read a unit count from {self.statement}. "
-                        "Expected a TSP quarterly statement (PDF or text)."
+                        f"Could not take a unit count from {self.statement}. "
+                        "Either it is not a TSP statement, or its activity "
+                        "table covers more than one fund still holding money "
+                        "and does not say which fund the closing units belong "
+                        "to."
                     )
                 )
             else:

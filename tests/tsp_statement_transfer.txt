@@ -1,0 +1,37 @@
+Annual Account Statement
+Thrift Savings Plan (Uniformed Services)
+Account Summary 07-01-2024 to 06-30-2026
+Opening Balance $6,100.00
+Deposits/Adjustments 1 $900.00
+Withdrawals $0.00
+Transaction Fees/Expenses $0.00
+Gains/Losses $810.84
+Closing Balance $7,810.84
+Vested Balance $7,810.84
+Contributions and Earnings
+You
+$7,810.84 100%
+Employer
+$0.00 0%
+Total
+$7,810.84 100%
+Statement Date: July 8, 2026
+EXAMPLE MEMBER
+1 EXAMPLE ST
+EXAMPLETOWN XX  00000
+Your Balances As of 06-30-2026
+Total $7,810.84 100%
+Your Investment Summary
+Fund Allocation as of 06-30-2026
+Fund Name Current Allocation Future Investments All
+L 2060 100% 100%
+Activity Detail by Fund
+07-01-2024 to 06-30-2026 Asset Class
+Lifecycle Lifecycle
+Fund Name All Funds Total L 2050 L 2060
+Opening Balance $6,100.00 $6,100.00 $0.00
+Contributions $900.00 $0.00 $900.00
+Gains/Losses $810.84 $0.00 $810.84
+Closing Balance $7,810.84 $0.00 $7,810.84
+Closing Units 315.789
+Unit Price (NAV) 24.734400
