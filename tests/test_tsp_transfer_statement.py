@@ -108,6 +108,75 @@ class AggregateColumn(unittest.TestCase):
         self.assertEqual(len(balances), len(funds))
 
 
+class UnalignedRow(_EditedStatement):
+    """A row matching neither shape is handed over whole, not trimmed.
+
+    Trimming to the first `count` values would be this PR's own bug pointed the
+    other way: the transfer statement's extra column is on the *left*, so
+    taking the leftmost values is precisely what read it backwards. An
+    over-long row means the table is not the shape the header describes, and
+    there is nothing on the page saying which end the extras belong to.
+    """
+
+    #: A percentage after the balances. AMOUNT matches bare numbers, so "100%"
+    #: parses as a fourth figure on a three-column row.
+    LONG = "Closing Balance $7,810.84 $0.00 $7,810.84 100%"
+
+    def test_the_extra_value_is_not_trimmed_away(self) -> None:
+        text = _text(TRANSFER).replace(
+            "Closing Balance $7,810.84 $0.00 $7,810.84", self.LONG
+        )
+
+        values = fund_values(text=text, label=CLOSING_BALANCE_LABEL, count=2)
+
+        self.assertEqual(values, [7810.84, 0.0, 7810.84, 100.0])
+
+    def test_and_the_fund_it_would_have_named_is_refused(self) -> None:
+        text = _text(TRANSFER).replace(
+            "Closing Balance $7,810.84 $0.00 $7,810.84", self.LONG
+        )
+
+        self.assertIsNone(sole_position(text=text))
+
+    def test_so_the_statement_yields_no_units(self) -> None:
+        text = _text(TRANSFER).replace(
+            "Closing Balance $7,810.84 $0.00 $7,810.84", self.LONG
+        )
+
+        units, fund, _period = read_statement(path=self.written(text=text))
+
+        self.assertIsNone(units)
+        self.assertEqual(fund, "")
+
+
+class PeriodSurvives(_EditedStatement):
+    """The period is a property of the statement, not of its fund table.
+
+    It used to be read after the fund checks, so every path that gave up before
+    reaching them reported no period -- not because the statement stated none,
+    but because nobody had looked yet.
+    """
+
+    def test_a_statement_with_no_activity_table_still_dates_itself(self) -> None:
+        text = "Account Summary 04-01-2026 to 06-30-2026\n"
+
+        _units, _fund, period = read_statement(path=self.written(text=text))
+
+        self.assertEqual(str(object=period), "2026-06-30")
+
+    def test_and_so_does_one_whose_unit_row_is_missing(self) -> None:
+        text = _text(TRANSFER).replace("Closing Units 315.789", "")
+
+        _units, _fund, period = read_statement(path=self.written(text=text))
+
+        self.assertEqual(str(object=period), "2026-06-30")
+
+    def test_a_file_that_would_not_open_dates_nothing(self) -> None:
+        # Nothing was read, so there is nothing to have found. Distinct from
+        # having looked and found no period.
+        self.assertEqual(read_statement(path="/nonexistent.pdf"), (None, "", None))
+
+
 class SolePosition(unittest.TestCase):
     """Naming the fund a short row belongs to, from the balances."""
 

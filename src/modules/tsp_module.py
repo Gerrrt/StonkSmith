@@ -119,19 +119,24 @@ def read_statement(path: str) -> tuple[float | None, str, dt.date | None]:
         # the caller, not a traceback. Missing pypdf lands here too.
         return None, "", None
 
+    # Read before anything can return, because the period is a property of the
+    # statement rather than of its fund table. Reading it later meant every path
+    # that gave up before reaching it reported no period -- not because the
+    # statement stated none, but because nobody had looked yet.
+    period = statement_period(text=text)
+    ends: dt.date | None = period[1] if period else None
+
     funds: list[str] = statement_funds(text=text)
 
     if not funds:
-        return None, "", None
+        return None, "", ends
 
     units: list[float] = fund_values(
         text=text, label=CLOSING_UNITS_LABEL, count=len(funds)
     )
-    period = statement_period(text=text)
-    ends: dt.date | None = period[1] if period else None
 
     if not units:
-        return None, funds[0], None
+        return None, funds[0], ends
 
     # The rows line up, so position names the fund the way it always has.
     if len(units) == len(funds):

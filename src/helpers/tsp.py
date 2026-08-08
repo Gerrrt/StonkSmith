@@ -329,10 +329,16 @@ def fund_values(text: str, label: str, count: int) -> list[float]:
     reads the total as the first fund's figure and drops the last fund; see
     AGGREGATE_LABEL, where doing so inverts a two-fund statement exactly.
 
-    A row that matches neither length is returned as-is and short. It cannot be
-    aligned -- a lone figure on a two-fund table belongs to whichever fund the
-    statement had something to say about, and position does not say which --
-    so the caller is handed the ambiguity rather than a guess at it.
+    A row matching neither length is returned exactly as printed, long or
+    short, and the caller is handed the ambiguity rather than a guess at it. It
+    cannot be aligned: a lone figure on a two-fund table belongs to whichever
+    fund the statement had something to say about, and position does not say
+    which.
+
+    Trimming an over-long row to the first `count` values would be the same
+    unjustified assumption this function exists to avoid, pointed the other
+    way. The transfer statement's extra column was on the *left*; taking the
+    leftmost values is exactly what read it backwards.
     :param text: Extracted statement text
     :param label: The row label, e.g. "Closing Units"
     :param count: How many funds the table covers
@@ -362,7 +368,7 @@ def fund_values(text: str, label: str, count: int) -> list[float]:
         if len(values) == count + offset:
             return values[offset:]
 
-        return values[:count]
+        return values
 
     return []
 
