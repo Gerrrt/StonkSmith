@@ -86,6 +86,11 @@ HOLDING_COLUMNS: tuple[str, ...] = (
     "Currency",
     "As Of",
     "Scraped At",
+    #: Appended, not slotted in beside "As Of", and not a replacement for it.
+    #: A position's value is as of one date and its quantity can be as of an
+    #: older one -- TSP's price is today's while its units are as old as the
+    #: last statement. Two facts, so two columns.
+    "Units As Of",
 )
 
 
@@ -216,6 +221,10 @@ class HoldingRow:
     as_of: str | None = None
     scraped_at: str = ""
 
+    #: The date the unit count was true, where the source dates a quantity apart
+    #: from its value. ``as_of`` above stays the value's date.
+    units_as_of: str | None = None
+
     def cells(self) -> list[Any]:
         """
         This row in HOLDING_COLUMNS order.
@@ -239,6 +248,7 @@ class HoldingRow:
             self.currency,
             _cell(self.as_of),
             _cell(self.scraped_at),
+            _cell(self.units_as_of),
         ]
 
 
@@ -351,6 +361,7 @@ def read_broker(
         currency,
         as_of,
         scraped_at,
+        units_as_of,
     ) in db.get_current_holdings():
         parent: AccountRow | None = by_key.get(account_key)
 
@@ -376,8 +387,12 @@ def read_broker(
                 principal=principal,
                 earnings=earnings,
                 currency=currency or "USD",
+                # The snapshot's date, still: what the position is worth is as of
+                # when its value was struck. The quantity's own date rides
+                # separately, because for TSP they are weeks apart.
                 as_of=as_of,
                 scraped_at=scraped_at or "",
+                units_as_of=units_as_of,
             )
         )
 

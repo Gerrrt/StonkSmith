@@ -89,6 +89,12 @@ class Holding:
     #: The value exactly as the source wrote it, before parsing.
     raw_value: str | None = None
 
+    #: The date the unit count was true, ISO, where the source dates a quantity
+    #: separately from its value. TSP is the only one that does: its price is
+    #: today's and its units are as old as the last statement, so a mark that
+    #: carried one date could not say which. None when the source never said.
+    units_as_of: str | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class Transaction:

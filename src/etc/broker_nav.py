@@ -41,6 +41,7 @@ CATEGORY_HEADERS: dict[str, tuple[str, ...]] = {
         "Earnings",
         "Cost Basis",
         "Currency",
+        "Units As Of",
     ),
     "transactions": (
         "ID",

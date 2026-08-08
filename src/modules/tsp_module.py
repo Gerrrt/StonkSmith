@@ -539,7 +539,7 @@ class TspModule:
         price_date, price = found
         value: float = units * price
 
-        self.report(context=context, as_of=as_of, source=source, today=today)
+        self.report(context=context, units_as_of=as_of, source=source, today=today)
         context.log.success(
             msg=(
                 f"{fund}: {format_units(units)} units x ${price:,.4f} "
@@ -554,7 +554,7 @@ class TspModule:
             price=price,
             value=value,
             price_date=price_date,
-            as_of=as_of,
+            units_as_of=as_of,
         )
         sheets_ok: bool = sync(context=context)
 
@@ -568,7 +568,7 @@ class TspModule:
         return db_ok
 
     @staticmethod
-    def report(context: Context, as_of: str, source: str, today: dt.date) -> None:
+    def report(context: Context, units_as_of: str, source: str, today: dt.date) -> None:
         """Say how old the unit count is before reporting a value from it.
 
         The whole point of the broker. A mark carried on a three-month-old unit
@@ -578,12 +578,12 @@ class TspModule:
 
         Args:
             context (Context): Used for logging.
-            as_of (str): The date the unit count was true, as written.
+            units_as_of (str): The date the unit count was true, as written.
             source (str): Which input supplied it.
             today (dt.date): The run date.
 
         """
-        if not as_of:
+        if not units_as_of:
             context.log.highlight(
                 msg=(
                     f"Unit count came from {source} with no as-of date, so how "
@@ -593,25 +593,27 @@ class TspModule:
             return
 
         try:
-            age: int = (today - dt.date.fromisoformat(as_of)).days
+            age: int = (today - dt.date.fromisoformat(units_as_of)).days
 
         except ValueError:
             context.log.highlight(
-                msg=f"Unreadable units_as_of {as_of!r}; expected YYYY-MM-DD."
+                msg=f"Unreadable units_as_of {units_as_of!r}; expected YYYY-MM-DD."
             )
             return
 
         if age > UNITS_STALE_DAYS:
             context.log.highlight(
                 msg=(
-                    f"Unit count is from {as_of} ({age} days). TSP posts "
+                    f"Unit count is from {units_as_of} ({age} days). TSP posts "
                     "contributions at least monthly, so this mark is probably "
                     "short by one or more of them. Import a newer statement "
                     "with -o STATEMENT=<path> to reset it."
                 )
             )
         else:
-            context.log.display(msg=f"Unit count from {source}, true as of {as_of}.")
+            context.log.display(
+                msg=f"Unit count from {source}, true as of {units_as_of}."
+            )
 
     @staticmethod
     def save(
@@ -621,14 +623,19 @@ class TspModule:
         price: float,
         value: float,
         price_date: dt.date,
-        as_of: str,
+        units_as_of: str,
     ) -> bool:
         """Write the mark to the broker database.
 
-        ``scraped_at`` is when the run happened; ``as_of`` is the price date the
-        value is true for. They differ whenever the run lands on a weekend or
-        before the day's price publishes, and collapsing them would date a
-        Friday price as Sunday's.
+        Three dates, and none of them is the same fact. ``scraped_at`` is when
+        the run happened. The snapshot's ``as_of`` is the price date the value is
+        true for -- they differ whenever the run lands on a weekend or before the
+        day's price publishes, and collapsing them would date a Friday price as
+        Sunday's. The holding's ``units_as_of`` is when the unit count was true,
+        which is a statement old and moves only on a contribution.
+
+        The last of those used to be called ``as_of`` here while the line below
+        wrote the *price* date to the column of that name, eleven lines apart.
 
         Args:
             context (Context): Logging and the database.
@@ -637,7 +644,7 @@ class TspModule:
             price (float): Share price used.
             value (float): The resulting mark.
             price_date (dt.date): The date that price was published.
-            as_of (str): The date the unit count was true.
+            units_as_of (str): The date the unit count was true.
 
         Returns:
             bool: False on a database contract violation.
@@ -667,9 +674,11 @@ class TspModule:
                         price=price,
                         value=value,
                         currency="USD",
-                        # The unit count's own date, kept beside the position
-                        # so a stored mark stays self-describing.
-                        raw_value=as_of or None,
+                        # Its own column now. This used to ride in raw_value,
+                        # which means "the value exactly as the source wrote it"
+                        # for every other broker -- and which nothing ever read
+                        # back, so the date was stored and invisible.
+                        units_as_of=units_as_of or None,
                     )
                 ],
             )
