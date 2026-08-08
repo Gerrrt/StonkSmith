@@ -51,7 +51,7 @@ from sqlalchemy.orm import Session, scoped_session, sessionmaker
 from etc.logger import stonksmith_logger
 from etc.records import AccountIdentity, Holding, Transaction
 from etc.secrets import delete_secret, get_secret, keyring_key, set_secret
-from helpers.normalize import format_amount, to_amount, to_currency
+from helpers.normalize import format_amount, to_amount, to_currency, to_iso_date
 
 #: Where a legacy ``accounts`` table is moved so its rows survive the migration.
 #: Never dropped: if the replay misreads a balance format, this is the only copy
@@ -165,6 +165,13 @@ class BrokerDatabase:
             Column("cost_basis", _MONEY),
             Column("currency", String, nullable=False, server_default="USD"),
             Column("raw_value", String),
+            # The date the unit count was true, which is not the date the value
+            # was struck. A TSP mark is units times a price and the two are as of
+            # different days -- the price is today's, the units are as old as the
+            # last statement -- so a stored mark carrying only one of them cannot
+            # be audited later. Nullable: no other source dates a quantity
+            # separately from its value, and most never will.
+            Column("units_as_of", String),
             UniqueConstraint(
                 "snapshot_id", "position", name="uq_holding_snapshot_position"
             ),
@@ -206,6 +213,10 @@ class BrokerDatabase:
         renamed: bool = self.migrate_legacy_accounts()
         self.metadata.create_all(bind=self.db_engine)
         self.backfill_legacy_accounts(force=renamed)
+        # After create_all, not before: on a fresh database there is no holdings
+        # table to alter yet, and afterwards its guard finds the column already
+        # there and does nothing.
+        self.migrate_holding_dates()
         self.migrate_plaintext_secrets()
 
         session_factory: sessionmaker[Session] = sessionmaker(
@@ -389,6 +400,97 @@ class BrokerDatabase:
 
         return len(payload)
 
+    def migrate_holding_dates(self) -> int:
+        """
+        Give an existing ``holdings`` table its units_as_of column, and fill it.
+
+        create_all leaves an existing table alone -- it never emits ALTER -- so a
+        database written before this column existed does not grow one by being
+        opened. It has to be added here, and it has to be added: save_snapshot
+        names every column unconditionally, so without this the first write
+        against an older file fails outright.
+
+        The backfill moves TSP's unit dates out of ``raw_value``, where they were
+        kept before there was anywhere better. Two gates, because ``raw_value``
+        means "the value exactly as the source wrote it" for every other broker
+        and a money string must never be mistaken for a date: the database has to
+        be TSP's, and the text has to actually read as a date. ``$1,234.56`` does
+        not, and neither does an empty one.
+
+        Nothing is cleared. ``raw_value`` keeps whatever it held, the same way
+        migrate_legacy_accounts renames the old table rather than dropping it: a
+        migration that has to guess is a migration that should not also destroy
+        the thing it guessed from.
+
+        The column and the backfill go in together, in one transaction. Split
+        across two, a crash in between would leave the column added and the dates
+        unmoved -- and the column's own presence is what stops this running
+        again, so that state would never be revisited. SQLite takes DDL inside a
+        transaction, so the two either both land or neither does and the next
+        open tries again.
+
+        _write() before ``self.sess`` exists is deliberate and safe: it builds
+        its own connection off the engine and never touches the session, which
+        __init__ creates after every migration has run.
+        :return: The number of dates moved
+        :rtype: int
+        """
+
+        with self._write() as conn:
+            columns: set[str] = self._table_columns(conn=conn, table="holdings")
+
+            if not columns:
+                # No holdings table to alter. Hands off.
+                return 0
+
+            if "units_as_of" in columns:
+                # Fresh from create_all, or already migrated.
+                return 0
+
+            conn.execute(text("ALTER TABLE holdings ADD COLUMN units_as_of TEXT"))
+
+            if self.broker != "tsp":
+                return 0
+
+            stranded: Sequence[Any] = conn.execute(
+                text(
+                    "SELECT id, raw_value FROM holdings "
+                    "WHERE raw_value IS NOT NULL AND raw_value != ''"
+                )
+            ).fetchall()
+
+            # to_iso_date rather than a strict fromisoformat, because it is what
+            # every other as-of in the project is read through and it normalises
+            # a date TSP stored the way a user typed it. Its leniency is not a
+            # risk here: it returns None for "$1,234.56", "--" and "50", which
+            # is what raw_value holds for every broker that is not this one.
+            moved: list[dict[str, Any]] = [
+                {"holding_id": holding_id, "when": dated}
+                for holding_id, raw in stranded
+                if (dated := to_iso_date(raw))
+            ]
+
+            if not moved:
+                return 0
+
+            conn.execute(
+                text("UPDATE holdings SET units_as_of = :when WHERE id = :holding_id"),
+                moved,
+            )
+
+        # Said out loud rather than returned into silence, the way the legacy
+        # backfill reports. A date that moves between columns without anyone
+        # being told is indistinguishable from one that was invented. Silent when
+        # nothing moved: an empty column is not news.
+        stonksmith_logger.success(
+            msg=(
+                f"Moved {len(moved)} unit date(s) for {self.broker} out of "
+                "raw_value into units_as_of. The original text is kept."
+            )
+        )
+
+        return len(moved)
+
     def migrate_plaintext_secrets(self) -> int:
         """
         Move any legacy plaintext passwords into the OS keyring.
@@ -402,9 +504,7 @@ class BrokerDatabase:
         migrated = 0
 
         with self.db_engine.connect() as conn:
-            columns: set[str] = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(credentials)"))
-            }
+            columns: set[str] = self._table_columns(conn=conn, table="credentials")
 
             if "password" not in columns:
                 return 0
@@ -687,6 +787,7 @@ class BrokerDatabase:
                             "cost_basis": holding.cost_basis,
                             "currency": holding.currency or "USD",
                             "raw_value": holding.raw_value,
+                            "units_as_of": holding.units_as_of,
                         }
                         for index, holding in enumerate(holdings)
                     ],
@@ -943,7 +1044,7 @@ class BrokerDatabase:
         :param snapshot_id: Restrict to one snapshot
         :param limit: How many rows at most
         :return: Rows of (account, symbol_or_fund, name, units, price, value,
-            principal, earnings, cost_basis, currency)
+            principal, earnings, cost_basis, currency, units_as_of)
         :rtype: list[tuple[Any, ...]]
         """
 
@@ -959,7 +1060,7 @@ class BrokerDatabase:
         return self._select(
             "SELECT a.display_name, COALESCE(h.symbol, h.fund_code), h.name, "
             "h.units, h.price, h.value, h.principal, h.earnings, h.cost_basis, "
-            "h.currency FROM holdings h "
+            "h.currency, h.units_as_of FROM holdings h "
             "JOIN account_snapshots s ON s.id = h.snapshot_id "
             f"JOIN accounts a ON a.id = s.account_id {where} "
             "ORDER BY a.display_name, h.position LIMIT :limit",
@@ -1009,14 +1110,14 @@ class BrokerDatabase:
         unlimited for the same reason as get_current_accounts.
         :return: Rows of (account_key, position, symbol, fund_code, name, units,
             price, value, principal, earnings, cost_basis, currency, as_of,
-            scraped_at), in source order within each account
+            scraped_at, units_as_of), in source order within each account
         :rtype: list[tuple[Any, ...]]
         """
 
         return self._select(
             "SELECT a.account_key, h.position, h.symbol, h.fund_code, h.name, "
             "h.units, h.price, h.value, h.principal, h.earnings, h.cost_basis, "
-            "h.currency, s.as_of, s.scraped_at FROM holdings h "
+            "h.currency, s.as_of, s.scraped_at, h.units_as_of FROM holdings h "
             "JOIN account_snapshots s ON s.id = h.snapshot_id "
             "JOIN accounts a ON a.id = s.account_id "
             "WHERE s.id = ("

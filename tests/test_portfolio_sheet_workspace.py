@@ -105,7 +105,7 @@ class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
             [row.cells() for row in expected.accounts],
         )
         self.assertEqual(
-            book.rows_written(tab=HOLDINGS_TAB, width="O"),
+            book.rows_written(tab=HOLDINGS_TAB, width="P"),
             [row.cells() for row in expected.holdings],
         )
         self.assertEqual(result.accounts, 2)
@@ -204,7 +204,7 @@ class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
         headers = [
             call.args[0][0]
             for call in book.tabs[HOLDINGS_TAB].update.call_args_list
-            if call.args[1] == "A2:O2"
+            if call.args[1] == "A2:P2"
         ]
         self.assertEqual(headers, [list(HOLDING_COLUMNS)])
 

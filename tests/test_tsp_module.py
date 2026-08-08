@@ -377,7 +377,9 @@ class StalenessReportTests(unittest.TestCase):
         context = _context()
         old = (TODAY - dt.timedelta(days=UNITS_STALE_DAYS + 30)).isoformat()
 
-        TspModule.report(context=context, as_of=old, source=FROM_CONFIG, today=TODAY)
+        TspModule.report(
+            context=context, units_as_of=old, source=FROM_CONFIG, today=TODAY
+        )
 
         said = _said(context.log.highlight)
         self.assertIn(old, said)
@@ -388,7 +390,7 @@ class StalenessReportTests(unittest.TestCase):
         recent = (TODAY - dt.timedelta(days=3)).isoformat()
 
         TspModule.report(
-            context=context, as_of=recent, source=FROM_STATEMENT, today=TODAY
+            context=context, units_as_of=recent, source=FROM_STATEMENT, today=TODAY
         )
 
         self.assertEqual(_said(context.log.highlight), "")
@@ -397,14 +399,18 @@ class StalenessReportTests(unittest.TestCase):
     def test_no_as_of_date_is_reported_as_unknowable_not_assumed_fresh(self) -> None:
         context = _context()
 
-        TspModule.report(context=context, as_of="", source=FROM_CONFIG, today=TODAY)
+        TspModule.report(
+            context=context, units_as_of="", source=FROM_CONFIG, today=TODAY
+        )
 
         self.assertIn("cannot be stated", _said(context.log.highlight))
 
     def test_an_unparseable_as_of_date_says_what_was_expected(self) -> None:
         context = _context()
 
-        TspModule.report(context=context, as_of="June", source=FROM_CONFIG, today=TODAY)
+        TspModule.report(
+            context=context, units_as_of="June", source=FROM_CONFIG, today=TODAY
+        )
 
         self.assertIn("YYYY-MM-DD", _said(context.log.highlight))
 
@@ -454,6 +460,37 @@ class MarkTests(unittest.TestCase):
         self.assertEqual(holding.units, 100.0)
         self.assertEqual(holding.price, 24.7344)
         self.assertEqual(holding.fund_code, "L 2060")
+
+    def test_the_units_date_and_the_price_date_are_different_fields(self) -> None:
+        # The whole reason this broker exists, in one assertion. The mark's
+        # value is as of the price date; its unit count is as of the last
+        # statement. One date could not say which, and for a while the second
+        # one rode in raw_value -- a field meaning "the value exactly as the
+        # source wrote it" everywhere else, and read back nowhere.
+        context = _context(units=100.0, as_of="2026-06-30")
+        context.db = MagicMock()
+
+        with patch("modules.tsp_module.SnapshotDbProtocol", MagicMock):
+            self._run(context=context)
+
+        saved = context.db.save_snapshot.call_args.kwargs
+        holding = saved["holdings"][0]
+
+        self.assertEqual(saved["as_of"], "2026-08-05", "the price date")
+        self.assertEqual(holding.units_as_of, "2026-06-30", "the units date")
+        self.assertIsNone(holding.raw_value, "no longer smuggled through raw_value")
+
+    def test_a_units_date_the_source_never_gave_is_absent_not_empty(self) -> None:
+        # "" would be a source that said nothing rather than one never asked,
+        # and it is what three of the four unit-count origins hand over.
+        context = _context(units=100.0, as_of="")
+        context.db = MagicMock()
+
+        with patch("modules.tsp_module.SnapshotDbProtocol", MagicMock):
+            self._run(context=context)
+
+        holding = context.db.save_snapshot.call_args.kwargs["holdings"][0]
+        self.assertIsNone(holding.units_as_of)
 
     def test_no_unit_count_refuses_rather_than_valuing_at_zero(self) -> None:
         # Zero units would multiply out to $0.00 -- a number, which reads as an

@@ -559,7 +559,7 @@ Each broker gets its own SQLite file at
 | --- | --- | --- |
 | `accounts` | account, ever | broker, brokerage, display name, beneficiary, kind |
 | `account_snapshots` | account per run | a **numeric** value, its currency, the source's own as-of date, and the text the source printed |
-| `holdings` | position per snapshot | fund code or ticker, name, units, price, value, principal, earnings, cost basis |
+| `holdings` | position per snapshot | fund code or ticker, name, units, price, value, principal, earnings, cost basis, and the unit count's own as-of date where a source dates its quantity apart from its value |
 | `transactions` | movement | processed and traded dates, type, units, price, value |
 
 Two things about that shape are deliberate:
@@ -606,6 +606,19 @@ migrates it: the old table is renamed to `accounts_legacy_v1` and **kept**, and
 every row is replayed as a snapshot with its balance parsed into a number.
 Accounts keep the same identity they had, so existing history continues rather
 than starting over. It runs once and reports how many rows it moved.
+
+A second migration adds `holdings.units_as_of` to a database written before that
+column existed, and moves TSP's unit dates into it from `holdings.raw_value`,
+where they used to ride. Both halves happen in one transaction, so a database is
+never left with the column and without the dates. The original text is kept
+rather than cleared, on the same principle as the renamed table above, and a
+value that does not read as a date — which is what `raw_value` holds for every
+broker other than TSP — is left exactly where it is. It reports only when it
+actually moved something.
+
+Adding the column is not optional on the writing side: a snapshot write names
+every column it has, so a database that missed the migration would fail its next
+sync outright rather than quietly storing less.
 
 ### The sheet is output
 
@@ -671,13 +684,18 @@ and no transaction shape. Inventing one here would repeat the mistake the
 contract was written to fix. They are still in the database, and still reachable
 through `stonksmithdb` with `show transactions` and `export transactions`.
 
-Two columns also went, for the same reason in different strengths. Ally's
-`Total G/L` and `Today's G/L` were never stored, so losing them from the sheet is
-just what "the sheet is a view of the database" means. TSP's `Units as of` **is**
-stored — but in `holdings.raw_value`, which means "the value exactly as the
-source wrote it" for every other broker, so surfacing it as a shared column would
-put two meanings in one column. It needs a field of its own, which is a schema
-change and separate work.
+Ally's `Total G/L` and `Today's G/L` went too, and stayed gone: they were never
+stored, so losing them from the sheet is just what "the sheet is a view of the
+database" means.
+
+TSP's `Units as of` was the other one, and it came back — as `Units As Of`,
+column 16, backed by a `holdings.units_as_of` of its own. It went in the first
+place because it *was* stored, only in `holdings.raw_value`, which means "the
+value exactly as the source wrote it" for every other broker. That was two
+meanings in one column, and a column nothing read back, so the date was kept and
+invisible at the same time. The contrast with the Ally columns is the point: a
+fact the database does not hold cannot earn a column, and one it does hold
+eventually will.
 
 #### Refreshing without scraping
 
@@ -728,7 +746,8 @@ first four columns are the same, so the two join on `Broker` + `Account Key`.
 | 6 | `Name` | |
 | 7-10 | `Units`, `Price`, `Value`, `Cost Basis` | |
 | 11-12 | `Principal`, `Earnings` | 529 plans report growth separately |
-| 13-15 | `Currency`, `As Of`, `Scraped At` | |
+| 13-15 | `Currency`, `As Of`, `Scraped At` | `As Of` is the account's — when the position's *value* is true |
+| 16 | `Units As Of` | when the *unit count* was true, for a source that dates the two apart |
 
 Three rules make that a contract rather than a list:
 
@@ -739,6 +758,13 @@ Three rules make that a contract rather than a list:
 - **One name per meaning.** `Value` is what things are worth, everywhere.
   `As Of` is the source's own date and `Scraped At` is when the run happened —
   two different facts, and a source that never says the first is common.
+
+  `Units As Of` reads like a fourth answer to that question and is not. `Synced`
+  and `Price date` were other brokers' *names* for the fact `As Of` already
+  carries, so they stay abolished. A TSP position is a quarterly unit count times
+  today's share price: its value is as of one date and its quantity as of
+  another, weeks apart, and no single column can say both. Two meanings, so two
+  names — which is the rule rather than an exception to it.
 - **Money and quantities are numbers, not text.** No `"$1,234.56"` in a cell
   you then cannot add up. Formatting is the cell's job. A value the source never
   gave stays empty rather than becoming `0`, because an account that reported no

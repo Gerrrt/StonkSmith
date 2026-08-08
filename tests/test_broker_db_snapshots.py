@@ -164,6 +164,51 @@ class WriteTests(_SnapshotTestCase):
         self.assertEqual(account[4], "529", "kind")
 
 
+class UnitsDateTests(_SnapshotTestCase):
+    """The two dates on one row, kept apart.
+
+    A TSP mark is a unit count times a share price and the two are true on
+    different days. Before this the units date rode in raw_value, which every
+    other broker uses for the value text -- and which nothing read back, so the
+    date was stored and invisible.
+    """
+
+    def test_a_units_date_persists_apart_from_the_snapshots_own(self) -> None:
+        # The single assertion the whole column exists for.
+        self.save(
+            as_of="2026-08-07",
+            holdings=[
+                Holding(fund_code="L 2060", units=100.0, units_as_of="2026-06-30")
+            ],
+        )
+
+        rows = self.db.get_current_holdings()
+
+        self.assertEqual(rows[0][-1], "2026-06-30", "the units date")
+        self.assertEqual(rows[0][12], "2026-08-07", "the value's date, untouched")
+
+    def test_a_holding_that_never_dated_its_units_stores_null(self) -> None:
+        # Not "", which would be a source saying nothing rather than a source
+        # never asked. Every other absent date here is NULL.
+        self.save(holdings=[Holding(symbol="VTI", units=10.0)])
+
+        self.assertIsNone(self.db.get_current_holdings()[0][-1])
+
+    def test_the_shell_view_carries_it_too(self) -> None:
+        # docs/live-verification.md tells the reader to audit this date from
+        # stonksmithdb, which was impossible while get_holdings omitted it.
+        self.save(
+            holdings=[
+                Holding(fund_code="L 2060", units=100.0, units_as_of="2026-06-30")
+            ]
+        )
+
+        rows = self.db.get_holdings()
+
+        self.assertEqual(len(rows[0]), 11)
+        self.assertEqual(rows[0][-1], "2026-06-30")
+
+
 class IdempotenceTests(_SnapshotTestCase):
     """Re-running a scrape must not double anything."""
 

@@ -115,6 +115,7 @@ def holding_tuple(**overrides: Any) -> tuple[Any, ...]:
         "currency": "USD",
         "as_of": "2025-12-31",
         "scraped_at": "2026-01-01 00:00:00",
+        "units_as_of": None,
     }
     row.update(overrides)
     return tuple(row.values())
@@ -160,6 +161,7 @@ class ColumnContractTests(unittest.TestCase):
                 "Currency",
                 "As Of",
                 "Scraped At",
+                "Units As Of",
             ),
             "columns are append-only: add to the end, never in the middle",
         )
@@ -178,7 +180,28 @@ class ColumnContractTests(unittest.TestCase):
             self.assertIn("As Of", columns)
             self.assertNotIn("Synced", columns)
             self.assertNotIn("Price date", columns)
-            self.assertNotIn("Units as of", columns)
+
+    def test_the_units_date_is_a_second_meaning_not_a_second_spelling(self) -> None:
+        # "Units As Of" is one of the three names the contract was written to
+        # abolish, so its return needs an argument rather than a casing trick.
+        #
+        # "Synced" and "Price date" were other brokers' names for the fact "As
+        # Of" already carries -- when is this number from. They stay gone. The
+        # units date is not that fact. A TSP position's value is as of the price
+        # date and its quantity is as of the last statement, weeks apart, and a
+        # mark carrying one of them cannot say which. Two meanings, so two
+        # names, which is what the rule says rather than an exception to it.
+        self.assertIn("As Of", HOLDING_COLUMNS)
+        self.assertIn("Units As Of", HOLDING_COLUMNS)
+
+        # It qualifies "Units", and sits at the end where an appended column
+        # belongs -- not beside "As Of", which would read as an alternative to
+        # it rather than a companion.
+        self.assertIn("Units", HOLDING_COLUMNS)
+        self.assertEqual(HOLDING_COLUMNS[-1], "Units As Of")
+
+        # And it is a holdings-only fact. An account has one date.
+        self.assertNotIn("Units As Of", ACCOUNT_COLUMNS)
 
     def test_a_row_produces_exactly_one_cell_per_column(self) -> None:
         identity: dict[str, str] = {
@@ -373,6 +396,41 @@ class ReadBrokerTests(unittest.TestCase):
 
         self.assertEqual(holdings[0].account, "Ezekiel 529")
         self.assertEqual(holdings[0].account_key, "Ezekiel")
+
+    def test_a_units_date_reaches_the_row_and_its_own_cell(self) -> None:
+        db = _FakeDb(
+            accounts=[account_tuple()],
+            holdings=[holding_tuple(units_as_of="2026-06-30")],
+        )
+
+        _accounts, holdings = read_broker(broker="tsp", db=db)
+
+        self.assertEqual(holdings[0].units_as_of, "2026-06-30")
+        self.assertEqual(
+            holdings[0].cells()[HOLDING_COLUMNS.index("Units As Of")], "2026-06-30"
+        )
+
+    def test_the_units_date_does_not_displace_the_value_date(self) -> None:
+        # Both dates, in one row, meaning different things. Collapsing them is
+        # the thing this column was added to stop.
+        db = _FakeDb(
+            accounts=[account_tuple()],
+            holdings=[holding_tuple(as_of="2026-08-07", units_as_of="2026-06-30")],
+        )
+
+        _accounts, holdings = read_broker(broker="tsp", db=db)
+
+        self.assertEqual(holdings[0].as_of, "2026-08-07")
+        self.assertEqual(holdings[0].units_as_of, "2026-06-30")
+
+    def test_a_holding_with_no_units_date_leaves_the_cell_empty(self) -> None:
+        db = _FakeDb(
+            accounts=[account_tuple()], holdings=[holding_tuple(units_as_of=None)]
+        )
+
+        _accounts, holdings = read_broker(broker="tsp", db=db)
+
+        self.assertEqual(holdings[0].cells()[HOLDING_COLUMNS.index("Units As Of")], "")
 
     def test_a_position_whose_account_is_missing_is_carried_not_dropped(self) -> None:
         # The real query cannot produce this; a losing-money-silently bug is

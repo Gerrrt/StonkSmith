@@ -293,9 +293,10 @@ show snapshots
 whenever the run lands on a weekend or before the day's price publishes — run on a
 Sunday to see it, since that is the case collapsing them would get wrong.
 
-A third date is stored on the holding: the date the *unit count* was true. A TSP mark
-is a unit count times a share price and the two are true as of different days, so a
-stored mark that carries only one of them cannot be audited later.
+A third date is stored on the holding, in `holdings.units_as_of`: the date the *unit
+count* was true. A TSP mark is a unit count times a share price and the two are true
+as of different days, so a stored mark that carries only one of them cannot be audited
+later. `show holdings` displays it, and so does the `Holdings` tab.
 
 ### 4. The sheet
 
@@ -336,10 +337,17 @@ Confirm your text is still there, and that `Accounts` was **not** rewritten eith
 all three tabs are claimed before any of them is cleared, so a refusal costs nothing
 rather than leaving one tab fresh beside a stale one.
 
-Worth knowing while verifying TSP specifically: `Units as of` is no longer on any tab.
-The unit count's own date is still stored, in `holdings.raw_value`, and still printed
-by the run — but `raw_value` means something else for every other broker, so it has no
-column of its own yet. Audit that date from `stonksmithdb`, not the sheet.
+Worth knowing while verifying TSP specifically: the unit count's own date is column
+`P`, `Units As Of`, beside the `As Of` that carries the price date. Confirm the two
+differ — that is the whole reason this broker exists — and that `show holdings` in
+`stonksmithdb` shows the same date the tab does.
+
+The Holdings tab is sixteen columns wide as of that change. A tab still ending at `O`
+after a sync is a visible sign the sync did not run.
+
+One check only a real database can make: open an existing `tsp.db` once and confirm
+that marks written *before* that upgrade show a `Units As Of` too. Those dates were
+migrated out of `holdings.raw_value`, and no test can prove that against your file.
 
 ### 5. The staleness warning fires, and stays quiet
 
