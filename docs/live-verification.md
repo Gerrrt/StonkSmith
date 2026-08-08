@@ -33,8 +33,8 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*10 of 17 claims have been settled by a live run — 9 confirmed, 1 disproved. The
-remaining 7 rest on unit tests or on fixtures.*
+*10 of 19 claims have been settled by a live run — 9 confirmed, 1 disproved. The
+remaining 9 rest on unit tests or on fixtures.*
 
 | Claim | Rests on | Observed live |
 | --- | --- | --- |
@@ -44,6 +44,8 @@ remaining 7 rest on unit tests or on fixtures.*
 | Ally — Ally Bank deposit accounts skipped, not filed as brokerage | The same nine runs | Yes |
 | Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one | Yes |
 | Ally — one row per account across runs | `uq_accounts_broker_key`; the row count was never checked across those runs | No |
+| Ally — valuing from published prices without a login | Unit tests over a fake DB and a canned payload, `tests/test_ally_from_prices.py` | No |
+| Ally — the published price feed answers | Yahoo's chart endpoint, one symbol at a time; no record of a real request | No |
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
 | TSP — statement parser | Real statements, read as issued through `-o STATEMENT=` | Yes, against real files |
 | TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files |
@@ -67,8 +69,9 @@ rather than a second witness to it.
 
 ## Ally
 
-Six steps. The whole sequence needs one signed-in browser session and about ten
-minutes.
+Seven steps. The whole sequence needs one signed-in browser session and about ten
+minutes — except step 6, which deliberately needs no session at all and has to be run
+on a later day than step 1 to mean anything.
 
 The `[+]`, `[!]`, `[*]` and `[-]` prefixes below are what the logger prints for
 success, highlight, display and failure respectively. Quoted strings are copied from
@@ -167,9 +170,14 @@ from a session that made 25 successful data calls. A session Ally renders for an
 it does not produce the same markup, so the difference only ever existed in the
 network log.
 
-**The outcome: Ally cannot run unattended.** `--manual-login` on every run is the
-correct description, and the README says so. This is not a defect to fix in
-StonkSmith; nothing StonkSmith stores reconstitutes a session Ally will honour.
+**The outcome: the Ally scrape cannot run unattended.** `--manual-login` on every
+scrape is the correct description, and the README says so. This is not a defect to fix
+in StonkSmith; nothing StonkSmith stores reconstitutes a session Ally will honour.
+
+What does run unattended is `--from-prices`, which values the account from published
+closes and the units the last signed-in run recorded — no browser, no sign-in. That is
+a different claim from any of the ones settled here, so it has rows of its own in the
+table above, and they start at `No`.
 
 What *is* proven, every one of those nine runs: the sign-in flow, the holdings parse,
 the account rail, the bank/brokerage split and the database write. The scrape works.
@@ -240,7 +248,46 @@ class with `-account` stripped, so a class Ally has since renamed would show up 
 as a *missing* skip line and a bank balance filed under a brokerage — which is why
 the skip announces itself rather than happening quietly.
 
-### 6. Re-running does not duplicate accounts
+### 6. The account values from published prices, with no browser at all
+
+Needs step 1 to have run first, since the units come out of the database. Then, on any
+later day:
+
+```bash
+uv run stonksmith ally -M ally --from-prices
+```
+
+```
+[+] Valuing from published prices; no sign-in needed.
+[+] <label>: <units> <symbol> x <price> (<price date>) = <value>
+[*] <label>: priced at <price date>; units as recorded <stamp>. Re-run with --manual-login after a deposit.
+```
+
+**No browser window should open.** That is most of the claim: this path returns before
+Playwright starts and before the preflight request to the bank, so a run that opens a
+window has taken the scrape branch instead.
+
+Two things to check in `stonksmithdb` afterwards. `show snapshots` should have one more
+row, and its `as_of` should carry the **price** date rather than being empty — this is
+the only Ally path that fills that column, so an empty `as_of` here means the value was
+dated by the run. And `show holdings` should show the same unit count step 1 recorded,
+unchanged: this run reprices units, it does not rediscover them.
+
+Then the failure that matters more than the success. Against a database with no Ally
+holdings on record:
+
+```
+[-] No holdings on record to value. Run with --manual-login once so a signed-in run can record the units.
+```
+
+A number here instead of a refusal would be the finding — it would mean the run had
+invented units rather than read them.
+
+Worth knowing before ticking this: the sheet is **not** synced by a price run, so an
+unchanged `Holdings` tab is expected rather than a failure. Run `sheet` in
+`stonksmithdb` to refresh it.
+
+### 7. Re-running does not duplicate accounts
 
 Covered by the shared step below.
 
