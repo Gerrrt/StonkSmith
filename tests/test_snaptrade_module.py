@@ -958,7 +958,7 @@ class OnLoginTests(unittest.TestCase):
     def test_balances_reach_the_database(self) -> None:
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.Saver"):
+        with patch("modules.snaptrade_module.sync"):
             result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertIsNot(result, False, "a working sync must not fail the run")
@@ -970,7 +970,7 @@ class OnLoginTests(unittest.TestCase):
         # table has no brokerage column to tell them apart.
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.Saver"):
+        with patch("modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertEqual(self.db.saved[0]["account_name"], "Schwab - Garrett IRA")
@@ -992,7 +992,7 @@ class OnLoginTests(unittest.TestCase):
         ]
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.Saver"):
+        with patch("modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker(accounts, TWO_BROKERAGES))  # type: ignore[arg-type]
 
         self.assertEqual(
@@ -1022,7 +1022,7 @@ class OnLoginTests(unittest.TestCase):
         ]
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.Saver"):
+        with patch("modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker(accounts, TWO_BROKERAGES))  # type: ignore[arg-type]
 
         labels = [row["account_name"] for row in self.db.saved]
@@ -1033,7 +1033,7 @@ class OnLoginTests(unittest.TestCase):
     def test_the_timestamp_matches_the_other_brokers(self) -> None:
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.Saver"):
+        with patch("modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         datetime.datetime.strptime(
@@ -1045,8 +1045,11 @@ class OnLoginTests(unittest.TestCase):
         # balances.
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.Saver") as saver:
-            saver.return_value.save_accounts.side_effect = SheetsUnavailable("no tab")
+        # refresh() rather than sync(): the "sync skipped" wording and the
+        # decision not to fail the run live inside sync() now, so patching that
+        # would remove the behaviour under test.
+        with patch("etc.portfolio_sheet.refresh") as refresh:
+            refresh.side_effect = SheetsUnavailable("no tab")
             result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertEqual(len(self.db.saved), 1, "the balance survived")
@@ -1056,8 +1059,11 @@ class OnLoginTests(unittest.TestCase):
     def test_a_broken_sheets_client_does_not_lose_balances(self) -> None:
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.Saver") as saver:
-            saver.return_value.save_accounts.side_effect = RuntimeError("boom")
+        # Faulted underneath sync() rather than in place of it, so the broad
+        # except that keeps a Sheets crash from costing the run is the thing
+        # actually exercised.
+        with patch("etc.portfolio_sheet.refresh") as refresh:
+            refresh.side_effect = RuntimeError("boom")
             result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertEqual(len(self.db.saved), 1)
@@ -1067,7 +1073,7 @@ class OnLoginTests(unittest.TestCase):
     def test_a_database_without_save_account_data_is_reported(self) -> None:
         context = _StubContext(_StubDbNoSave())
 
-        with patch("modules.snaptrade_module.Saver"):
+        with patch("modules.snaptrade_module.sync"):
             result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertFalse(result, "nothing reached the database")
@@ -1076,7 +1082,7 @@ class OnLoginTests(unittest.TestCase):
     def test_nothing_syncable_writes_nothing_and_says_so(self) -> None:
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.Saver") as saver:
+        with patch("modules.snaptrade_module.sync") as sheet_sync:
             result = self.module.on_login(
                 context,
                 _StubBroker([account(brokerage_authorization=DEAD_CONNECTION)]),  # type: ignore[arg-type]
@@ -1084,7 +1090,7 @@ class OnLoginTests(unittest.TestCase):
 
         self.assertFalse(result, "nothing was written")
         self.assertEqual(self.db.saved, [])
-        saver.assert_not_called()
+        sheet_sync.assert_not_called()
         self.assertTrue(any("Nothing was written" in m for m in context.log.messages))
 
     def test_the_wrong_broker_fails_cleanly(self) -> None:
@@ -1112,7 +1118,7 @@ class OnLoginTests(unittest.TestCase):
         }
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.Saver"):
+        with patch("modules.snaptrade_module.sync"):
             self.module.on_login(context, broker)  # type: ignore[arg-type]
 
         self.assertEqual(len(self.db.saved), 1, "the healthy account still synced")

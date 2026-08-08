@@ -277,7 +277,7 @@ class OnLoginTransactionRoutingTests(unittest.TestCase):
         context.db = db
         context.log = MagicMock()
 
-        with patch("modules.schwab529plan_module.Saver"):
+        with patch("modules.schwab529plan_module.sync"):
             Schwab529Module().on_login(context, connection)
 
         return db, context
@@ -418,7 +418,7 @@ class SingleAccountRegressionTests(unittest.TestCase):
         context.db = db
         context.log = MagicMock()
 
-        with patch("modules.schwab529plan_module.Saver"):
+        with patch("modules.schwab529plan_module.sync"):
             Schwab529Module().on_login(context, connection)
 
         self.assertEqual(len(db.snapshots), 1)

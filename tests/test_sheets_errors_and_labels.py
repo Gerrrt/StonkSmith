@@ -116,10 +116,14 @@ class AccountLabelTests(unittest.TestCase):
 
 
 class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
-    @patch("modules.schwab529plan_module.Saver")
+    # refresh() rather than sync(), deliberately. The "sync skipped" wording and
+    # the decision not to fail the run both live inside sync() now, so patching
+    # sync() would remove the behaviour this is here to check. Faulting the read
+    # underneath it exercises the real path all five modules share.
+    @patch("etc.portfolio_sheet.refresh")
     @patch("modules.schwab529plan_module.Parser")
     def test_sheets_failure_does_not_abort_the_run(
-        self, mock_parser: MagicMock, mock_saver: MagicMock
+        self, mock_parser: MagicMock, mock_refresh: MagicMock
     ) -> None:
         from modules.schwab529plan_module import Schwab529Module
 
@@ -129,9 +133,7 @@ class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
         parsed.investment_data.return_value = []
         parsed.transaction_data.return_value = []
 
-        mock_saver.return_value.save_beneficiary.side_effect = SheetsUnavailable(
-            "Google authorization failed"
-        )
+        mock_refresh.side_effect = SheetsUnavailable("Google authorization failed")
 
         saved: list[tuple] = []
 

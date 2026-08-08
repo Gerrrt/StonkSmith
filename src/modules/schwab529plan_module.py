@@ -11,13 +11,11 @@ from requests import Response
 from requests.exceptions import RequestException
 
 from brokers.schwab529plan.parser import Parser
-from brokers.schwab529plan.saver import Saver
 from etc.connection import Connection
 from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from etc.portfolio_sheet import sync
 from etc.records import AccountIdentity, Holding, Transaction
 from helpers.normalize import (
-    format_amount,
-    format_units,
     to_amount,
     to_currency,
     to_iso_date,
@@ -31,7 +29,6 @@ from helpers.schwab529plan import (
     match_account,
     transaction_from_row,
 )
-from helpers.sheets import SheetsUnavailable
 
 
 class Schwab529Module:
@@ -352,105 +349,6 @@ class Schwab529Module:
                 ),
             )
 
-    @staticmethod
-    def holding_rows(
-        db: BrokerDbProtocol, scraped: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        """Build the holdings block of the worksheet from stored rows.
-
-        Args:
-            db (BrokerDbProtocol): The broker database.
-            scraped (list[dict[str, Any]]): This run's fund rows, used only when
-            the database predates snapshot history.
-
-        Returns:
-            list[dict[str, Any]]: Rows in the worksheet's column order.
-
-        """
-        read = getattr(db, "get_holdings", None)
-
-        if not callable(read):
-            return list(scraped)
-
-        return [
-            {
-                "Fund Code": symbol,
-                "Fund": name,
-                "Units": format_units(units),
-                "Price": format_amount(price, currency),
-                "Value": format_amount(value, currency),
-                "Total Assets": format_amount(
-                    (principal or 0) + (earnings or 0)
-                    if principal is not None or earnings is not None
-                    else None,
-                    currency,
-                ),
-                "Principal": format_amount(principal, currency),
-                "Earnings": format_amount(earnings, currency),
-            }
-            for (
-                _account,
-                symbol,
-                name,
-                units,
-                price,
-                value,
-                principal,
-                earnings,
-                _cost_basis,
-                currency,
-            ) in read()
-        ]
-
-    @staticmethod
-    def transaction_rows(
-        db: BrokerDbProtocol, scraped: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        """Build the transactions block of the worksheet from stored rows.
-
-        The account is a column now rather than something discarded. Once rows
-        are attributed per account the tab interleaves several accounts'
-        movements, and without a column saying whose each one is the block is
-        unreadable.
-
-        Args:
-            db (BrokerDbProtocol): The broker database.
-            scraped (list[dict[str, Any]]): This run's transaction rows, used
-            only when the database predates snapshot history.
-
-        Returns:
-            list[dict[str, Any]]: Rows in the worksheet's column order.
-
-        """
-        read = getattr(db, "get_transactions", None)
-
-        if not callable(read):
-            return list(scraped)
-
-        return [
-            {
-                "Account": account,
-                "Processed": processed_on,
-                "Traded": traded_on,
-                "Type": tx_type,
-                "Units": format_units(units),
-                "Price": format_amount(price, currency),
-                "Value": format_amount(value, currency),
-            }
-            for (
-                _id,
-                account,
-                processed_on,
-                traded_on,
-                tx_type,
-                _symbol,
-                units,
-                price,
-                value,
-                currency,
-            ) in read()
-        ]
-
     def on_login(self, context: Context, connection: Connection) -> bool:
         """Perform the login and scraping process for Schwab529Plan.
 
@@ -586,32 +484,7 @@ class Schwab529Module:
 
         # 5. Sync: Push clean data to Google Sheets
 
-        sheets_ok: bool = True
-
-        try:
-            context.log.highlight(msg="Syncing data to Google Sheets...")
-
-            saver = Saver()
-
-            saver.save_beneficiary(data=beneficiaries)
-            saver.save_balance(data=balances)
-            saver.save_investment(data=self.holding_rows(db=db, scraped=investments))
-            saver.save_transactions(
-                data=self.transaction_rows(db=db, scraped=transactions)
-            )
-
-            context.log.success(msg="Google Sheets updated successfully!")
-
-        except SheetsUnavailable as e:
-            context.log.fail(msg=f"Google Sheets sync skipped: {e}")
-            sheets_ok = False
-
-        except Exception as e:
-            # Deliberately broad: the scrape is already saved to the broker
-            # database above, so a Sheets problem must not fail the run or bury
-            # the result under a traceback from gspread/google-auth internals.
-            context.log.fail(msg=f"Google Sheets sync failed: {e}")
-            sheets_ok = False
+        sheets_ok: bool = sync(context=context)
 
         if db_ok and sheets_ok:
             context.log.success(msg="Schwab529Plan sync complete.")

@@ -411,8 +411,8 @@ class StalenessReportTests(unittest.TestCase):
 
 class MarkTests(unittest.TestCase):
     def _run(self, context: MagicMock, module: TspModule | None = None) -> bool:
-        with patch("modules.tsp_module.Saver") as saver:
-            saver.return_value.save_accounts.return_value = None
+        with patch("modules.tsp_module.sync") as sheet_sync:
+            sheet_sync.return_value.save_accounts.return_value = None
             return (module or TspModule()).on_login(
                 context=context, connection=_connection()
             )
@@ -482,7 +482,7 @@ class MarkTests(unittest.TestCase):
         connection = _connection()
         connection.fund = "Q Fund"
 
-        with patch("modules.tsp_module.Saver"):
+        with patch("modules.tsp_module.sync"):
             self.assertFalse(
                 TspModule().on_login(context=context, connection=connection)
             )

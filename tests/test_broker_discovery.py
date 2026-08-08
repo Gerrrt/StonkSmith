@@ -194,13 +194,14 @@ class DiscoveryRulesTests(unittest.TestCase):
 
 
 class LazyExportTests(unittest.TestCase):
-    """A broker's saver is imported on every run; it must stay cheap.
+    """The sheet writer is imported on every run; it must stay cheap.
 
     ModuleLoader metadata-scans every file in modules/ on every run of every
-    broker, and each of those imports its broker's saver. An eager class export
-    in a broker's __init__.py drags the whole transport in with it -- playwright
-    for Fidelity, the SnapTrade SDK for SnapTrade -- on runs that never touch
-    that broker.
+    broker, and each of those now imports etc.portfolio_sheet -- which is what
+    the five per-broker savers used to be, an every-run import that must not
+    drag a transport in behind it. An eager class export in a broker's
+    __init__.py pulls the whole transport along: playwright for Fidelity, the
+    SnapTrade SDK for SnapTrade, on runs that never touch that broker.
     """
 
     def _import_in_subprocess(self, module: str, heavy: str) -> str:
@@ -219,16 +220,25 @@ class LazyExportTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout
 
-    def test_the_fidelity_saver_does_not_drag_in_playwright(self) -> None:
+    def test_the_sheet_writer_does_not_drag_in_playwright(self) -> None:
         self.assertIn(
             "False",
-            self._import_in_subprocess("brokers.fidelity.saver", "playwright_stealth"),
+            self._import_in_subprocess("etc.portfolio_sheet", "playwright_stealth"),
         )
 
-    def test_the_snaptrade_saver_does_not_drag_in_the_sdk(self) -> None:
+    def test_the_sheet_writer_does_not_drag_in_the_snaptrade_sdk(self) -> None:
         self.assertIn(
             "False",
-            self._import_in_subprocess("brokers.snaptrade.saver", "snaptrade_client"),
+            self._import_in_subprocess("etc.portfolio_sheet", "snaptrade_client"),
+        )
+
+    def test_the_sheet_writer_does_not_open_a_broker_package(self) -> None:
+        # It reads every broker database directly as a BrokerDatabase rather
+        # than through each broker's Database subclass, precisely so that a
+        # read does not import five broker packages and their optional deps.
+        self.assertIn(
+            "False",
+            self._import_in_subprocess("etc.portfolio_sheet", "brokers.fidelity"),
         )
 
 
