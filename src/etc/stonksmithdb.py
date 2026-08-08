@@ -35,6 +35,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    broker            list available brokers\n"
         "    broker <name>     enter that broker (add/show/export live in there)\n"
         "    workspace list    list workspaces\n"
+        "    sheet             rewrite the Google Sheet from these databases\n"
         "    help              commands at this level\n"
         "    exit              quit\n"
     )
@@ -145,6 +146,48 @@ class StonkSmithDBMenu(cmd.Cmd):
             print(f"      {name:<16} {status}")
 
         print("\n    Enter one with: broker <name>")
+
+    def do_sheet(self, line: str) -> None:
+        """
+        Rewrite the machine-owned tabs from this workspace's databases.
+
+        The sheet is a view of the databases, so it can be rebuilt from them
+        alone. Without this the only cure for "the dashboard was not updated" is
+        another scrape, and for the browser-backed brokers that means a human at
+        a sign-in page -- a high price for a tab that is missing a banner.
+        :param line: Ignored
+        :return: None
+        """
+
+        del line
+
+        # Imported here rather than at module scope: this pulls in gspread and
+        # google-auth, and the shell is mostly used for things that never touch
+        # Sheets. tests/test_no_import_side_effects.py imports this module in a
+        # subprocess and asserts nothing appears in $HOME.
+        from etc.portfolio_sheet import refresh
+        from helpers.sheets import SheetsUnavailable
+
+        try:
+            result = refresh(workspace=self.workspace)
+
+        except SheetsUnavailable as e:
+            print(f"[-] {e}")
+            return
+
+        except Exception as e:
+            print(f"[-] Sheet refresh failed: {type(e).__name__}: {e}")
+            return
+
+        print(
+            f"[*] Refreshed: {result.accounts} accounts, {result.holdings} "
+            f"holdings from {', '.join(result.brokers_read) or 'no brokers'}."
+        )
+
+        for name, reason in result.unreadable:
+            # Printed as well as written to the tab. A total short by a whole
+            # broker is exactly the failure that must not be quiet.
+            print(f"[-] Not on the sheet: {name} could not be read ({reason}).")
 
     def write_config(self) -> None:
         """

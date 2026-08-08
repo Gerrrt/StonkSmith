@@ -31,7 +31,8 @@ outcome would mean.
 | TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
 | TSP — share price download | A real request on 2026-08-07; response written up in #48 | Yes |
 | TSP — database write | Unit tests with a mocked DB | No |
-| TSP — `TSP` worksheet | Unit tests with a stubbed saver | No |
+| The sheet — three machine-owned tabs | Unit tests with a faked spreadsheet | No |
+| The sheet — refusing a tab it does not own | Unit tests with a faked spreadsheet | No |
 
 The Ally parser row is the one worth reading twice. It is proven against *one snapshot
 of one account state*: one investment account, one holding, one deposit account. Every
@@ -296,20 +297,49 @@ A third date is stored on the holding: the date the *unit count* was true. A TSP
 is a unit count times a share price and the two are true as of different days, so a
 stored mark that carries only one of them cannot be audited later.
 
-### 4. The `TSP` worksheet
+### 4. The sheet
 
-**Create a tab named `TSP` in the `Investment Account Scrapes` spreadsheet first.**
-No broker creates its own tab. Without it the run prints:
+No tab needs creating: StonkSmith makes `Accounts`, `Holdings` and `Dashboard` on the
+first sync. Nor does this need a scrape any more — the sheet is a view of the
+databases, so it can be built from them alone:
 
 ```
-[+] TSP mark saved locally; the dashboard was not updated.
+$ uv run stonksmithdb
+stonksmithdb (default) > sheet
+[*] Refreshed: 6 accounts, 23 holdings from ally, fidelity, snaptrade, tsp.
 ```
 
-and still exits 0, because the database write already succeeded and Sheets is a view
-of it. That message is the tab being absent, not the broker failing.
+Four things to confirm on the tabs themselves, none of which a unit test can see:
 
-With the tab present, confirm the row carries `Units as of` and `Price date` as
-separate columns — both dates, travelling with the number.
+1. **The first cell of each tab carries the machine-owned banner**, and row 2 is the
+   column contract exactly as `src/etc/portfolio.py` spells it.
+2. **Money is a number, not text.** A currency cell should right-align on its own and
+   accept a number format. If it left-aligns, something is writing strings again.
+3. **The dashboard's `Total (USD)` equals its `Total as read`.** Those are the same
+   number computed by Sheets and by Python; a disagreement means the write was
+   truncated, and it is the only signal that would say so.
+4. **Empty cells are genuinely empty.** `Accounts` minus the count of `As Of` values
+   is how the dashboard counts accounts whose source never gave a date, and it relies
+   on an absent value arriving as an empty cell rather than as an empty string that
+   `COUNTA` still counts. If that figure reads 0 where the tab visibly has blank
+   `As Of` cells, the formula needs `COUNTIF(...,"<>")` instead.
+
+Then the refusal, which is the point of the whole thing. Type something into a spare
+tab, rename it `Holdings`, and run `sheet` again:
+
+```
+[-] Tab 'Holdings' holds something StonkSmith did not write, so it was left
+    untouched and nothing was synced.
+```
+
+Confirm your text is still there, and that `Accounts` was **not** rewritten either —
+all three tabs are claimed before any of them is cleared, so a refusal costs nothing
+rather than leaving one tab fresh beside a stale one.
+
+Worth knowing while verifying TSP specifically: `Units as of` is no longer on any tab.
+The unit count's own date is still stored, in `holdings.raw_value`, and still printed
+by the run — but `raw_value` means something else for every other broker, so it has no
+column of its own yet. Audit that date from `stonksmithdb`, not the sheet.
 
 ### 5. The staleness warning fires, and stays quiet
 

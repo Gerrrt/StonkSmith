@@ -44,6 +44,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import Engine
+
 from etc.broker_db import BrokerDatabase
 from etc.config import get_workspace
 from etc.context import PortfolioDbProtocol
@@ -407,7 +409,12 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
     Opening is not free of writes. BrokerDatabase applies its pending
     migrations on open, so a database written before account history is upgraded
     by being read. That is deliberate: the alternative is a read path that
-    cannot see the oldest data.
+    cannot see the oldest data. It does mean a sheet sync of one broker upgrades
+    every broker in the workspace, which is worth knowing rather than surprising.
+
+    Each engine is disposed as well as its session closed. shutdown_db() ends
+    the session; the engine's pool holds the SQLite file handle open regardless,
+    and this now runs on every broker run rather than only from the shell.
     :param paths: Database files, one per broker
     :return: Their accounts and positions, and whatever would not open
     :rtype: Portfolio
@@ -421,9 +428,11 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
     for path in paths:
         broker: str = path.stem
         db: BrokerDatabase | None = None
+        engine: Engine | None = None
 
         try:
-            db = BrokerDatabase(db_engine=create_db_engine(db_path=path), broker=broker)
+            engine = create_db_engine(db_path=path)
+            db = BrokerDatabase(db_engine=engine, broker=broker)
             broker_accounts, broker_holdings = read_broker(broker=broker, db=db)
 
         # Deliberately broad. A file in this directory can fail to be a usable
@@ -438,6 +447,9 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
         finally:
             if db is not None:
                 db.shutdown_db()
+
+            if engine is not None:
+                engine.dispose()
 
         accounts.extend(broker_accounts)
         holdings.extend(broker_holdings)
