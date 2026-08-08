@@ -65,7 +65,19 @@ TWO_BROKERAGES: dict[str, dict[str, Any]] = {
 
 
 def account(**overrides: Any) -> dict[str, Any]:
-    """A healthy Schwab investment account, synced an hour ago."""
+    """A healthy Schwab investment account, synced an hour ago.
+
+    "An hour ago" is measured from the real clock, not from NOW. The tests that
+    pass an explicit ``now`` are unaffected -- a sync time in their future is
+    still fresh -- but the ones that go through ``on_login`` use the real clock,
+    and a literal date here meant this account aged out of the freshness window
+    three days after it was written. It did: the suite went red on 2026-08-08
+    with "its holdings last synced 4 days ago", having passed when it landed.
+    """
+
+    synced_an_hour_ago: str = (
+        datetime.datetime.now(tz=datetime.UTC) - datetime.timedelta(hours=1)
+    ).isoformat()
 
     base: dict[str, Any] = {
         "id": "acct-1",
@@ -78,7 +90,7 @@ def account(**overrides: Any) -> dict[str, Any]:
         "balance": {"total": {"amount": 6539.67, "currency": "USD"}},
         "sync_status": {
             "holdings": {
-                "last_successful_sync": "2026-08-04T11:00:00+00:00",
+                "last_successful_sync": synced_an_hour_ago,
                 "initial_sync_completed": True,
             }
         },
@@ -126,7 +138,8 @@ class MoneyTests(unittest.TestCase):
 
 class SelectAccountsTests(unittest.TestCase):
     def test_a_healthy_account_is_written(self) -> None:
-        rows, skipped = select([account()])
+        healthy: dict[str, Any] = account()
+        rows, skipped = select([healthy])
 
         self.assertEqual(skipped, [])
         self.assertEqual(len(rows), 1)
@@ -142,7 +155,7 @@ class SelectAccountsTests(unittest.TestCase):
                 "Account": "Garrett IRA",
                 "Balance": "$6,539.67",
                 "Category": "INVESTMENT",
-                "Synced": "2026-08-04T11:00:00+00:00",
+                "Synced": healthy["sync_status"]["holdings"]["last_successful_sync"],
             },
         )
 
