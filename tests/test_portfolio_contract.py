@@ -30,6 +30,8 @@ from etc.portfolio import (
     HOLDING_COLUMNS,
     AccountRow,
     HoldingRow,
+    Portfolio,
+    _reason,
     read_broker,
     read_databases,
     read_workspace,
@@ -227,6 +229,68 @@ class CellTypeTests(unittest.TestCase):
 
         self.assertEqual(cells[HOLDING_COLUMNS.index("Principal")], "")
         self.assertEqual(cells[HOLDING_COLUMNS.index("Units")], 3.0)
+
+
+class TotalTests(unittest.TestCase):
+    """What the accounts add up to, including when there are none."""
+
+    def test_an_empty_portfolio_totals_to_a_float(self) -> None:
+        # sum() starts at int 0, so an empty total came back a different type
+        # from every non-empty one -- fine until the one caller that checks.
+        total = Portfolio().total()
+
+        self.assertEqual(total, 0.0)
+        self.assertIsInstance(total, float)
+
+    def test_only_the_asked_for_currency_counts(self) -> None:
+        # Adding a dollar to a euro is not wrong so much as meaningless, and
+        # nothing here knows a rate.
+        portfolio = Portfolio(
+            accounts=(
+                AccountRow(
+                    broker="a", source="a", account="a", account_key="a", value=10.0
+                ),
+                AccountRow(
+                    broker="b",
+                    source="b",
+                    account="b",
+                    account_key="b",
+                    value=99.0,
+                    currency="EUR",
+                ),
+            )
+        )
+
+        self.assertEqual(portfolio.total(), 10.0)
+        self.assertEqual(portfolio.total(currency="EUR"), 99.0)
+
+    def test_an_account_with_no_value_does_not_break_the_total(self) -> None:
+        portfolio = Portfolio(
+            accounts=(
+                AccountRow(
+                    broker="a", source="a", account="a", account_key="a", value=10.0
+                ),
+                AccountRow(broker="b", source="b", account="b", account_key="b"),
+            )
+        )
+
+        self.assertEqual(portfolio.total(), 10.0)
+
+
+class FailureReasonTests(unittest.TestCase):
+    """A reported failure has to actually report something."""
+
+    def test_an_argumentless_exception_still_names_itself(self) -> None:
+        # OSError() and sqlite3.DatabaseError() both stringify to "", so str(e)
+        # alone yields a blank reason: a report that a broker could not be read
+        # which says nothing about why, and blank is the silence this breaks.
+        self.assertEqual(_reason(OSError()), "OSError")
+
+    def test_a_message_is_kept_alongside_the_class(self) -> None:
+        self.assertEqual(
+            _reason(ValueError("file is not a database")),
+            "ValueError: file is not a database",
+        )
 
 
 class ReadBrokerTests(unittest.TestCase):

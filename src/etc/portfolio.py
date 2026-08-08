@@ -102,6 +102,26 @@ def _cell(value: Any) -> Any:
     return "" if value is None else value
 
 
+def _reason(error: Exception) -> str:
+    """
+    Describe a failure in a way that always says something.
+
+    An exception raised with no arguments stringifies to "" -- OSError() and
+    sqlite3.DatabaseError() both do -- so str(e) alone can hand back a blank
+    reason. A blank reason is worse than no field at all: it is a report that a
+    broker could not be read, offering nothing about why, which is precisely the
+    silence this field exists to break. The class name is always there.
+    :param error: The exception to describe
+    :return: A non-empty description
+    :rtype: str
+    """
+
+    detail: str = str(object=error).strip()
+    name: str = type(error).__name__
+
+    return f"{name}: {detail}" if detail else name
+
+
 @dataclass(frozen=True, slots=True)
 class AccountRow:
     """
@@ -254,10 +274,17 @@ class Portfolio:
         :rtype: float
         """
 
+        # Started at 0.0 rather than sum()'s implicit int 0, so a portfolio with
+        # nothing in it returns the same type as one with something in it. A
+        # total that is an int only when it is empty is the kind of thing that
+        # works everywhere until it reaches the one caller that checks.
         return sum(
-            row.value
-            for row in self.accounts
-            if row.value is not None and row.currency == currency
+            (
+                row.value
+                for row in self.accounts
+                if row.value is not None and row.currency == currency
+            ),
+            0.0,
         )
 
 
@@ -405,7 +432,7 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
         # caller the other four brokers. What it must not do is vanish, so the
         # reason is carried out rather than logged and forgotten.
         except Exception as e:
-            unreadable.append((broker, str(object=e)))
+            unreadable.append((broker, _reason(e)))
             continue
 
         finally:
