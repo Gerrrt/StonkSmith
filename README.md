@@ -524,6 +524,59 @@ bounded by one contribution, it corrects itself at the next statement, and it
 is stated rather than hidden — which is the whole reason this broker values the
 account instead of refusing to.
 
+**Or close the gap, if you are in uniform.** The missing contributions are not
+unknowable: DFAS publishes basic pay per pay grade and time in service, so a
+grade, a service date and two percentages are enough to say what each month
+since the last statement bought. Four more optional keys:
+
+```ini
+[TSP]
+rank = E-7
+basd = 2016-03-14
+member_contribution = 5
+agency_contribution = 5
+```
+
+`rank` is the pay grade, not the title — `E-7`, `O-3`, `W-2`, or `O-3E` for an
+officer with over four years of enlisted or warrant service. `basd` is the Basic
+Active Service Date, and time in service is counted from it *to the day*, which
+matters because the pay bands are crossed on an anniversary and a member who
+crosses one mid-quarter is paid at two rates over it. Both percentages are of
+monthly basic pay. Fill in all four or none.
+
+```text
+E-7 at Over 10: $5,300.40 basic pay per month
+  2026-04-30: E-7 Over 10 $5,300.40 x 10% = $530.04 at $23.1290 (2026-04-30) = 22.916685 units
+  2026-05-31: E-7 Over 10 $5,300.40 x 10% = $530.04 at $24.2845 (2026-05-29) = 21.826268 units
+  2026-06-30: E-7 Over 10 $5,300.40 x 10% = $530.04 at $24.2990 (2026-06-30) = 21.813243 units
+  2026-07-31: E-7 Over 10 $5,300.40 x 10% = $530.04 at $24.0756 (2026-07-31) = 22.015651 units
+Contributions since 2026-03-31: 4 month(s), $2,120.16 at 5% member + 5% agency = 88.571847 estimated units
+L 2060: 315.7885 anchored + 88.571847 estimated = 404.360347 units x $24.7344 (2026-08-05) = $10,001.61
+```
+
+Each month is priced on its own posting date — the last day of the month unless
+`contribution_day` says otherwise — against the published price on or before it,
+because TSP does not revalue on a weekend. The run prints its working so the
+figures can be checked against a pay table and an LES, and the estimate is
+stored as **its own holding**, so "how much of this is a guess" is answerable
+from the database and the dashboard rather than only from a log line.
+
+It is an estimate, and it is bounded in the same way the stale count was. It
+assumes contributions come out of basic pay alone — not special, incentive or
+bonus pay — and it does not know about the IRS elective deferral limit, so a
+member who reaches the annual cap will be over-accrued until the next statement
+resets the anchor. `--no-accrual` values the anchored count on its own for a run
+that must be exact arithmetic with no estimate in it.
+
+Anything that stops an estimate being made costs the estimate and not the run:
+a half-filled config, a rank that is not a pay grade, an unreadable service
+date, a grade DFAS publishes no rate for, or a refused download all report
+themselves and leave the anchored mark exactly as it was. The pay table is
+cached under `~/.stonksmith` for the rest of the year, since DFAS changes it
+every January. `--pay-table` reads a page saved by hand, the way `--prices`
+does. Unlike the share price download, **this one has not been run against
+dfas.mil for real** — see `docs/live-verification.md`.
+
 Sheets needs no tab prepared: StonkSmith creates `Accounts`, `Holdings` and
 `Dashboard` itself on the first sync. If the sheet cannot be written at all — no
 spreadsheet, no authorization, or a tab that turns out not to be StonkSmith's —

@@ -83,6 +83,27 @@ def broker_args(
     )
 
     group.add_argument(
+        "--pay-table",
+        type=str,
+        help=(
+            "Read DFAS basic pay from this file instead of downloading it. A "
+            "published pay table page as saved from dfas.mil. Use this when the "
+            "machine cannot reach dfas.mil, or to account for contributions "
+            "offline."
+        ),
+    )
+
+    group.add_argument(
+        "--no-accrual",
+        action="store_true",
+        help=(
+            "Value the unit count on its own, ignoring the configured rank, "
+            "service date and contribution percentages. Use this for a mark "
+            "that must be exact arithmetic with no estimate in it."
+        ),
+    )
+
+    group.add_argument(
         "--units-as-of",
         type=str,
         metavar="YYYY-MM-DD",

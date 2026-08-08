@@ -30,6 +30,9 @@ outcome would mean.
 | TSP — share price parser | A real slice of the published file, `tests/tsp_prices.csv` | Yes, against real files |
 | TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
 | TSP — share price download | A real request on 2026-08-07; response written up in #48 | Yes |
+| TSP — DFAS pay table parse | `tests/dfas_basic_pay_em.html`, a **reconstruction** of the live page | No |
+| TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused every request from the dev environment | No |
+| TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
 | TSP — database write | Unit tests with a mocked DB | No |
 | The sheet — three machine-owned tabs | Unit tests with a faked spreadsheet | No |
 | The sheet — refusing a tab it does not own | Unit tests with a faked spreadsheet | No |
@@ -368,6 +371,51 @@ uv run stonksmith tsp -M tsp --units-as-of <today>
 
 The warning must come *before* the value, not after. Saying how old a number is only
 helps if it is said before the number is read.
+
+### 6. The DFAS pay table downloads at all
+
+**This is the one step here that could not be attempted.** dfas.mil sits behind Akamai
+and answered every request from the development environment with a 403 and an "Access
+Denied" page — every User-Agent tried, including the one tsp.gov accepts, and
+`web.archive.org` was refused too. So the parser is written against
+`tests/dfas_basic_pay_em.html`, which is a *reconstruction* of the live page's
+structure and not a saved response. Everything downstream of the parse is verified;
+the parse itself is verified against a shape that was read off the real page by eye.
+
+Two things to establish, in order.
+
+First, that the page can be fetched from a machine that DFAS will talk to:
+
+```bash
+uv run stonksmith tsp -M tsp
+```
+
+```
+[+] E-7 at Over 10: $5,300.40 basic pay per month
+```
+
+If instead it prints `The enlisted members pay table returned HTTP 403. dfas.mil
+refused the request...`, then this download is not unattended, and the README claim
+that four config keys are the whole setup needs the same qualification `--prices`
+carries. Say so there rather than leaving it standing.
+
+Second — and worth doing **either way** — that the parser reads the real markup:
+
+1. Open <https://www.dfas.mil/Military-Members/payentitlements/Pay-Tables/Basic-Pay/EM/>
+   in a browser and save the page as HTML.
+2. Run against it: `uv run stonksmith tsp -M tsp --pay-table ~/Downloads/EM.html`
+3. Check the printed basic pay against the figure in that grade's row and time-in-service
+   column on the page itself.
+
+If step 3 disagrees, the reconstruction differs from DFAS's markup in a way the tests
+cannot see. **Replace `tests/dfas_basic_pay_em.html` with the saved page** — trimmed of
+anything but the tables — and the fixture stops being a reconstruction. That is the
+single highest-value thing anyone with access to dfas.mil can do for this feature.
+
+A number that is merely *plausible* is the failure mode to watch for here. The columns
+are matched from the right, so a table with an unexpected trailing column would shift
+every rate by one band — which reads as a member being paid at the wrong seniority, not
+as a parse error, and looks entirely like an answer.
 
 ---
 
