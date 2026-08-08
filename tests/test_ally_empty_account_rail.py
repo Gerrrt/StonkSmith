@@ -21,7 +21,7 @@ complaint.
 
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from helpers.ally import SIDEBAR_SELECTOR
 from modules.ally_module import AllyModule, capture_holdings
@@ -51,7 +51,13 @@ def _run(markup: str, capture: str | None = "/tmp/ally-empty-account-rail.html")
     # rail is never read, so half of them would pass for the wrong reason.
     context.args.from_prices = False
 
-    module.on_login(context, connection)
+    # Stubbed because the sheet sync now reads the workspace name out of the
+    # config to know which databases to render, and a test that lets it would
+    # rewrite the developer's own ~/.stonksmith/stonksmith.conf. Nothing here is
+    # about the sheet.
+    with patch("modules.ally_module.sync", return_value=True):
+        module.on_login(context, connection)
+
     return connection, context
 
 

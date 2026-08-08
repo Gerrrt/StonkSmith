@@ -100,10 +100,10 @@ class Schwab529ModuleDbContractTests(unittest.TestCase):
         resp.text = '<div id="txHistDiv">transactions</div>'
         return resp
 
-    @patch("modules.schwab529plan_module.Saver")
+    @patch("modules.schwab529plan_module.sync")
     @patch("modules.schwab529plan_module.Parser")
     def test_on_login_saves_balances_with_valid_db_contract(
-        self, MockParser: MagicMock, MockSaver: MagicMock
+        self, MockParser: MagicMock, mock_sync: MagicMock
     ) -> None:
         parser_inst = MockParser.return_value
         parser_inst.beneficiary_data.return_value = []
@@ -112,11 +112,6 @@ class Schwab529ModuleDbContractTests(unittest.TestCase):
         ]
         parser_inst.investment_data.return_value = []
         parser_inst.transaction_data.return_value = []
-
-        MockSaver.return_value.save_beneficiary = MagicMock()
-        MockSaver.return_value.save_balance = MagicMock()
-        MockSaver.return_value.save_investment = MagicMock()
-        MockSaver.return_value.save_transactions = MagicMock()
 
         db = _StubDb()
         ctx = _make_on_login_context(db=db)
@@ -130,10 +125,10 @@ class Schwab529ModuleDbContractTests(unittest.TestCase):
         self.assertEqual(account_name, "529 Balance")
         self.assertEqual(balance, "1000.00")
 
-    @patch("modules.schwab529plan_module.Saver")
+    @patch("modules.schwab529plan_module.sync")
     @patch("modules.schwab529plan_module.Parser")
     def test_on_login_fails_cleanly_when_db_missing_save_account_data(
-        self, MockParser: MagicMock, MockSaver: MagicMock
+        self, MockParser: MagicMock, mock_sync: MagicMock
     ) -> None:
         parser_inst = MockParser.return_value
         parser_inst.beneficiary_data.return_value = []
@@ -142,11 +137,6 @@ class Schwab529ModuleDbContractTests(unittest.TestCase):
         ]
         parser_inst.investment_data.return_value = []
         parser_inst.transaction_data.return_value = []
-
-        MockSaver.return_value.save_beneficiary = MagicMock()
-        MockSaver.return_value.save_balance = MagicMock()
-        MockSaver.return_value.save_investment = MagicMock()
-        MockSaver.return_value.save_transactions = MagicMock()
 
         db = _StubDbNoSave()
         ctx = _make_on_login_context(db=db)

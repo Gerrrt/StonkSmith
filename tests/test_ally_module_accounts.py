@@ -20,7 +20,7 @@ from unittest.mock import MagicMock
 
 from bs4 import BeautifulSoup
 
-from modules.ally_module import AllyModule, holding_rows
+from modules.ally_module import AllyModule
 
 FIXTURE = Path(__file__).resolve().parents[0] / "ally_holdings.html"
 
@@ -295,19 +295,24 @@ class EmptyPageTests(unittest.TestCase):
         self.assertEqual(rows, [])
 
 
-class HoldingRowTests(unittest.TestCase):
-    def test_positions_carry_the_account_they_belong_to(self) -> None:
+class HoldingRecordTests(unittest.TestCase):
+    """What positions carry now that nothing formats them into a tab.
+
+    This used to assert a worksheet row, down to "$1,500.00" in a Value cell.
+    The row builder is gone and so is the formatting -- a Holding carries the
+    number, and the sheet writer puts the number in the cell. What is left worth
+    pinning is that the position reaches its own account with its symbol and its
+    value intact, which is what the database is handed.
+    """
+
+    def test_a_position_reaches_its_account_with_its_numbers(self) -> None:
         rows, _context = _scrape(soup=_page())
-        sheet_rows = holding_rows(
-            account=rows[0]["Account"], positions=rows[0]["Holdings"]
-        )
+        held = rows[0]["Holdings"][0]
 
-        self.assertEqual(sheet_rows[0]["Account"], "Brokerage (...0111)")
-        self.assertEqual(sheet_rows[0]["Symbol"], "EXMPL")
-        self.assertEqual(sheet_rows[0]["Value"], "$1,500.00")
-
-    def test_an_account_with_no_positions_contributes_no_rows(self) -> None:
-        self.assertEqual(holding_rows(account="Roth IRA (...0333)", positions=[]), [])
+        self.assertEqual(rows[0]["Account"], "Brokerage (...0111)")
+        self.assertEqual(held.symbol, "EXMPL")
+        self.assertEqual(held.value, 1500.0)
+        self.assertIsInstance(held.value, float)
 
 
 if __name__ == "__main__":

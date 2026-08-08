@@ -50,6 +50,7 @@ StonkSmith/
 |    |--- main.py            # CLI entry point
 |    |--- etc/               # config, logging, connection, shells, paths,
 |    |                       #   records, database, the canonical row shape
+|    |                       #   and the one thing that writes it to a sheet
 |    |--- brokers/           # one package per broker (broker.py + helpers)
 |    |--- modules/           # per-broker scrape/sync modules
 |    |--- loaders/           # dynamic broker and module loading
@@ -61,7 +62,7 @@ StonkSmith/
 
 Each broker is one package. `brokers/<name>/broker.py` holds the login class and
 publishes it as `Broker`, alongside `database.py`, `db_navigator.py`,
-`broker_args.py` and any `parser.py` / `saver.py`. A directory containing
+`broker_args.py` and any `parser.py`. A directory containing
 `broker.py` *is* a broker — that is how `BrokerLoader` discovers them, scanning
 `src/brokers/` first and then `~/.stonksmith/brokers/`. Everything except
 `broker.py` is optional; a broker without `database.py` and `db_navigator.py` is
@@ -83,9 +84,9 @@ Not every broker has been run against a real account. **Ally now has** — its
 sign-in, holdings parse and database write are verified, and its session was
 found not to survive between runs at all, so it needs `--manual-login` every
 time. TSP has in part: its parsers, its arithmetic and its price download are
-verified against real data, but its database write and its worksheet are not. Green tests say the
-code does what it was written to do, which is not the same as saying the site
-still looks the way it did when the parser was written.
+verified against real data, but its database write and the sheet it feeds are
+not. Green tests say the code does what it was written to do, which is not the
+same as saying the site still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
 gives the procedure for the rest.
 
@@ -338,9 +339,9 @@ connection health and account names but never balances.
 #### Adding a second brokerage
 
 Linking Schwab alongside Fidelity adds **no** broker, **no** module, **no**
-database and **no** worksheet tab. One `snaptrade` broker, one `snaptrade.db`,
-one `SnapTrade` sheet; the `Brokerage` column tells them apart. Anything
-SnapTrade covers is an operator action rather than a code change.
+database and **no** worksheet tab. One `snaptrade` broker, one `snaptrade.db`;
+on the sheet the `Source` column tells them apart. Anything SnapTrade covers is
+an operator action rather than a code change.
 
 ```bash
 uv run python scripts/snaptrade_register.py link --broker SCHWAB
@@ -366,7 +367,7 @@ SnapTrade's initial holdings sync is not instant, and an account with no
 finished sync has no balance worth recording. `status` shows a timestamp
 instead of `never` once it lands. That is the guard working, not a bug.
 
-Then sync, after creating a `SnapTrade` tab in the dashboard spreadsheet:
+Then sync:
 
 ```bash
 uv run stonksmith snaptrade -M snaptrade
@@ -383,9 +384,14 @@ archived or paper accounts, and liabilities such as credit cards. Override with
 SnapTrade covers whole brokerages, so it will happily report an account a
 dedicated broker already scrapes — a Schwab-held 529 that `schwab529plan`
 covers, or the Fidelity accounts behind the `fidelity` scraper. Both sources
-write, into two databases and two tabs. Nothing here adds the tabs together, so
-no stored data is wrong; a dashboard total that sums them counts that money
-twice and says nothing.
+write, into two databases and onto the `Accounts` tab twice. No stored data is
+wrong — but the tab now has a total on it, and that total counts the money twice
+and says nothing.
+
+That is materially worse than it was. The two brokers used to write separate
+tabs, so double-counting took a deliberate act of addition. One `Accounts` tab
+adds them by default, which moves `exclude_accounts` from advisable to
+necessary.
 
 Pick one owner per account. Where SnapTrade is the better source — Fidelity,
 which it takes from attended to unattended — simply stop running the other
@@ -518,15 +524,16 @@ bounded by one contribution, it corrects itself at the next statement, and it
 is stated rather than hidden — which is the whole reason this broker values the
 account instead of refusing to.
 
-Sheets needs a `TSP` tab in the dashboard spreadsheet, created by hand as every
-broker's tab is. Without it the run prints `TSP mark saved locally; the
-dashboard was not updated.` and still exits 0 — the database write has already
-happened, and Sheets is a view of it. That message means the tab is missing,
-not that the broker failed.
+Sheets needs no tab prepared: StonkSmith creates `Accounts`, `Holdings` and
+`Dashboard` itself on the first sync. If the sheet cannot be written at all — no
+spreadsheet, no authorization, or a tab that turns out not to be StonkSmith's —
+the run prints `TSP mark saved locally; the dashboard was not updated.` and still
+exits 0, because the database write has already happened and Sheets is a view of
+it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write and the worksheet have not been run;
+reports. The database write and the sheet have not been run;
 `docs/live-verification.md` has the procedure and one trap worth knowing about
 first — a statement's fund is read and logged but not carried into the mark,
 so a statement for one fund with another configured values the wrong one.
@@ -602,24 +609,89 @@ than starting over. It runs once and reports how many rows it moved.
 
 ### The sheet is output
 
-**Broker tabs are machine-owned. Nothing hand-written ever lives on one.**
+**StonkSmith owns three tabs, and refuses to touch anything else.**
 
-Every saver calls `worksheet.clear()` before it writes. That is correct
-behaviour — the tab is a rendering of the database, and a stale row left behind
-would be a number that no longer has a source. But it means a note, an
-override, a formula or a column you added to a broker tab is gone at the next
-sync. Not flagged, not backed up, not recoverable: the sync had no idea it was
-there, so it reports success, because from its side nothing went wrong.
+The three are `Accounts`, `Holdings` and `Dashboard`. They are created on the
+first sync if they are not there — you no longer add tabs by hand — and each is
+cleared and rewritten in full every run. A note, an override, a formula or a
+column you add to one of them is gone at the next sync.
 
-This is written down rather than left as a convention because that is the worst
-shape a failure can take — silent, total, and indistinguishable from things
-working.
+That used to be a convention, which is not what stops a sync from clearing a tab
+you kept notes on. It is now a refusal. The first cell of each tab carries a
+banner saying what the tab is, and **before clearing, StonkSmith reads that cell
+back.** A tab that carries the banner is its own. A tab that is empty is adopted.
+A tab with anything else on it is refused by name and nothing is written:
 
-So: the five broker tabs (`Fidelity`, `SnapTrade`, `TSP`, `Ally`, `529 Plan`)
-are output. They are allowed to stay ugly. Anything you want to keep — your own
-notes, targets, allocations, a chart, arithmetic of your own — goes on a tab
-StonkSmith never opens, and pulls what it needs across with a formula. A tab is
-only ever touched if some broker names it, so any tab you invent is safe.
+```
+[-] Google Sheets sync skipped: Tab 'Holdings' holds something StonkSmith did
+    not write, so it was left untouched and nothing was synced. StonkSmith
+    rewrites this tab from scratch every run and would have lost whatever is on
+    it. Move your work to a tab of your own, empty this one to hand it over, or
+    delete it and let the next sync recreate it.
+```
+
+The run still exits 0. The scrape is already in the database by the time the
+sheet is written, so a refusal is a report and not a failure — the same as Sheets
+being unreachable.
+
+The check is deliberately not just "is the first cell blank". Every tab
+StonkSmith used to write left the first cell blank and started its headers on row
+2, so a blank first cell is exactly the shape a leftover layout has — and exactly
+the shape your own tab has if you started below the top row. When the first cell
+does not carry the banner, the whole tab is read before anything is decided. That
+costs one extra request, on the first sync of a tab and no other.
+
+So: anything you want to keep — notes, targets, allocations, a chart, arithmetic
+of your own — goes on a tab of your own, and pulls what it needs across with a
+formula. Only those three names are ever opened, so any other tab is safe, and
+one you name `Accounts` by accident is refused rather than eaten.
+
+**Formatting survives.** `clear()` empties values, not number formats. Format the
+`Value` column as currency once and every sync keeps it.
+
+**A sync is workspace-wide.** Running one broker rewrites every broker's rows,
+because all three tabs are rendered from every database in the workspace rather
+than from the run that happened to trigger them. Reading a database also applies
+any pending migrations to it, so syncing one broker upgrades the rest — see
+[Upgrading an existing database](#what-is-stored) above.
+
+#### The five old tabs
+
+`Fidelity`, `SnapTrade`, `TSP`, `Ally` and `529 Plan` are no longer written or
+read. They are frozen at whatever the last sync left on them.
+
+StonkSmith will not delete them, on principle: it does not touch tabs it did not
+write this way, and a change that opened by deleting five tabs would break that
+promise on its first day. Delete them yourself once you have moved anything off
+them you want.
+
+One thing left the sheet with them, and is worth knowing: **529 transactions are
+no longer on any tab.** The row contract has two shapes, accounts and holdings,
+and no transaction shape. Inventing one here would repeat the mistake the
+contract was written to fix. They are still in the database, and still reachable
+through `stonksmithdb` with `show transactions` and `export transactions`.
+
+Two columns also went, for the same reason in different strengths. Ally's
+`Total G/L` and `Today's G/L` were never stored, so losing them from the sheet is
+just what "the sheet is a view of the database" means. TSP's `Units as of` **is**
+stored — but in `holdings.raw_value`, which means "the value exactly as the
+source wrote it" for every other broker, so surfacing it as a shared column would
+put two meanings in one column. It needs a field of its own, which is a schema
+change and separate work.
+
+#### Refreshing without scraping
+
+```
+$ uv run stonksmithdb
+stonksmithdb (default) > sheet
+[*] Refreshed: 6 accounts, 23 holdings from ally, fidelity, snaptrade, tsp.
+```
+
+Rebuilds all three tabs from the current workspace's databases, with no login
+anywhere. This is what to reach for after a refused tab or a "the dashboard was
+not updated" line: the sheet is a view of the databases, so it can be rebuilt
+from them alone, and re-scraping Ally or Fidelity to fix a spreadsheet means
+sitting at a sign-in page for no reason.
 
 ### What a tab may promise
 
@@ -677,8 +749,42 @@ sum of its positions are different numbers — uninvested cash sits in the balan
 and in no holding. One table doing both would understate every account holding
 cash while looking like it totalled correctly.
 
-Nothing writes these to the sheet yet; the shape is settled first, because
-formatting is cheap to redo and a column contract is not.
+`src/etc/portfolio_sheet.py` is the only thing that writes them: one read of the
+workspace, one authorization, three tabs. Values go up raw, so a number arrives
+as a number — and so an account whose display name begins with `=` stays a name
+instead of becoming a formula the spreadsheet runs.
+
+#### What the dashboard shows
+
+`Dashboard` is formulas over `Accounts!` and `Holdings!` ranges rather than a
+third copy of the data. That is where the append-only rule stops being a slogan:
+a formula addresses a column by its position, so a column added at the end costs
+nothing and a column inserted in the middle would repoint every one of them at
+its neighbour. None of them contains a typed column letter — every reference is
+derived from the tuples above, so the letters cannot drift away from the contract.
+
+- **Total (USD)**, summed on the `Currency` column rather than over every `Value`.
+  `Portfolio.total()` refuses to add a dollar to a euro; the sheet must not do
+  quietly what the code declines to do loudly. **Other currencies present** names
+  whatever the total therefore left out.
+- **Total as read**, the same number computed in Python over the databases,
+  sitting beside the one Sheets computed over the cells. They disagree only if
+  the write was truncated or a row failed to land, which is otherwise invisible.
+- **Accounts** and **Holdings**, counted on `Account Key` rather than `Account`:
+  the key is never blank, a display name can be.
+- **Holdings total** and **In accounts, not in positions** — the second is the
+  money sitting in a balance and in no position, which is the whole reason there
+  are two row shapes. A negative number there means something is double-counted.
+- **Newest** and **oldest scrape**, and a **staleness** table of accounts whose
+  `As Of` is missing or more than a week old. A number with no as-of date lies to
+  you; this is where it says so.
+- Subtotals **by broker** and **by source**.
+- **Not read** — one row per database that would not open, with the reason. A
+  total short by a whole broker looks perfectly reasonable, so it is stated on the
+  same tab as the total rather than only in the run's output.
+
+If every database fails to read, nothing is written at all. Clearing the tabs
+there would replace a correct sheet with a blank one and report success for it.
 
 ---
 

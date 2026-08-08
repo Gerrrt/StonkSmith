@@ -8,13 +8,12 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, ClassVar
 
-from brokers.tsp.saver import Saver
 from etc.config import get_tsp_units
 from etc.connection import Connection
 from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from etc.portfolio_sheet import sync
 from etc.records import AccountIdentity, Holding
-from helpers.normalize import format_amount, format_units
-from helpers.sheets import SheetsUnavailable
+from helpers.normalize import format_units
 from helpers.tsp import (
     CLOSING_UNITS_LABEL,
     UNIT_PRICE_LABEL,
@@ -548,16 +547,6 @@ class TspModule:
             )
         )
 
-        row: dict[str, Any] = {
-            "Fund": fund,
-            "Units": format_units(units),
-            "Units as of": as_of or "unknown",
-            "Share price": f"{price:,.4f}",
-            "Price date": price_date.isoformat(),
-            "Value": format_amount(value, "USD"),
-            "Basis": source,
-        }
-
         db_ok: bool = self.save(
             context=context,
             fund=fund,
@@ -567,7 +556,7 @@ class TspModule:
             price_date=price_date,
             as_of=as_of,
         )
-        sheets_ok: bool = self.sync(context=context, rows=[row])
+        sheets_ok: bool = sync(context=context)
 
         if db_ok and sheets_ok:
             context.log.success(msg="TSP sync complete.")
@@ -697,30 +686,3 @@ class TspModule:
             "save_account_data. Skipping DB save.",
         )
         return False
-
-    @staticmethod
-    def sync(context: Context, rows: list[dict[str, Any]]) -> bool:
-        """Push the mark to Google Sheets.
-
-        Args:
-            context (Context): Used for logging.
-            rows (list[dict[str, Any]]): Worksheet rows.
-
-        Returns:
-            bool: False when the dashboard was not updated.
-
-        """
-        try:
-            context.log.highlight(msg="Syncing data to Google Sheets...")
-            Saver().save_accounts(data=rows)
-            context.log.success(msg="Google Sheets updated successfully!")
-            return True
-
-        except SheetsUnavailable as e:
-            context.log.fail(msg=f"Google Sheets sync skipped: {e}")
-            return False
-
-        except Exception as e:
-            # Broad on purpose: the mark is already in the broker database.
-            context.log.fail(msg=f"Google Sheets sync failed: {e}")
-            return False

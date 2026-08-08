@@ -18,6 +18,9 @@ REPO = Path(__file__).resolve().parents[1]
 
 IMPORT_EVERYTHING = (
     "import etc.paths, etc.config, etc.connection, etc.stonksmithdb, "
+    # Imported by all five modules on every run, and it pulls gspread and
+    # google-auth in behind it. Neither may reach for a token at import.
+    "etc.portfolio, etc.portfolio_sheet, "
     "loaders.moduleloader, loaders.brokerloader, main; print('ok')"
 )
 

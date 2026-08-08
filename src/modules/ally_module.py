@@ -10,7 +10,6 @@ from typing import Any, ClassVar
 from bs4 import BeautifulSoup
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-from brokers.ally.saver import Saver
 from etc.connection import Connection
 from etc.context import (
     BrokerDbProtocol,
@@ -18,6 +17,7 @@ from etc.context import (
     SnapshotDbProtocol,
     SnapshotReadDbProtocol,
 )
+from etc.portfolio_sheet import sync
 from etc.records import AccountIdentity, Holding
 from helpers.ally import (
     INVESTMENT_KIND,
@@ -32,7 +32,6 @@ from helpers.ally import (
 )
 from helpers.normalize import format_amount, format_units, to_amount, to_currency
 from helpers.quotes import QuotesUnavailable, daily_closes, repriced
-from helpers.sheets import SheetsUnavailable
 
 #: The account-value block above the holdings table. Waited for rather than the
 #: table itself, because an account with no positions renders the block and an
@@ -103,31 +102,6 @@ def capture_holdings(connection: Connection, reason: str = "no-holdings") -> str
 
     saved = capture(reason=reason)
     return str(object=saved) if saved else None
-
-
-def holding_rows(account: str, positions: list[Holding]) -> list[dict[str, Any]]:
-    """Build the worksheet rows for one account's positions.
-
-    Args:
-        account (str): The account label the positions belong to.
-        positions (list[Holding]): The parsed positions.
-
-    Returns:
-        list[dict[str, Any]]: One dict per position, keyed by worksheet header.
-
-    """
-    return [
-        {
-            "Account": account,
-            "Symbol": holding.symbol,
-            "Description": holding.name,
-            "Units": format_units(holding.units),
-            "Price": format_amount(holding.price, holding.currency),
-            "Cost Basis": format_amount(holding.cost_basis, holding.currency),
-            "Value": format_amount(holding.value, holding.currency),
-        }
-        for holding in positions
-    ]
 
 
 class AllyModule:
@@ -518,32 +492,7 @@ class AllyModule:
             db_ok = False
 
         # 3. Sync to Google Sheets
-        sheets_ok: bool = True
-
-        try:
-            context.log.highlight(msg="Syncing data to Google Sheets...")
-            saver = Saver()
-            saver.save_accounts(data=accounts)
-            saver.save_holdings(
-                data=[
-                    row
-                    for account in accounts
-                    for row in holding_rows(
-                        account=account["Account"],
-                        positions=list(account.get("Holdings") or ()),
-                    )
-                ]
-            )
-            context.log.success(msg="Google Sheets updated successfully!")
-
-        except SheetsUnavailable as e:
-            context.log.fail(msg=f"Google Sheets sync skipped: {e}")
-            sheets_ok = False
-
-        except Exception as e:
-            # Broad on purpose: the balances are already in the broker database.
-            context.log.fail(msg=f"Google Sheets sync failed: {e}")
-            sheets_ok = False
+        sheets_ok: bool = sync(context=context)
 
         # By here the run may have held two sessions: the saved one, if the
         # session check rejected it, and the one the operator's sign-in

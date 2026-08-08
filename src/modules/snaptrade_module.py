@@ -32,12 +32,11 @@ import datetime
 import re
 from typing import Any, ClassVar
 
-from brokers.snaptrade.saver import Saver
 from etc.connection import Connection
 from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from etc.portfolio_sheet import sync
 from etc.records import AccountIdentity, Holding, Transaction
 from helpers.normalize import format_amount, to_amount, to_iso_date
-from helpers.sheets import SheetsUnavailable
 
 #: Account categories that are debts rather than holdings. Excluded by default
 #: and opted back in with --include-liabilities.
@@ -742,49 +741,6 @@ class SnapTradeModule:
 
         return [activity_transaction(activity=activity) for activity in activities]
 
-    @staticmethod
-    def sheet_rows(
-        db: BrokerDbProtocol, rows: list[dict[str, str]]
-    ) -> list[dict[str, Any]]:
-        """
-        What to put on the worksheet: what the database now holds.
-
-        Reading it back rather than reusing the scraped rows is the point of the
-        tab being a view. The sheet is cleared and rewritten every run, so
-        sourcing it from the database means it shows the stored truth -- and
-        would show it even for an account this particular run did not refresh.
-        :param db: The broker database
-        :param rows: This run's selected accounts, used when the database
-            cannot answer
-        :return: Rows in the worksheet's column order
-        :rtype: list[dict[str, Any]]
-        """
-
-        read = getattr(db, "get_latest_snapshots", None)
-
-        if not callable(read):
-            return list(rows)
-
-        return [
-            {
-                "Brokerage": source,
-                "Account": display_name,
-                "Balance": format_amount(value, currency),
-                "Category": kind or "",
-                "Synced": as_of or scraped_at or "",
-            }
-            for (
-                _snapshot_id,
-                source,
-                display_name,
-                value,
-                currency,
-                as_of,
-                scraped_at,
-                kind,
-            ) in read()
-        ]
-
     def on_login(self, context: Context, connection: Connection) -> bool:
         """
         Fetch, filter and persist every connected brokerage's balances.
@@ -887,21 +843,7 @@ class SnapTradeModule:
             )
             db_ok = False
 
-        sheets_ok: bool = True
-
-        try:
-            context.log.highlight(msg="Syncing data to Google Sheets...")
-            Saver().save_accounts(data=self.sheet_rows(db=db, rows=rows))
-            context.log.success(msg="Google Sheets updated successfully!")
-
-        except SheetsUnavailable as e:
-            context.log.fail(msg=f"Google Sheets sync skipped: {e}")
-            sheets_ok = False
-
-        except Exception as e:
-            # Broad on purpose: the balances are already in the broker database.
-            context.log.fail(msg=f"Google Sheets sync failed: {e}")
-            sheets_ok = False
+        sheets_ok: bool = sync(context=context)
 
         if db_ok and sheets_ok:
             context.log.success(msg="SnapTrade sync complete.")

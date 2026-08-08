@@ -22,7 +22,7 @@ afterwards, which is what makes them worse than an empty table and a message.
 
 import unittest
 from typing import Any, ClassVar
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from etc.context import Context, SnapshotDbProtocol
 from etc.records import AccountIdentity, Holding, Transaction
@@ -146,7 +146,11 @@ class FidelityWriteTests(unittest.TestCase):
 
         module.scrape_accounts = lambda page, context: list(self.ACCOUNTS)  # type: ignore[method-assign]
 
-        return module.on_login(context=context, connection=connection)
+        # Stubbed for the same reason as elsewhere: the sheet sync reads the
+        # configured workspace to know which databases to render, and letting it
+        # would rewrite the developer's own config. This is about the snapshot.
+        with patch("modules.fidelity_module.sync", return_value=True):
+            return module.on_login(context=context, connection=connection)
 
     def test_a_snapshot_database_receives_a_number_not_a_string(self) -> None:
         db = _SnapshotDb()
