@@ -25,6 +25,14 @@ DEFAULT_HOST_INFO_COLORS: tuple[str, ...] = ("green", "red", "yellow", "cyan")
 #: serves.
 DEFAULT_TSP_PRICE_URL = "https://www.tsp.gov/data/fund-price-history.csv"
 
+#: Where DFAS publishes the military basic pay tables. The four grade families
+#: hang off this as path segments -- see helpers.dfas.TABLE_PATHS -- so a move
+#: only invalidates the base, which is what makes one overridable URL enough to
+#: fix all four without a release.
+DEFAULT_DFAS_PAY_URL = (
+    "https://www.dfas.mil/Military-Members/payentitlements/Pay-Tables/Basic-Pay/"
+)
+
 _config: configparser.ConfigParser | None = None
 
 
@@ -298,3 +306,110 @@ def get_tsp_price_url() -> str:
     )
 
     return configured or DEFAULT_TSP_PRICE_URL
+
+
+def get_tsp_rank() -> str:
+    """
+    The member's pay grade, which picks a row out of the DFAS pay tables.
+
+    Returned as written rather than validated here. helpers.dfas.normalize_grade
+    owns what a grade may look like, and it is the broker that has to report an
+    unusable one -- a getter that quietly returned "" for "Sergeant" would leave
+    the run saying no rank was configured when one plainly was.
+    :return: The grade as configured, or "" when unset
+    :rtype: str
+    """
+
+    return get_config().get(section="TSP", option="rank", fallback="").strip()
+
+
+def get_tsp_basd() -> str:
+    """
+    Basic Active Service Date, from which time in service is counted.
+
+    A string, not a date, for the same reason units_as_of is one: a caller that
+    parses it can say "Unreadable basd 'Jan 5 2019'; expected YYYY-MM-DD", where
+    a getter returning None cannot tell a typo from an empty line.
+    :return: The date as written, or "" when unset
+    :rtype: str
+    """
+
+    return get_config().get(section="TSP", option="basd", fallback="").strip()
+
+
+def get_tsp_contributions() -> tuple[float | None, float | None]:
+    """
+    What share of basic pay the member and their agency contribute.
+
+    Percentages, because that is what a member elects and what an agency match
+    is expressed as -- and because it needs no LES to know. Both, always: they
+    buy units together each month and reporting one without the other would
+    understate the account by exactly the other one.
+
+    A malformed figure is None rather than 0.0, the same rule get_tsp_units()
+    follows. A typo must not read as "contributed nothing", which values the
+    accrual at zero and looks like a real answer.
+    :return: (member percent, agency percent); either is None when unset or
+        unreadable
+    :rtype: tuple[float | None, float | None]
+    """
+
+    config = get_config()
+
+    def percent(option: str) -> float | None:
+        raw: str = config.get(section="TSP", option=option, fallback="").strip()
+
+        try:
+            return float(raw.rstrip("%")) if raw else None
+
+        except ValueError:
+            return None
+
+    return percent(option="member_contribution"), percent(option="agency_contribution")
+
+
+def get_tsp_contribution_day() -> int | None:
+    """
+    Which day of the month a contribution posts.
+
+    Configurable because when the money lands is a fact about the member's pay
+    cycle rather than about TSP, and because the price it buys at is the price
+    on that day. Blank means the last day of the month, which is what the
+    accrual uses when this is unset.
+
+    A day past the end of a short month is clamped by the caller rather than
+    refused here, so "31" is a usable answer in February.
+    :return: A day of the month, or None when unset or unreadable
+    :rtype: int | None
+    """
+
+    raw: str = (
+        get_config().get(section="TSP", option="contribution_day", fallback="").strip()
+    )
+
+    try:
+        day = int(raw) if raw else None
+
+    except ValueError:
+        return None
+
+    return day if day is None or 1 <= day <= 31 else None
+
+
+def get_tsp_pay_table_url() -> str:
+    """
+    Where the published basic pay tables live.
+
+    Overridable for the same reason price_url is: this is a URL on somebody
+    else's site, and a config line is fixable without waiting for a release.
+    Blank counts as unset rather than as "download nothing", so an install that
+    backfilled an empty line still picks the default up.
+    :return: The configured base URL, or the published default when unset
+    :rtype: str
+    """
+
+    configured: str = (
+        get_config().get(section="TSP", option="pay_table_url", fallback="").strip()
+    )
+
+    return configured or DEFAULT_DFAS_PAY_URL

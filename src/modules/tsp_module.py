@@ -3,16 +3,19 @@
 
 """Module to value a TSP account from published share prices and a unit count."""
 
+import calendar
 import datetime as dt
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
-from etc.config import get_tsp_units
+from etc.config import get_tsp_contribution_day, get_tsp_contributions, get_tsp_units
 from etc.connection import Connection
 from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
 from etc.portfolio_sheet import sync
 from etc.records import AccountIdentity, Holding
+from helpers.dfas import band_on, monthly_basic_pay
 from helpers.normalize import format_units
 from helpers.tsp import (
     CLOSING_UNITS_LABEL,
@@ -51,6 +54,141 @@ UNIT_PRINT_STEP = 0.001
 #: between business days; past that, the price file is stale rather than the
 #: market closed, and dividing by an old price invents units.
 BALANCE_PRICE_GAP_DAYS = 4
+
+
+@dataclass(frozen=True, slots=True)
+class Accrual:
+    """One month's estimated contribution, and everything it was derived from.
+
+    Kept whole rather than summed on the spot so the run can print its working.
+    A single "12.04 units" is unauditable; the same number beside the pay grade,
+    the service band, the basic pay, the dollars and the price that bought them
+    can be checked against a pay table and an LES in about a minute, which is
+    what makes an estimate usable rather than merely present.
+    """
+
+    posted_on: dt.date
+    band: str
+    basic_pay: float
+    dollars: float
+    price: float
+    price_date: dt.date
+    units: float
+
+
+def posting_dates(start: dt.date, end: dt.date, day: int | None) -> list[dt.date]:
+    """Every date a contribution posted over a window.
+
+    One per month, strictly after ``start`` and on or before ``end``. Strictly
+    after, because ``start`` is the date the unit count was already true: a
+    contribution that posted that day is in the count, and counting it again is
+    the one error this whole path exists to avoid.
+
+    A day past the end of a short month is clamped to that month's last day, so
+    a member paid on the 31st still accrues in February rather than skipping it.
+
+    Args:
+        start (dt.date): The date the anchoring unit count was true.
+        end (dt.date): The run date.
+        day (int | None): Day of the month a contribution posts; None means the
+        last day of each month.
+
+    Returns:
+        list[dt.date]: The posting dates, in order.
+
+    """
+    dates: list[dt.date] = []
+    year, month = start.year, start.month
+
+    while (year, month) <= (end.year, end.month):
+        last: int = calendar.monthrange(year, month)[1]
+        when = dt.date(year, month, min(day or last, last))
+
+        if start < when <= end:
+            dates.append(when)
+
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+
+    return dates
+
+
+def accrue_units(
+    prices: dict[dt.date, dict[str, float]],
+    fund: str,
+    table: dict[str, dict[str, float]],
+    grade: str,
+    basd: dt.date,
+    percent: float,
+    dates: list[dt.date],
+) -> tuple[list[Accrual], list[str]]:
+    """Turn a run of posting dates into the units they bought.
+
+    Each month is priced on its own terms. Time in service is recomputed at
+    every posting date rather than once for the window, because a member who
+    crosses a pay band mid-quarter is paid two different rates over it and a
+    single lookup would apply the wrong one to half the months.
+
+    Anything that cannot be priced is skipped and *said*, never treated as a
+    month with no contribution in it. A silent zero is indistinguishable from a
+    month the member genuinely did not contribute, and it understates the
+    account by exactly the amount nobody was told about.
+
+    Args:
+        prices (dict[dt.date, dict[str, float]]): The parsed price file.
+        fund (str): The fund the contributions buy into.
+        table (dict[str, dict[str, float]]): A parsed DFAS pay table.
+        grade (str): The canonical pay grade.
+        basd (dt.date): Basic Active Service Date.
+        percent (float): Member and agency percentages, added together.
+        dates (list[dt.date]): The posting dates to price.
+
+    Returns:
+        tuple[list[Accrual], list[str]]: One record per month that could be
+        priced, and one note per month that could not.
+
+    """
+    accruals: list[Accrual] = []
+    notes: list[str] = []
+
+    for when in dates:
+        pay: float | None = monthly_basic_pay(
+            table=table, grade=grade, basd=basd, day=when
+        )
+
+        if pay is None:
+            notes.append(
+                f"DFAS publishes no {grade} rate for the service band on "
+                f"{when}, so that month's contribution is not counted."
+            )
+            continue
+
+        found: tuple[dt.date, float] | None = price_on(
+            prices=prices, fund=fund, day=when
+        )
+
+        if found is None or found[1] <= 0:
+            notes.append(
+                f"No published {fund} price on or before {when}, so that "
+                "month's contribution could not be converted to units."
+            )
+            continue
+
+        price_date, price = found
+        dollars: float = pay * percent / 100
+
+        accruals.append(
+            Accrual(
+                posted_on=when,
+                band=band_on(basd=basd, day=when),
+                basic_pay=pay,
+                dollars=dollars,
+                price=price,
+                price_date=price_date,
+                units=dollars / price,
+            )
+        )
+
+    return accruals, notes
 
 
 def pdf_text(pages: Iterable[Any]) -> str:
@@ -537,24 +675,43 @@ class TspModule:
             return False
 
         price_date, price = found
-        value: float = units * price
 
         self.report(context=context, units_as_of=as_of, source=source, today=today)
+        accrued, accrued_as_of = self.accrue(
+            context=context,
+            connection=connection,
+            prices=prices,
+            fund=fund,
+            units_as_of=as_of,
+            today=today,
+        )
+        total: float = units + accrued
+        value: float = total * price
+
+        # Two shapes, because a mark with an estimate in it is a different claim
+        # from one without. Printing the same line for both would leave the
+        # estimated part visible only in the lines above it, which is exactly
+        # how a figure that is partly a guess comes to be read as arithmetic.
+        held: str = (
+            f"{format_units(units)} anchored + {format_units(accrued)} estimated "
+            f"= {format_units(total)} units"
+            if accrued
+            else f"{format_units(units)} units"
+        )
         context.log.success(
-            msg=(
-                f"{fund}: {format_units(units)} units x ${price:,.4f} "
-                f"({price_date}) = ${value:,.2f}"
-            )
+            msg=f"{fund}: {held} x ${price:,.4f} ({price_date}) = ${value:,.2f}"
         )
 
         db_ok: bool = self.save(
             context=context,
             fund=fund,
             units=units,
+            accrued=accrued,
             price=price,
             value=value,
             price_date=price_date,
             units_as_of=as_of,
+            accrued_as_of=accrued_as_of,
         )
         sheets_ok: bool = sync(context=context)
 
@@ -566,6 +723,153 @@ class TspModule:
             )
 
         return db_ok
+
+    @staticmethod
+    def accrue(
+        context: Context,
+        connection: Connection,
+        prices: dict[dt.date, dict[str, float]],
+        fund: str,
+        units_as_of: str,
+        today: dt.date,
+    ) -> tuple[float, str]:
+        """Estimate the units bought since the unit count was last true.
+
+        The gap this closes is the broker's one known inaccuracy: units move
+        when a contribution posts, contributions post monthly, and a count from
+        the last quarterly statement is short by every one of them since. Basic
+        pay is published per grade and time in service, so a member who knows
+        their grade, their service date and what fraction of pay they and their
+        agency contribute has everything needed to say what those months bought
+        -- without a login, and without an LES.
+
+        Returns zero rather than failing on every path that cannot produce an
+        estimate. The anchored mark is correct arithmetic on its own and was the
+        whole product until now; an accrual that cannot be computed must cost
+        the accrual, and say so.
+
+        Args:
+            context (Context): Logging, and the parsed CLI arguments.
+            connection (Connection): The TSP connection, carrying the pay table,
+            the canonical grade and the service date the broker validated.
+            prices (dict[dt.date, dict[str, float]]): The parsed price file.
+            fund (str): The fund the contributions buy into.
+            units_as_of (str): The date the anchoring unit count was true.
+            today (dt.date): The run date.
+
+        Returns:
+            tuple[float, str]: Estimated units accrued and the date they run
+            through -- the last contribution that could be priced, not the run
+            date, since a month that could not be priced is not in the number.
+            (0.0, "") when no estimate could be made.
+
+        """
+        table: Any = getattr(connection, "pay_table", None)
+        basd: Any = getattr(connection, "basd", None)
+        grade: Any = getattr(connection, "grade", "")
+
+        # Typed rather than merely truthy. A connection is duck-typed here --
+        # which is why every read of it goes through getattr -- so "has the
+        # attribute" says nothing about what is in it, and a broker that never
+        # loaded a pay table must reach the same answer as one that has no such
+        # attribute at all.
+        #
+        # The broker reports every reason it could not build a table, so there
+        # is nothing to add here: a second line would name the same problem
+        # twice, and the first one already says what to do about it.
+        if (
+            not isinstance(table, dict)
+            or not isinstance(basd, dt.date)
+            or not isinstance(grade, str)
+            or not grade
+        ):
+            return 0.0, ""
+
+        member, agency = get_tsp_contributions()
+
+        if member is None or agency is None:
+            return 0.0, ""
+
+        if not units_as_of:
+            context.log.highlight(
+                msg=(
+                    "Contributions cannot be accounted for without a date the "
+                    "unit count was true: there is nothing to measure the "
+                    "months since. Set units_as_of."
+                )
+            )
+            return 0.0, ""
+
+        try:
+            start: dt.date = dt.date.fromisoformat(units_as_of)
+
+        except ValueError:
+            # report() has already said the date is unreadable, in those words.
+            return 0.0, ""
+
+        dates: list[dt.date] = posting_dates(
+            start=start, end=today, day=get_tsp_contribution_day()
+        )
+
+        if not dates:
+            return 0.0, ""
+
+        accruals, notes = accrue_units(
+            prices=prices,
+            fund=fund,
+            table=table,
+            grade=grade,
+            basd=basd,
+            percent=member + agency,
+            dates=dates,
+        )
+
+        for note in notes:
+            context.log.highlight(msg=note)
+
+        effective: dt.date | None = getattr(connection, "pay_effective", None)
+        early: int = sum(1 for when in dates if effective and when < effective)
+
+        if early:
+            # Basic pay changes every 1 January and DFAS publishes only the
+            # current year, so a window reaching back over a raise is priced at
+            # rates that were not in force for part of it. Not fatal, and not
+            # worth refusing an otherwise good estimate over -- but it is the
+            # difference between an estimate and a wrong one, so it is said.
+            context.log.highlight(
+                msg=(
+                    f"{early} of {len(dates)} contribution(s) posted before the "
+                    f"pay table took effect on {effective}, so they are priced "
+                    "at rates that came in after them."
+                )
+            )
+
+        if not accruals:
+            return 0.0, ""
+
+        for one in accruals:
+            context.log.display(
+                msg=(
+                    f"  {one.posted_on}: {grade} {one.band} ${one.basic_pay:,.2f} "
+                    f"x {member + agency:g}% = ${one.dollars:,.2f} at "
+                    f"${one.price:,.4f} ({one.price_date}) = "
+                    f"{format_units(one.units)} units"
+                )
+            )
+
+        total: float = sum(one.units for one in accruals)
+        spent: float = sum(one.dollars for one in accruals)
+        context.log.success(
+            msg=(
+                f"Contributions since {units_as_of}: {len(accruals)} month(s), "
+                f"${spent:,.2f} at {member:g}% member + {agency:g}% agency "
+                f"= {format_units(total)} estimated units"
+            )
+        )
+        # Dated to the last contribution it could price, not to the run. A month
+        # that was skipped is not in the number, so saying the estimate runs
+        # through today would date it past what it actually covers.
+        return total, accruals[-1].posted_on.isoformat()
 
     @staticmethod
     def report(context: Context, units_as_of: str, source: str, today: dt.date) -> None:
@@ -620,10 +924,12 @@ class TspModule:
         context: Context,
         fund: str,
         units: float,
+        accrued: float,
         price: float,
         value: float,
         price_date: dt.date,
         units_as_of: str,
+        accrued_as_of: str = "",
     ) -> bool:
         """Write the mark to the broker database.
 
@@ -637,14 +943,24 @@ class TspModule:
         The last of those used to be called ``as_of`` here while the line below
         wrote the *price* date to the column of that name, eleven lines apart.
 
+        An estimated accrual is written as its own holding rather than added
+        into the anchored one. Two rows that sum to the account's value keep the
+        estimate visible everywhere the value is -- in the database, and on the
+        sheet, which is a view of it -- instead of leaving "how much of this is a
+        guess" answerable only from a log line nobody kept. It also means a run
+        with no accrual writes exactly the row it always wrote.
+
         Args:
             context (Context): Logging and the database.
             fund (str): The fund held.
-            units (float): Units held.
+            units (float): Units the anchoring count states.
+            accrued (float): Units estimated to have been bought since.
             price (float): Share price used.
-            value (float): The resulting mark.
+            value (float): The resulting mark, over both.
             price_date (dt.date): The date that price was published.
-            units_as_of (str): The date the unit count was true.
+            units_as_of (str): The date the anchoring unit count was true.
+            accrued_as_of (str): The date the estimate runs through, which is
+            the last contribution it could price rather than the run date.
 
         Returns:
             bool: False on a database contract violation.
@@ -653,6 +969,39 @@ class TspModule:
         timestamp: str = dt.datetime.now(tz=dt.UTC).strftime(format="%Y-%m-%d %H:%M:%S")
         db: BrokerDbProtocol = context.db
         label: str = f"TSP {fund}"
+        holdings: list[Holding] = [
+            Holding(
+                fund_code=fund,
+                name=fund,
+                units=units,
+                price=price,
+                value=units * price,
+                currency="USD",
+                # Its own column now. This used to ride in raw_value, which
+                # means "the value exactly as the source wrote it" for every
+                # other broker -- and which nothing ever read back, so the date
+                # was stored and invisible.
+                units_as_of=units_as_of or None,
+            )
+        ]
+
+        if accrued:
+            # Its own row, and its own date. The anchored count is true as of a
+            # statement; this one is true through the last contribution it could
+            # price, which is a different day and a different kind of number.
+            # Now that units_as_of exists, both rows can say which -- where
+            # before there was one column for two facts.
+            holdings.append(
+                Holding(
+                    fund_code=fund,
+                    name=f"{fund} (estimated contributions since {units_as_of})",
+                    units=accrued,
+                    price=price,
+                    value=accrued * price,
+                    currency="USD",
+                    units_as_of=accrued_as_of or None,
+                )
+            )
 
         if isinstance(db, SnapshotDbProtocol):
             db.save_snapshot(
@@ -666,21 +1015,7 @@ class TspModule:
                 value=value,
                 currency="USD",
                 raw_value=f"{value:.2f}",
-                holdings=[
-                    Holding(
-                        fund_code=fund,
-                        name=fund,
-                        units=units,
-                        price=price,
-                        value=value,
-                        currency="USD",
-                        # Its own column now. This used to ride in raw_value,
-                        # which means "the value exactly as the source wrote it"
-                        # for every other broker -- and which nothing ever read
-                        # back, so the date was stored and invisible.
-                        units_as_of=units_as_of or None,
-                    )
-                ],
+                holdings=holdings,
             )
             return True
 
