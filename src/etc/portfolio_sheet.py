@@ -361,6 +361,21 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         ["Brokers read"],
     ]
 
+    def at(label: str) -> str:
+        """
+        The cell one summary row's value sits in.
+
+        Derived rather than typed, for the same reason the column letters are:
+        the one formula here that refers to its own neighbours would otherwise
+        keep pointing at rows 3 and 7 after somebody reordered the list above,
+        and it would keep producing a number while doing it.
+        :param label: The row's label, exactly as spelled above
+        :return: A cell reference such as "B3"
+        :rtype: str
+        """
+
+        return f"B{FIRST_DATA_ROW + [row[0] for row in labels].index(label)}"
+
     values: list[list[Any]] = [
         # SUMIF on Currency rather than SUM on Value, because Portfolio.total
         # refuses to add a dollar to a euro and the sheet must not do quietly
@@ -378,7 +393,7 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         # The reason there are two row shapes at all: uninvested cash sits in a
         # balance and in no position. Negative means positions are being counted
         # twice.
-        ["=B3-B7"],
+        [f"={at(label='Total (USD)')}-{at(label='Holdings total (USD)')}"],
         # Names what the USD total left out. A USD-only total with a euro
         # account in the workspace is a wrong number that looks right.
         [

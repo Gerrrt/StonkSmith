@@ -104,6 +104,16 @@ class FormulaTests(unittest.TestCase):
         # are two row shapes at all. Negative means double-counting.
         self.assertEqual(self.by_range["B8"], [["=B3-B7"]])
 
+    def test_that_gap_points_at_its_neighbours_by_label_not_by_row(self) -> None:
+        # The one formula that refers to its own tab. Typed, it would keep
+        # naming rows 3 and 7 after somebody reordered the summary -- and keep
+        # producing a number while doing it. So the labels move it.
+        labels = [row[0] for row in cells(updates=self.literals)["A3:A12"]]
+        total: int = labels.index("Total (USD)") + 3
+        held: int = labels.index("Holdings total (USD)") + 3
+
+        self.assertEqual(self.by_range["B8"], [[f"=B{total}-B{held}"]])
+
     def test_scrape_times_are_sorted_as_text_not_maxed(self) -> None:
         # Scraped At is text under RAW, and MAX over text returns 0. The stored
         # format sorts lexicographically exactly as it sorts chronologically.
