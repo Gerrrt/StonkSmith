@@ -316,6 +316,24 @@ class WriteRowsTests(unittest.TestCase):
         self.assertEqual(data[0][1], f"A3:O{CHUNK_ROWS + 2}")
         self.assertEqual(data[1][1], f"A{CHUNK_ROWS + 3}:O{CHUNK_ROWS + 502}")
 
+    def test_a_grid_that_exactly_fits_the_write_is_not_grown(self) -> None:
+        # N data rows end on HEADER_ROW + N, because the header takes row 2 and
+        # the data starts on the row after it. Asking for FIRST_DATA_ROW + N
+        # asked for one row more than the write addresses, so a tab trimmed to
+        # exactly fit gained a spare row it never used.
+        rows = [
+            AccountRow(
+                broker="tsp", source="tsp", account=f"A{n}", account_key=f"a{n}"
+            ).cells()
+            for n in range(5)
+        ]
+        tab = owned(row_count=2 + len(rows))
+
+        write_rows(worksheet=tab, tab=ACCOUNTS_TAB, columns=ACCOUNT_COLUMNS, rows=rows)
+
+        self.assertEqual(written(worksheet=tab)[-1][1], f"A3:J{2 + len(rows)}")
+        tab.add_rows.assert_not_called()
+
     def test_the_grid_is_grown_before_the_write_not_after(self) -> None:
         tab = owned(row_count=10)
         order: list[str] = []

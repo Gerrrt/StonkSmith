@@ -97,6 +97,12 @@ CHUNK_ROWS: int = 2000
 #: dashboard rather than quietly counted at full value.
 STALE_DAYS: int = 7
 
+#: How short the dashboard's grid may be. A floor, not the answer -- the bands
+#: below the summary block spill as far as the portfolio is long, so the height
+#: is computed per sync and this only covers the case where there is nothing to
+#: spill and the summary block is the tallest thing on the tab.
+DASHBOARD_MIN_ROWS: int = 40
+
 #: Where the dashboard's bands start. Separate columns rather than separate row
 #: bands because a QUERY that would spill into an occupied cell returns #REF!
 #: and shows nothing at all -- the same reason the old Ally tab put its holdings
@@ -315,7 +321,12 @@ def write_rows(
     claim(worksheet=worksheet, tab=tab)
 
     right: str = last_column(columns=columns)
-    fit(worksheet=worksheet, rows=FIRST_DATA_ROW + len(rows), cols=len(columns))
+    # The last row actually addressed: the header sits on HEADER_ROW and the
+    # data runs from the row after it, so N rows end on HEADER_ROW + N. Asking
+    # for FIRST_DATA_ROW + N asked for one row past that -- harmless, since the
+    # grid then satisfied the request forever after, but it made this call say
+    # something slightly untrue about what the write needs.
+    fit(worksheet=worksheet, rows=HEADER_ROW + len(rows), cols=len(columns))
     worksheet.clear()
 
     worksheet.update([[BANNER]], BANNER_CELL, value_input_option="RAW")
@@ -586,7 +597,20 @@ def write_dashboard(
 
     formulas, literals = dashboard_cells(portfolio=portfolio, today=today)
 
-    fit(worksheet=worksheet, rows=40, cols=column_index(letter=UNREADABLE_COL) + 1)
+    # Every band starts on HEADER_ROW and spills downward -- the staleness query
+    # by a row per account, the unreadable block by a row per broker that would
+    # not open. A grid too short for that does not truncate the band: Sheets
+    # refuses the whole array with #REF!, so the panel whose job is to say what
+    # is stale would be the first thing to vanish from a portfolio big enough to
+    # need it. The floor is only for the empty case, where the summary block is
+    # the tallest thing on the tab.
+    spill: int = max(len(portfolio.accounts), len(portfolio.unreadable))
+
+    fit(
+        worksheet=worksheet,
+        rows=max(DASHBOARD_MIN_ROWS, HEADER_ROW + spill),
+        cols=column_index(letter=UNREADABLE_COL) + 1,
+    )
     worksheet.clear()
 
     worksheet.batch_update(literals, value_input_option="RAW")

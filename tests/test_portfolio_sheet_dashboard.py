@@ -19,6 +19,7 @@ from etc.portfolio_sheet import (
     BANNER_CELL,
     BY_BROKER_COL,
     BY_SOURCE_COL,
+    DASHBOARD_MIN_ROWS,
     STALE_DAYS,
     STALENESS_COL,
     SUMMARY_COL,
@@ -264,6 +265,43 @@ class WriteDashboardTests(unittest.TestCase):
             for call in tab.batch_update.call_args_list
         ]
         self.assertEqual(options, ["RAW", "USER_ENTERED"])
+
+    def test_a_small_portfolio_gets_the_floor(self) -> None:
+        tab = self._tab()
+        tab.row_count = 10
+
+        write_dashboard(worksheet=tab, portfolio=portfolio(), today=TODAY)
+
+        tab.add_rows.assert_called_once_with(DASHBOARD_MIN_ROWS - 10)
+
+    def test_the_grid_grows_with_the_portfolio_not_to_a_fixed_height(self) -> None:
+        # The bands spill downward, one row per account. A grid too short does
+        # not shorten the band -- Sheets refuses the whole array with #REF!, so
+        # the staleness panel disappears exactly when there is most to see. A
+        # fixed 40 rows broke silently somewhere past the 38th account.
+        many = tuple(
+            AccountRow(broker="tsp", source="tsp", account=f"A{n}", account_key=f"a{n}")
+            for n in range(60)
+        )
+        tab = self._tab()
+        tab.row_count = 40
+
+        write_dashboard(worksheet=tab, portfolio=portfolio(accounts=many), today=TODAY)
+
+        # Room for the header row plus one result row per account.
+        tab.add_rows.assert_called_once_with(62 - 40)
+
+    def test_unreadable_brokers_are_counted_in_the_height_too(self) -> None:
+        tab = self._tab()
+        tab.row_count = 10
+
+        write_dashboard(
+            worksheet=tab,
+            portfolio=portfolio(unreadable=tuple((f"b{n}", "boom") for n in range(50))),
+            today=TODAY,
+        )
+
+        tab.add_rows.assert_called_once_with(52 - 10)
 
     def test_a_dashboard_that_is_not_ours_is_refused_before_it_is_cleared(self) -> None:
         tab = self._tab()
