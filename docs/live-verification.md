@@ -40,7 +40,7 @@ remaining 7 rest on unit tests or on fixtures.*
 | Ally — holdings, totals and sidebar parse | The same nine runs; `tests/ally_holdings.html` is one redacted DOM from that same account | Yes |
 | Ally — masked sidebar number matches the full one | The same nine runs; `masked_matches("...0111", "1AB20111")` in unit tests | Yes |
 | Ally — Ally Bank deposit accounts skipped, not filed as brokerage | The same nine runs | Yes |
-| Ally — database write | The same nine runs; unit tests write to a fake DB, never to a real `ally.db` | Yes |
+| Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one | Yes |
 | Ally — one row per account across runs | `uq_accounts_broker_key`; the row count was never checked across those runs | No |
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
 | TSP — statement parser | Real statement layouts | Yes, against real files |
@@ -200,7 +200,7 @@ a balance and once with positions, they did not.
 This logic has met a real account, but exactly one. Ally account numbers are
 alphanumeric, which is why the comparison upper-cases both sides. A number with a
 lowercase letter or an unexpected separator is exactly the case that neither that
-account nor the fixture rules out.
+account nor the fixture can rule out.
 
 ### 4. More than one investment account
 
