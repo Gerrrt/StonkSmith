@@ -312,6 +312,38 @@ Two things it does not do. It does not touch the sheet — only a scrape syncs, 
 `stonksmithdb`'s `sheet` command is what refreshes the tabs afterwards. And it
 does not notice new accounts, since it values what is already on record.
 
+#### What a browser run writes down
+
+Every run that opens a browser leaves a response log in `~/.stonksmith/logs/`:
+
+```text
+[*] Recorded 25 data call(s) and 1 refusal(s) to ~/.stonksmith/logs/ally-data-calls-20260809-041200.log
+```
+
+```text
+200 https://live.invest.ally.com/api/account/<id>/activity ?endDate&jwt&pageSize&startDate (18422 bytes)
+```
+
+**Endpoints and parameter *names*; never values, bodies or headers.** A route
+called `activity` says nothing on its own. The same route taking `startDate` and
+`endDate` says it is a windowed history feed — which is the question worth
+answering, and answering it costs nothing, because a parameter name is a fact
+about the endpoint while its value is a fact about you. Long path segments stay
+masked as `<id>` and query values never appear, so the lines paste into an issue
+as they are.
+
+It used to record only on failure, and only when *not* attached — so the
+`--browser cdp` path recommended above wrote nothing at all, and a run that
+worked threw away everything it had seen. One live session was observed making
+twenty-five successful data calls and all that survives of it is the number.
+Now it is armed before either path and written on every exit, including the ones
+that end by raising or by giving up at the sign-in.
+
+This is what makes Ally's unanswered questions answerable without a dedicated
+investigation: whether an activity endpoint exists, whether it takes a date
+range, and whether it is per-account are all readable off an ordinary run you
+were doing anyway.
+
 Ally runs Akamai, Dynatrace and Transmit on that login page, so the same
 attach-to-your-own-Chrome path Fidelity documents above applies here, pointed at
 the bank:
