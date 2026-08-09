@@ -745,6 +745,17 @@ schwab529plan > export transactions ~/tx.csv
 [+] Exported 2043 transactions to ~/tx.csv
 ```
 
+**It is fewer columns as well as fewer rows.** `show transactions` leaves out
+`Description` — free text a source wrote, and the one column that can be a whole
+sentence — and says which column it dropped and where to get it. Everything else
+the `Transactions` tab shows, `show` shows too, and `export` writes all thirteen:
+
+```
+schwab529plan > show transactions
+[!] Description is too wide for a terminal and not shown; 'export transactions
+    <file>' includes it.
+```
+
 That count is not decoration. A CSV that stopped early looks exactly like a
 complete one, and nothing reading it afterwards can tell — which is the same
 failure the `Transactions` tab exists to avoid, in a file instead of a tab.
