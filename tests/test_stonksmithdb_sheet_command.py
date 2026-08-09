@@ -61,12 +61,19 @@ class SheetCommandTests(unittest.TestCase):
     def test_it_says_what_it_wrote(self) -> None:
         with patch("etc.portfolio_sheet.refresh") as refresh:
             refresh.return_value = SheetSync(
-                accounts=4, holdings=17, brokers_read=("ally", "tsp"), total=1.0
+                accounts=4,
+                holdings=17,
+                transactions=203,
+                brokers_read=("ally", "tsp"),
+                total=1.0,
             )
             printed = run(menu=shell())
 
         self.assertIn("4 accounts", printed)
         self.assertIn("17 holdings", printed)
+        # Named as well, because a count this report omits is a tab nobody
+        # checks -- and the whole point of the tab is that it holds everything.
+        self.assertIn("203 movements", printed)
         self.assertIn("ally, tsp", printed)
 
     def test_a_refused_tab_is_reported_rather_than_raised(self) -> None:

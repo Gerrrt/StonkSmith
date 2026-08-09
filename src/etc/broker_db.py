@@ -1126,11 +1126,62 @@ class BrokerDatabase:
             ") ORDER BY a.source, a.display_name, h.position"
         )
 
+    def get_current_transactions(self) -> list[tuple[Any, ...]]:
+        """
+        Every movement this database holds, keyed the way the other two are.
+
+        The third read path behind the canonical row shape (see etc.portfolio),
+        beside get_current_accounts and get_current_holdings. It carries
+        ``account_key`` rather than the display name for the same reason they
+        do: a view spanning several brokers joins on identity, and a display
+        name is explicitly not identity.
+
+        **Deliberately unlimited**, and not for the reason the other two are.
+        Theirs is that a total which silently drops its five-hundred-and-first
+        row is worse than no total; nothing totals movements. The reason here is
+        that a log is the one thing this database holds that grows without
+        bound, so a limit is the difference between a history and the newest
+        page of one -- shown with no indication that there is more. That is why
+        get_transactions below cannot back a sheet: its ``limit=500`` would
+        report the newest five hundred movements as though they were all of
+        them.
+
+        No newest-snapshot subquery, unlike the other two. Those restrict to one
+        snapshot because an account has a value per run and only the last is
+        current. A movement is not observed per run -- ``transactions.account_id``
+        points at ``accounts`` rather than at ``account_snapshots``, and the
+        natural key means re-scraping an overlapping window contributes only what
+        is new. Every stored row is current, so there is nothing to scope to.
+
+        Ordered by account and then newest-inserted first, deliberately *not* by
+        ``processed_on``. That column holds the date as the source wrote it, and
+        the sources disagree: SnapTrade normalizes to ISO while the 529 scraper
+        stores "12/30/2025", which sorts below "01/15/2026". Ordering on it here
+        would look sorted and be wrong. The dates are compared where they are
+        normalized, in etc.portfolio.
+        :return: Rows of (account_key, tx_type, symbol, description, units,
+            price, value, currency, processed_on, traded_on, first_seen,
+            external_id)
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        return self._select(
+            "SELECT a.account_key, t.tx_type, t.symbol, t.description, t.units, "
+            "t.price, t.value, t.currency, t.processed_on, t.traded_on, "
+            "t.first_seen, t.external_id FROM transactions t "
+            "JOIN accounts a ON a.id = t.account_id "
+            "ORDER BY a.source, a.display_name, t.id DESC"
+        )
+
     def get_transactions(
         self, account_id: int | None = None, limit: int = 500
     ) -> list[tuple[Any, ...]]:
         """
         List movements, newest first.
+
+        Backs ``show transactions`` and ``export transactions`` in the shell,
+        where a limit is right because a human is scrolling. Anything rendering
+        a whole history wants get_current_transactions above instead.
         :param account_id: Restrict to one account
         :param limit: How many rows at most
         :return: Rows of (id, account, processed_on, traded_on, tx_type, symbol,

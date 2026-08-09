@@ -17,6 +17,7 @@ from etc.portfolio_sheet import (
     DASHBOARD_TAB,
     HOLDINGS_TAB,
     MACHINE_OWNED_TABS,
+    TRANSACTIONS_TAB,
     claim,
 )
 from helpers.sheets import SheetNotOwned, SheetsUnavailable
@@ -182,8 +183,8 @@ class OwnershipContractTests(unittest.TestCase):
 
     def test_the_banner_is_exactly_this(self) -> None:
         # Pinned, because changing it orphans every tab already in the field:
-        # the next sync reads a first cell it does not recognise and refuses all
-        # three tabs at once. Change this only with a migration in hand.
+        # the next sync reads a first cell it does not recognise and refuses
+        # every tab at once. Change this only with a migration in hand.
         self.assertEqual(
             BANNER,
             "StonkSmith machine-owned tab. Cleared and rewritten on every sync "
@@ -191,9 +192,13 @@ class OwnershipContractTests(unittest.TestCase):
             "your own.",
         )
 
-    def test_only_three_tabs_are_ever_opened(self) -> None:
+    def test_only_these_four_tabs_are_ever_opened(self) -> None:
+        # Pinned as a tuple rather than a set: a tab added here is a tab the
+        # next sync will clear, which is the one change in this module that can
+        # cost somebody data. It should be typed out deliberately.
         self.assertEqual(
-            MACHINE_OWNED_TABS, (ACCOUNTS_TAB, HOLDINGS_TAB, DASHBOARD_TAB)
+            MACHINE_OWNED_TABS,
+            (ACCOUNTS_TAB, HOLDINGS_TAB, TRANSACTIONS_TAB, DASHBOARD_TAB),
         )
 
     def test_the_retired_broker_tabs_are_not_among_them(self) -> None:

@@ -120,11 +120,21 @@ class PortfolioDbProtocol(Protocol):
     snapshot held so a module can reprice it. This asks what every account is
     worth *now*, keyed on the identity that survives a display name changing --
     which is what a view spanning several brokers has to join on.
+
+    Widened rather than layered when transactions gained a row shape, which is
+    the opposite of what the three protocols above did. They are layered because
+    a module holds one database and asks how much of the contract it supports
+    before deciding what to write, so a database that answers less is not broken.
+    This one is consumed by exactly one reader, which needs all three answers to
+    render the sheet at all -- a "transactions optional" branch there would be a
+    fallback into the silence etc.portfolio exists to prevent.
     """
 
     def get_current_accounts(self) -> list[tuple[Any, ...]]: ...
 
     def get_current_holdings(self) -> list[tuple[Any, ...]]: ...
+
+    def get_current_transactions(self) -> list[tuple[Any, ...]]: ...
 
 
 class Context:

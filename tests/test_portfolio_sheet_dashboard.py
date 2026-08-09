@@ -109,11 +109,28 @@ class FormulaTests(unittest.TestCase):
         # The one formula that refers to its own tab. Typed, it would keep
         # naming rows 3 and 7 after somebody reordered the summary -- and keep
         # producing a number while doing it. So the labels move it.
-        labels = [row[0] for row in cells(updates=self.literals)["A3:A12"]]
+        labels = [row[0] for row in cells(updates=self.literals)["A3:A14"]]
         total: int = labels.index("Total (USD)") + 3
         held: int = labels.index("Holdings total (USD)") + 3
 
         self.assertEqual(self.by_range["B8"], [[f"=B{total}-B{held}"]])
+
+    def test_movements_are_counted_on_the_key_that_cannot_be_blank(self) -> None:
+        # Same reasoning as the two counts above: Account Key is written
+        # unwrapped, while Type and Description are both routinely empty
+        # depending on which source the movement came from.
+        self.assertEqual(self.by_range["B13"], [["=COUNTA(Transactions!$D$3:$D)"]])
+
+    def test_the_newest_movement_is_sorted_as_text_not_maxed(self) -> None:
+        # Safe only because etc.portfolio normalizes Processed On to ISO on the
+        # way out of the database. It is stored as the source wrote it, and the
+        # 529 scraper writes "12/30/2025", which sorts above "01/15/2026".
+        newest: str = self.by_range["B14"][0][0]
+
+        self.assertIn("Transactions!$L$3:$L", newest)
+        self.assertIn("SORT(", newest)
+        self.assertNotIn("MAX(", newest)
+        self.assertIn(",1,FALSE)", newest)
 
     def test_scrape_times_are_sorted_as_text_not_maxed(self) -> None:
         # Scraped At is text under RAW, and MAX over text returns 0. The stored
@@ -200,11 +217,11 @@ class LiteralTests(unittest.TestCase):
         self.assertEqual(self.by_range[BANNER_CELL], [[BANNER]])
 
     def test_the_labels_name_every_summary_row(self) -> None:
-        labels = [row[0] for row in self.by_range["A3:A12"]]
+        labels = [row[0] for row in self.by_range["A3:A14"]]
 
         self.assertEqual(labels[0], "Total (USD)")
         self.assertEqual(labels[1], "Total as read")
-        self.assertEqual(labels[-1], "Brokers read")
+        self.assertEqual(labels[-1], "Newest movement")
 
     def test_the_total_as_read_is_the_number_python_computed(self) -> None:
         # The cross-check: Python over the databases beside Sheets over the
