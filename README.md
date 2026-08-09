@@ -630,8 +630,8 @@ every January. `--pay-table` reads a page saved by hand, the way `--prices`
 does. Unlike the share price download, **this one has not been run against
 dfas.mil for real** — see `docs/live-verification.md`.
 
-Sheets needs no tab prepared: StonkSmith creates `Accounts`, `Holdings` and
-`Dashboard` itself on the first sync. If the sheet cannot be written at all — no
+Sheets needs no tab prepared: StonkSmith creates `Accounts`, `Holdings`,
+`Transactions` and `Dashboard` itself on the first sync. If the sheet cannot be written at all — no
 spreadsheet, no authorization, or a tab that turns out not to be StonkSmith's —
 the run prints `TSP mark saved locally; the dashboard was not updated.` and still
 exits 0, because the database write has already happened and Sheets is a view of
@@ -728,11 +728,11 @@ sync outright rather than quietly storing less.
 
 ### The sheet is output
 
-**StonkSmith owns three tabs, and refuses to touch anything else.**
+**StonkSmith owns four tabs, and refuses to touch anything else.**
 
-The three are `Accounts`, `Holdings` and `Dashboard`. They are created on the
-first sync if they are not there — you no longer add tabs by hand — and each is
-cleared and rewritten in full every run. A note, an override, a formula or a
+The four are `Accounts`, `Holdings`, `Transactions` and `Dashboard`. They are
+created on the first sync if they are not there — you no longer add tabs by
+hand — and each is cleared and rewritten in full every run. A note, an override, a formula or a
 column you add to one of them is gone at the next sync.
 
 That used to be a convention, which is not what stops a sync from clearing a tab
@@ -762,14 +762,14 @@ costs one extra request, on the first sync of a tab and no other.
 
 So: anything you want to keep — notes, targets, allocations, a chart, arithmetic
 of your own — goes on a tab of your own, and pulls what it needs across with a
-formula. Only those three names are ever opened, so any other tab is safe, and
+formula. Only those four names are ever opened, so any other tab is safe, and
 one you name `Accounts` by accident is refused rather than eaten.
 
 **Formatting survives.** `clear()` empties values, not number formats. Format the
 `Value` column as currency once and every sync keeps it.
 
 **A sync is workspace-wide.** Running one broker rewrites every broker's rows,
-because all three tabs are rendered from every database in the workspace rather
+because every tab is rendered from every database in the workspace rather
 than from the run that happened to trigger them. Reading a database also applies
 any pending migrations to it, so syncing one broker upgrades the rest — see
 [Upgrading an existing database](#what-is-stored) above.
@@ -784,11 +784,20 @@ write this way, and a change that opened by deleting five tabs would break that
 promise on its first day. Delete them yourself once you have moved anything off
 them you want.
 
-One thing left the sheet with them, and is worth knowing: **529 transactions are
-no longer on any tab.** The row contract has two shapes, accounts and holdings,
-and no transaction shape. Inventing one here would repeat the mistake the
-contract was written to fix. They are still in the database, and still reachable
-through `stonksmithdb` with `show transactions` and `export transactions`.
+One thing left the sheet with them and has since come back. **529 transactions
+went**, because the row contract had two shapes, accounts and holdings, and no
+transaction shape — and inventing one on the way out would have repeated the
+mistake the contract was written to fix. So the shape was argued about on its
+own and written on its own, and `Transactions` is now the third of them,
+carrying every broker's movements rather than one tab's block.
+
+Restoring the block would have been the smaller change and the wrong one, for a
+reason worth stating: the reader it would have been built on stops at five
+hundred rows. `get_transactions()` takes a `limit` because it backs a shell
+command a human is scrolling, and a tab rendered from it would have shown the
+newest five hundred movements and said nothing about the rest — a number that
+looks complete with the missing part invisible, on a tab whose whole purpose is
+history. The unlimited read came first, and the tab came after it.
 
 Ally's `Total G/L` and `Today's G/L` went too, and stayed gone: they were never
 stored, so losing them from the sheet is just what "the sheet is a view of the
@@ -808,10 +817,10 @@ eventually will.
 ```
 $ uv run stonksmithdb
 stonksmithdb (default) > sheet
-[*] Refreshed: 6 accounts, 23 holdings from ally, fidelity, snaptrade, tsp.
+[*] Refreshed: 6 accounts, 23 holdings, 412 movements from ally, fidelity, snaptrade, tsp.
 ```
 
-Rebuilds all three tabs from the current workspace's databases, with no login
+Rebuilds all four tabs from the current workspace's databases, with no login
 anywhere. This is what to reach for after a refused tab or a "the dashboard was
 not updated" line: the sheet is a view of the databases, so it can be rebuilt
 from them alone, and re-scraping Ally or Fidelity to fix a spreadsheet means
@@ -825,7 +834,7 @@ Those five tabs each grew their own layout, and nothing shared a column:
 formula pointing at `SnapTrade!D:D` broke the day a column moved.
 
 `src/etc/portfolio.py` settles that. It reads every broker database in the
-workspace and produces two row shapes, shared across all brokers:
+workspace and produces three row shapes, shared across all brokers:
 
 **Accounts** — one row per account. Summing `Value` gives the portfolio total.
 
@@ -855,11 +864,33 @@ first four columns are the same, so the two join on `Broker` + `Account Key`.
 | 13-15 | `Currency`, `As Of`, `Scraped At` | `As Of` is the account's — when the position's *value* is true |
 | 16 | `Units As Of` | when the *unit count* was true, for a source that dates the two apart |
 
+**Transactions** — one row per movement, across every broker. Not per snapshot:
+a movement is recorded once, keyed so a re-scrape of an overlapping window
+contributes only what is new, and kept. Same first four columns again.
+
+| # | Column | |
+| --- | --- | --- |
+| 1-4 | `Broker`, `Source`, `Account`, `Account Key` | as above |
+| 5 | `Type` | `Contribution`, `BUY`, `DIVIDEND` — whatever the source calls it |
+| 6-7 | `Symbol`, `Description` | filled by sources that have them; a scraped 529 table has neither |
+| 8-11 | `Units`, `Price`, `Value`, `Currency` | |
+| 12 | `Processed On` | the settlement date |
+| 13 | `Traded On` | the trade date — a different fact, routinely days apart |
+| 14 | `First Seen` | when StonkSmith first observed this movement |
+| 15 | `External Id` | the source's own transaction id, where it has one |
+
+**This tab carries the whole history, deliberately.** Every other tab is bounded
+by the size of your portfolio; this one grows forever, which is exactly why it
+is written in full rather than windowed. A tab whose purpose is history, showing
+the newest few hundred rows with nothing saying so, would be worse than not
+having one. The read behind it takes no `limit` for that reason, and
+`stonksmithdb`'s `sheet` line reports the count so a short write is visible.
+
 Three rules make that a contract rather than a list:
 
 - **Columns are append-only.** A new one goes on the end, never in the middle.
   Everything reading these addresses a column by position, so inserting one
-  silently repoints every formula at its neighbour. A test pins both tuples
+  silently repoints every formula at its neighbour. A test pins all three tuples
   exactly, so that change fails in CI instead of in your spreadsheet.
 - **One name per meaning.** `Value` is what things are worth, everywhere.
   `As Of` is the source's own date and `Scraped At` is when the run happened —
@@ -871,25 +902,43 @@ Three rules make that a contract rather than a list:
   today's share price: its value is as of one date and its quantity as of
   another, weeks apart, and no single column can say both. Two meanings, so two
   names — which is the rule rather than an exception to it.
+
+  A movement's two dates are the same argument one view along. `Processed On`
+  and `Traded On` are settlement and trade, and neither is "the date the source
+  says the *value* is for", so neither borrows `As Of`. `First Seen` is its own
+  name for the same reason rather than a third `Scraped At`: that one moves
+  every sync, because those rows are rewritten every run, while the run that
+  first saw a movement never changes.
 - **Money and quantities are numbers, not text.** No `"$1,234.56"` in a cell
   you then cannot add up. Formatting is the cell's job. A value the source never
   gave stays empty rather than becoming `0`, because an account that reported no
   number is not an account worth nothing.
 
-**Two shapes rather than one flat table**, because an account's value and the
-sum of its positions are different numbers — uninvested cash sits in the balance
-and in no holding. One table doing both would understate every account holding
-cash while looking like it totalled correctly.
+**Separate shapes rather than one flat table**, because an account's value and
+the sum of its positions are different numbers — uninvested cash sits in the
+balance and in no holding. One table doing both would understate every account
+holding cash while looking like it totalled correctly. Movements are the third
+because they are a *log* rather than current state: the other two are "what is
+true now" and are replaced every run, while a movement happened once and stays.
+
+**Dates on the transactions tab are normalized on the way out, not on the way
+in.** SnapTrade reports ISO; the 529 scraper's table says `12/30/2025`, and that
+text is what its deduplication key is built from — so rewriting it at the
+scraper would make every already-stored row look new. Two formats in one column
+sort wrong, `12/30/2025` landing above `01/15/2026`, which is a tab that looks
+ordered and is not. So the stored text stays exactly as the source wrote it and
+the *view* renders `YYYY-MM-DD`. A date nothing can parse is passed through
+unchanged rather than blanked.
 
 `src/etc/portfolio_sheet.py` is the only thing that writes them: one read of the
-workspace, one authorization, three tabs. Values go up raw, so a number arrives
+workspace, one authorization, four tabs. Values go up raw, so a number arrives
 as a number — and so an account whose display name begins with `=` stays a name
 instead of becoming a formula the spreadsheet runs.
 
 #### What the dashboard shows
 
-`Dashboard` is formulas over `Accounts!` and `Holdings!` ranges rather than a
-third copy of the data. That is where the append-only rule stops being a slogan:
+`Dashboard` is formulas over `Accounts!`, `Holdings!` and `Transactions!` ranges
+rather than a fourth copy of the data. That is where the append-only rule stops being a slogan:
 a formula addresses a column by its position, so a column added at the end costs
 nothing and a column inserted in the middle would repoint every one of them at
 its neighbour. None of them contains a typed column letter — every reference is
@@ -910,6 +959,11 @@ derived from the tuples above, so the letters cannot drift away from the contrac
 - **Newest** and **oldest scrape**, and a **staleness** table of accounts whose
   `As Of` is missing or more than a week old. A number with no as-of date lies to
   you; this is where it says so.
+- **Movements**, counted the same way, and **Newest movement** — the latest
+  `Processed On` anywhere in the workspace. Both are sorted as text rather than
+  `MAX`ed, which works only because the view normalizes those dates to ISO on
+  the way out of the database; see above for why they are not normalized on the
+  way in.
 - Subtotals **by broker** and **by source**.
 - **Not read** — one row per database that would not open, with the reason. A
   total short by a whole broker looks perfectly reasonable, so it is stated on the
