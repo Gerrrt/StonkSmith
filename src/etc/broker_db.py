@@ -1283,9 +1283,11 @@ def _bounded(
     a result that looks complete with the missing part invisible. So the cap
     became optional rather than the readers becoming two sets of readers.
 
-    The bound parameter is added only when it is used. An unreferenced key would
-    be passed straight through to sqlite3's named paramstyle, and whether that
-    is tolerated is not a thing worth learning from a traceback.
+    The ``limit`` value goes in with the clause it belongs to and stays out when
+    there is no clause. Nothing forces that: the readers here already pass
+    ``account_id`` on reads whose WHERE clause is empty, and an unreferenced key
+    is carried without complaint. It is kept in step because a params dict that
+    matches its query is one fewer thing to reconcile when reading either.
     :param query: The SQL, without a LIMIT clause
     :param params: The bound parameters it already has
     :param limit: How many rows at most, or None for all of them
