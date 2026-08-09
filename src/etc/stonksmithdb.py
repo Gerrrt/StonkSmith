@@ -181,7 +181,8 @@ class StonkSmithDBMenu(cmd.Cmd):
 
         print(
             f"[*] Refreshed: {result.accounts} accounts, {result.holdings} "
-            f"holdings from {', '.join(result.brokers_read) or 'no brokers'}."
+            f"holdings, {result.transactions} movements from "
+            f"{', '.join(result.brokers_read) or 'no brokers'}."
         )
 
         for name, reason in result.unreadable:

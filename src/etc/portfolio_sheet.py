@@ -8,11 +8,18 @@ deliberately only one of these: five brokers each writing their own tab is the
 arrangement the column contract exists to end. A per-broker tab cannot show a
 total anyway, because no single broker's database has one.
 
-So one read of the workspace feeds three tabs. `Accounts` and `Holdings` are the
-two row shapes, verbatim. `Dashboard` is formulas over those two, which is what
-makes append-only matter in the spreadsheet and not only in the tests: a QUERY
-addresses a column by position, so a column added at the end costs nothing and a
-column inserted in the middle would silently repoint every one of them.
+So one read of the workspace feeds four tabs. `Accounts`, `Holdings` and
+`Transactions` are the three row shapes, verbatim. `Dashboard` is formulas over
+them, which is what makes append-only matter in the spreadsheet and not only in
+the tests: a QUERY addresses a column by position, so a column added at the end
+costs nothing and a column inserted in the middle would silently repoint every
+one of them.
+
+`Transactions` is the one that is a log rather than current state, and it
+carries the whole of it. Every other tab is bounded by the size of the
+portfolio; this one grows forever, which is exactly why it is written in full.
+A tab whose purpose is history, showing the newest few hundred rows with nothing
+saying so, would be worse than not having one.
 
 **The tabs are machine-owned, and this is where that stops being a README
 paragraph.** A tab is cleared only if its first cell carries BANNER, or if the
@@ -42,6 +49,8 @@ from etc.context import Context
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
+    ISO_DATE_PATTERN,
+    TRANSACTION_COLUMNS,
     Portfolio,
     read_workspace,
 )
@@ -57,7 +66,7 @@ from helpers.sheets import (
 
 #: Written into the first cell of every tab this module owns, and the only thing
 #: that makes a tab writable. Changing it orphans every tab already in the field:
-#: the next sync finds a first cell it does not recognise and refuses all three.
+#: the next sync finds a first cell it does not recognise and refuses them all.
 BANNER: str = (
     "StonkSmith machine-owned tab. Cleared and rewritten on every sync -- "
     "anything you put here is lost. Keep your own work on a tab of your own."
@@ -65,11 +74,17 @@ BANNER: str = (
 
 ACCOUNTS_TAB: str = "Accounts"
 HOLDINGS_TAB: str = "Holdings"
+TRANSACTIONS_TAB: str = "Transactions"
 DASHBOARD_TAB: str = "Dashboard"
 
 #: Every tab StonkSmith opens. Nothing outside this tuple is ever touched, which
 #: is what makes any other tab in the book safe to keep things on.
-MACHINE_OWNED_TABS: tuple[str, ...] = (ACCOUNTS_TAB, HOLDINGS_TAB, DASHBOARD_TAB)
+MACHINE_OWNED_TABS: tuple[str, ...] = (
+    ACCOUNTS_TAB,
+    HOLDINGS_TAB,
+    TRANSACTIONS_TAB,
+    DASHBOARD_TAB,
+)
 
 BANNER_CELL: str = "A1"
 
@@ -125,6 +140,7 @@ class SheetSync:
 
     accounts: int = 0
     holdings: int = 0
+    transactions: int = 0
     brokers_read: tuple[str, ...] = ()
     unreadable: tuple[tuple[str, str], ...] = ()
     total: float = 0.0
@@ -233,7 +249,7 @@ def claim(worksheet: Any, tab: str) -> None:
     below the top row. Only then is the whole tab read, which is the first sync
     of a tab and no other.
 
-    Asked once per worksheet object. refresh() claims all three tabs up front so
+    Asked once per worksheet object. refresh() claims every tab up front so
     that a tab which is not ours costs nothing, and each write then claims the
     tab it is about to clear so that no write path can exist without the guard
     on it. Those two are both worth having and would otherwise mean two rounds
@@ -385,6 +401,12 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Currency"
     )
     held_key: str = down(tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Account Key")
+    moved_key: str = down(
+        tab=TRANSACTIONS_TAB, columns=TRANSACTION_COLUMNS, name="Account Key"
+    )
+    processed: str = down(
+        tab=TRANSACTIONS_TAB, columns=TRANSACTION_COLUMNS, name="Processed On"
+    )
 
     labels: list[list[Any]] = [
         ["Total (USD)"],
@@ -397,6 +419,13 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         ["Newest scrape"],
         ["Oldest scrape"],
         ["Brokers read"],
+        # Appended rather than slotted in beside the account and holding counts,
+        # on the same principle the columns follow. at() derives every row
+        # reference from this list, so an insertion would not break a formula --
+        # but a person reading last sync's dashboard beside this one would find
+        # the rows they knew had moved, and that is worth more than tidiness.
+        ["Movements"],
+        ["Newest movement"],
     ]
 
     def at(label: str) -> str:
@@ -448,6 +477,26 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
             f'=IFERROR(INDEX(SORT(UNIQUE(FILTER({scraped},{scraped}<>"")),1,TRUE),1,1),"")'
         ],
         [", ".join(portfolio.brokers_read) or "none"],
+        # Counted on Account Key for the same reason the two counts above are:
+        # it is written unwrapped and can never be blank, while Type and
+        # Description are both routinely empty depending on the source.
+        [f"=COUNTA({moved_key})"],
+        # SORT rather than MAX, as the two scrape dates above -- and safe for
+        # the same reason only because etc.portfolio normalizes Processed On to
+        # ISO on the way out of the database. It is stored as the source wrote
+        # it, and "12/30/2025" sorts above "01/15/2026".
+        #
+        # Filtered on the shape of a date rather than on <>"", which the two
+        # cells above can afford and this one cannot. Scraped At is written by
+        # StonkSmith and is always a timestamp; Processed On comes from a source
+        # and is kept verbatim when it will not parse, deliberately. Sorted as
+        # text, one such row wins -- every letter compares above every digit --
+        # so the cell would answer "whenever" and look authoritative. The row
+        # keeps its place on the tab; it just cannot be the answer here.
+        [
+            f"=IFERROR(INDEX(SORT(UNIQUE(FILTER({processed},"
+            f'REGEXMATCH({processed}&"","{ISO_DATE_PATTERN}"))),1,FALSE),1,1),"")'
+        ],
     ]
 
     return labels, values
@@ -627,9 +676,9 @@ def refresh(
     """
     Put everything every broker in the workspace holds onto the sheet.
 
-    One read of the databases and one authorization, feeding three tabs. All
-    three are claimed before any of them is cleared: a tab that is not ours then
-    costs nothing rather than leaving Accounts rewritten beside a stale Holdings.
+    One read of the databases and one authorization, feeding four tabs. All of
+    them are claimed before any is cleared: a tab that is not ours then costs
+    nothing rather than leaving Accounts rewritten beside a stale Holdings.
     :param workspace: The workspace name, or None for the configured one
     :param root: The directory workspaces live in, for tests
     :param spreadsheet: The spreadsheet to write into
@@ -677,11 +726,18 @@ def refresh(
         columns=HOLDING_COLUMNS,
         rows=[row.cells() for row in portfolio.holdings],
     )
+    transactions: int = write_rows(
+        worksheet=tabs[TRANSACTIONS_TAB],
+        tab=TRANSACTIONS_TAB,
+        columns=TRANSACTION_COLUMNS,
+        rows=[row.cells() for row in portfolio.transactions],
+    )
     write_dashboard(worksheet=tabs[DASHBOARD_TAB], portfolio=portfolio, today=today)
 
     return SheetSync(
         accounts=accounts,
         holdings=holdings,
+        transactions=transactions,
         brokers_read=portfolio.brokers_read,
         unreadable=portfolio.unreadable,
         total=portfolio.total(),
@@ -719,8 +775,9 @@ def sync(context: Context, workspace: str | None = None) -> bool:
         context.log.success(msg="Google Sheets updated successfully!")
         context.log.success(
             msg=(
-                f"Sheet shows {result.accounts} accounts and {result.holdings} "
-                f"holdings from {', '.join(result.brokers_read) or 'no brokers'}."
+                f"Sheet shows {result.accounts} accounts, {result.holdings} "
+                f"holdings and {result.transactions} movements from "
+                f"{', '.join(result.brokers_read) or 'no brokers'}."
             )
         )
         return True

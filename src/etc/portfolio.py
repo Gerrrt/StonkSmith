@@ -8,8 +8,8 @@ Five brokers wrote five unrelated worksheet layouts. Nothing shared a column:
 `Price date` and `Units as of` were three answers to one question. Each broker
 was re-deriving its own projection of a shape the database already had.
 
-So the projection lives here instead, once. Two row types, ordered columns, and
-one function that produces them from every broker database in a workspace.
+So the projection lives here instead, once. Three row types, ordered columns,
+and one function that produces them from every broker database in a workspace.
 
 **The columns are append-only.** A new column goes on the end, never in the
 middle. Anything reading this -- a worksheet formula most of all -- addresses a
@@ -17,13 +17,21 @@ column by position, and a column inserted at the front silently changes what
 every one of them points at. `tests/test_portfolio_contract.py` pins the exact
 tuples so that shift fails in CI rather than in a spreadsheet.
 
-**Two row types rather than the one flat view this started out wanting.** An
-account's value and the sum of its positions are different numbers: uninvested
-cash sits in the balance and in no holding. A single view emitting positions
-for accounts that have them and a balance for accounts that do not would
-understate every account holding cash while looking like it totalled correctly.
-So accounts carry the value, holdings carry the breakdown, and the two join on
-(broker, account_key).
+**Separate row types rather than the one flat view this started out wanting.**
+An account's value and the sum of its positions are different numbers:
+uninvested cash sits in the balance and in no holding. A single view emitting
+positions for accounts that have them and a balance for accounts that do not
+would understate every account holding cash while looking like it totalled
+correctly. So accounts carry the value, holdings carry the breakdown, and the
+two join on (broker, account_key).
+
+Transactions are the third, and the first that is a *log* rather than current
+state. Accounts and holdings are both "what is true now" -- one row per account,
+one per position behind the newest snapshot, replaced every run. A movement
+happened once and stays, so this view carries every movement the database holds
+rather than the newest run's worth. That is why the read behind it takes no
+limit: a history shown five hundred rows at a time, with nothing saying so, is
+the failure this project keeps finding rather than a smaller feature.
 
 **Money is a number here, never a formatted string.** Every saver so far wrote
 `format_amount()` output, which puts "$1,234.56" in a cell that cannot then be
@@ -39,6 +47,7 @@ them. Nothing here can dedupe across brokers, which is why the `[SNAPTRADE]
 exclude_accounts` setting is still the thing that decides who owns an account.
 """
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +60,7 @@ from etc.config import get_workspace
 from etc.context import PortfolioDbProtocol
 from etc.infrastructure import create_db_engine
 from etc.paths import workspace_dir
+from helpers.normalize import to_iso_date
 
 #: The account view, in order. One row per account, across every broker. The
 #: sum of its Value column is the portfolio total; nothing else here totals.
@@ -93,6 +103,45 @@ HOLDING_COLUMNS: tuple[str, ...] = (
     "Units As Of",
 )
 
+#: The transaction view, in order. One row per stored movement, across every
+#: broker -- not per snapshot, because a movement is recorded once and deduped
+#: on its natural key thereafter. The same identity prefix as the other two, so
+#: all three join on Broker + Account Key.
+#:
+#: Which columns a source fills says something about the source, exactly as it
+#: does for holdings. SnapTrade supplies Symbol, Description and a real External
+#: Id; the Schwab 529 scraper's table has six columns and supplies none of the
+#: three, so those cells are blank for it. Blank means the source said nothing,
+#: which is the distinction _cell() exists to keep.
+TRANSACTION_COLUMNS: tuple[str, ...] = (
+    "Broker",
+    "Source",
+    "Account",
+    "Account Key",
+    "Type",
+    "Symbol",
+    "Description",
+    "Units",
+    "Price",
+    "Value",
+    "Currency",
+    #: Two columns rather than one, for the reason "Units As Of" is a column: a
+    #: movement carries a settlement date and a trade date, which are two facts
+    #: about one row and are routinely days apart. Neither is spelled "As Of".
+    #: That name means "the date the source says the *value* is for" on the
+    #: other two views, and a third answer to that question is the thing this
+    #: contract was written to stop.
+    "Processed On",
+    "Traded On",
+    #: Not "Scraped At", which is what the other two views call the run that
+    #: observed them and moves every sync. This is ``transactions.first_seen``:
+    #: the run that saw the movement *first*, which never moves again, because
+    #: a re-scrape of an overlapping window conflicts on the natural key and
+    #: does nothing. Two meanings, so two names.
+    "First Seen",
+    "External Id",
+)
+
 
 def _cell(value: Any) -> Any:
     """
@@ -107,6 +156,65 @@ def _cell(value: Any) -> Any:
     """
 
     return "" if value is None else value
+
+
+#: What a date this view has normalized looks like. _iso() below produces either
+#: exactly this or the source's own text handed back untouched, so matching it is
+#: how anything downstream tells a date that was read from one that was not.
+ISO_DATE_PATTERN: str = r"^\d{4}-\d{2}-\d{2}$"
+
+_ISO_DATE: re.Pattern[str] = re.compile(pattern=ISO_DATE_PATTERN)
+
+
+def _iso(date: str | None) -> str | None:
+    """
+    Render a stored transaction date as YYYY-MM-DD.
+
+    The one place this view rewrites what the database holds, and it is not
+    cosmetic. ``processed_on`` and ``traded_on`` are stored as the source wrote
+    them, and the sources disagree: SnapTrade normalizes to ISO, while the 529
+    scraper stores "12/30/2025" because its natural key is built from that text
+    and normalizing at the producer would make every already-stored row look new.
+    Two formats in one column sort wrong -- "12/30/2025" lands above
+    "01/15/2026" -- so a tab ordered on it, and a dashboard cell reporting the
+    newest movement, would both look right and be wrong.
+
+    Normalizing here fixes that without touching a stored key. Anything that
+    will not parse is handed back unchanged rather than blanked: an unreadable
+    date is still evidence, and dropping it would hide the one row worth looking
+    at.
+    :param date: The date as the source wrote it
+    :return: The date as YYYY-MM-DD, the original text if it will not parse, or
+        None when there was none
+    :rtype: str | None
+    """
+
+    if not date:
+        return None
+
+    return to_iso_date(text=date) or date
+
+
+def _sortable(date: str | None) -> str:
+    """
+    The key a movement's date sorts on, which is not always the date itself.
+
+    _iso keeps text it could not parse, because an unreadable date is still
+    evidence and blanking it would hide the one row worth looking at. Sorting on
+    that text is a different question, and the obvious answer is wrong: anything
+    beginning with a letter compares above every digit, so a single "whenever"
+    would sit at the top of the tab and be reported as the newest movement --
+    turning a preserved oddity into a confident false statement.
+
+    So a date that did not parse sorts as though it had none, which puts it at
+    the far end rather than the near one. It keeps its cell; it just stops
+    claiming to be the newest thing that happened.
+    :param date: The date as this view renders it
+    :return: The date when it is one, otherwise ""
+    :rtype: str
+    """
+
+    return date if date and _ISO_DATE.match(string=date) else ""
 
 
 def _reason(error: Exception) -> str:
@@ -253,6 +361,76 @@ class HoldingRow:
 
 
 @dataclass(frozen=True, slots=True)
+class TransactionRow:
+    """
+    One movement recorded against one account.
+
+    Not tied to a snapshot, unlike HoldingRow. A holding is what an account held
+    at one observation and is replaced wholesale by the next; a movement happened
+    once, is keyed so a re-scrape of the same window records it once, and stays.
+    So this carries every movement the database holds rather than the newest
+    run's worth -- which is the whole point of the tab, and the reason the read
+    behind it takes no limit.
+    """
+
+    broker: str
+    source: str
+    account: str
+    account_key: str
+
+    #: "Contribution", "BUY", "DIVIDEND" -- whatever the source calls it.
+    tx_type: str | None = None
+
+    #: Filled by sources that trade in tickers. A scraped 529 table has neither
+    #: this nor a description.
+    symbol: str | None = None
+    description: str | None = None
+
+    units: float | None = None
+    price: float | None = None
+    value: float | None = None
+    currency: str = "USD"
+
+    #: Settlement and trade date, normalized to ISO on the way out of the
+    #: database. Two dates for one movement, days apart in the ordinary case.
+    processed_on: str | None = None
+    traded_on: str | None = None
+
+    #: When StonkSmith first observed this movement. Deliberately not called
+    #: "Scraped At": that moves every sync on the other two views, and this
+    #: never moves again once written.
+    first_seen: str = ""
+
+    #: The source's own transaction id, where it has one.
+    external_id: str | None = None
+
+    def cells(self) -> list[Any]:
+        """
+        This row in TRANSACTION_COLUMNS order.
+        :return: One value per column
+        :rtype: list[Any]
+        """
+
+        return [
+            self.broker,
+            self.source,
+            self.account,
+            self.account_key,
+            _cell(self.tx_type),
+            _cell(self.symbol),
+            _cell(self.description),
+            _cell(self.units),
+            _cell(self.price),
+            _cell(self.value),
+            self.currency,
+            _cell(self.processed_on),
+            _cell(self.traded_on),
+            _cell(self.first_seen),
+            _cell(self.external_id),
+        ]
+
+
+@dataclass(frozen=True, slots=True)
 class Portfolio:
     """
     Everything the workspace's databases currently say, and what could not be
@@ -266,6 +444,9 @@ class Portfolio:
 
     accounts: tuple[AccountRow, ...] = ()
     holdings: tuple[HoldingRow, ...] = ()
+
+    #: Every movement every broker holds, not the newest run's worth.
+    transactions: tuple[TransactionRow, ...] = ()
 
     #: Brokers whose database was opened and read, in the order read.
     brokers_read: tuple[str, ...] = ()
@@ -302,7 +483,7 @@ class Portfolio:
 
 def read_broker(
     broker: str, db: PortfolioDbProtocol
-) -> tuple[list[AccountRow], list[HoldingRow]]:
+) -> tuple[list[AccountRow], list[HoldingRow], list[TransactionRow]]:
     """
     Project one already-open broker database into the canonical rows.
 
@@ -310,8 +491,8 @@ def read_broker(
     part with the mapping decisions in it -- can be tested against literals.
     :param broker: The broker name, which becomes the Broker column
     :param db: An open database
-    :return: Its accounts and their positions
-    :rtype: tuple[list[AccountRow], list[HoldingRow]]
+    :return: Its accounts, their positions, and every movement recorded
+    :rtype: tuple[list[AccountRow], list[HoldingRow], list[TransactionRow]]
     """
 
     accounts: list[AccountRow] = []
@@ -396,7 +577,56 @@ def read_broker(
             )
         )
 
-    return accounts, holdings
+    transactions: list[TransactionRow] = []
+
+    for (
+        account_key,
+        tx_type,
+        symbol,
+        description,
+        units,
+        price,
+        value,
+        currency,
+        processed_on,
+        traded_on,
+        first_seen,
+        external_id,
+    ) in db.get_current_transactions():
+        parent = by_key.get(account_key)
+
+        transactions.append(
+            TransactionRow(
+                broker=broker,
+                # Same fallback as the holdings loop, for the same reason: a
+                # movement whose account did not come back is carried by the one
+                # identity it definitely has rather than dropped.
+                source=parent.source if parent else broker,
+                account=parent.account if parent else account_key,
+                account_key=account_key,
+                tx_type=tx_type,
+                symbol=symbol,
+                description=description,
+                units=units,
+                price=price,
+                value=value,
+                currency=currency or "USD",
+                processed_on=_iso(date=processed_on),
+                traded_on=_iso(date=traded_on),
+                first_seen=first_seen or "",
+                external_id=external_id,
+            )
+        )
+
+    # Ordered here rather than in SQL, which is where the other two views are
+    # ordered, because the column being sorted is only comparable once _iso has
+    # been over it -- see the note there. Two stable sorts rather than one key:
+    # the dates go newest-first, then the accounts group without disturbing
+    # them, and the reader's own tie-break survives underneath both.
+    transactions.sort(key=lambda row: _sortable(date=row.processed_on), reverse=True)
+    transactions.sort(key=lambda row: (row.source, row.account))
+
+    return accounts, holdings, transactions
 
 
 def workspace_path(workspace: str | None = None, root: Path | None = None) -> Path:
@@ -437,6 +667,7 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
 
     accounts: list[AccountRow] = []
     holdings: list[HoldingRow] = []
+    transactions: list[TransactionRow] = []
     read: list[str] = []
     unreadable: list[tuple[str, str]] = []
 
@@ -448,7 +679,9 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
         try:
             engine = create_db_engine(db_path=path)
             db = BrokerDatabase(db_engine=engine, broker=broker)
-            broker_accounts, broker_holdings = read_broker(broker=broker, db=db)
+            broker_accounts, broker_holdings, broker_transactions = read_broker(
+                broker=broker, db=db
+            )
 
         # Deliberately broad. A file in this directory can fail to be a usable
         # database in more ways than are worth enumerating -- corrupt, truncated,
@@ -468,11 +701,13 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
 
         accounts.extend(broker_accounts)
         holdings.extend(broker_holdings)
+        transactions.extend(broker_transactions)
         read.append(broker)
 
     return Portfolio(
         accounts=tuple(accounts),
         holdings=tuple(holdings),
+        transactions=tuple(transactions),
         brokers_read=tuple(read),
         unreadable=tuple(unreadable),
     )
@@ -480,7 +715,7 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
 
 def read_workspace(workspace: str | None = None, root: Path | None = None) -> Portfolio:
     """
-    Every account and position across every broker in one workspace.
+    Every account, position and movement across every broker in one workspace.
 
     This is the single read path out of the databases: a worksheet sync, a
     dashboard, or anything else that wants to show what is held consumes this

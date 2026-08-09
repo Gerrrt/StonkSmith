@@ -377,5 +377,57 @@ class ReadTests(_SnapshotTestCase):
         self.assertEqual(self.count("account_snapshots"), 0)
 
 
+class CurrentTransactionsTests(_SnapshotTestCase):
+    """The unlimited read behind the Transactions tab."""
+
+    def _many(self, count: int) -> list[Transaction]:
+        """Movements enough to run past the shell reader's default limit."""
+
+        return [
+            Transaction(
+                processed_on=f"2026-01-{index % 28 + 1:02d}",
+                tx_type="Contribution",
+                value=float(index),
+                raw=f"${index}.00",
+            )
+            for index in range(count)
+        ]
+
+    def test_it_carries_the_key_the_shell_reader_does_not(self) -> None:
+        # get_transactions returns the display name, which is explicitly not
+        # identity. A view joining across brokers has to have the key.
+        self.save(transactions=[CONTRIBUTION])
+
+        row = self.db.get_current_transactions()[0]
+
+        self.assertEqual(row[0], "Ezekiel")
+        self.assertEqual(len(row), 12)
+
+    def test_it_returns_every_movement_however_many_there_are(self) -> None:
+        # The reason it exists. get_transactions stops at 500 by default, so a
+        # tab built on that one would report the newest five hundred as though
+        # they were all of them.
+        self.save(transactions=self._many(count=640))
+
+        self.assertEqual(len(self.db.get_transactions()), 500)
+        self.assertEqual(len(self.db.get_current_transactions()), 640)
+
+    def test_it_is_not_scoped_to_the_newest_snapshot(self) -> None:
+        # Unlike the other two current-state readers. A movement is recorded
+        # once and deduped thereafter, so every stored row is current -- an
+        # older run's movements must not disappear when a newer run lands.
+        self.save(transactions=[CONTRIBUTION])
+        self.save(
+            scraped_at="2026-02-01 00:00:00",
+            transactions=[
+                Transaction(
+                    processed_on="2026-02-01", tx_type="Contribution", value=99.0
+                )
+            ],
+        )
+
+        self.assertEqual(len(self.db.get_current_transactions()), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

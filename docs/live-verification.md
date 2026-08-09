@@ -55,7 +55,8 @@ remaining 9 rest on unit tests or on fixtures.*
 | TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused every request from the dev environment | No |
 | TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
 | TSP — database write | Unit tests with a mocked DB | No |
-| The sheet — three machine-owned tabs | Unit tests with a faked spreadsheet | No |
+| The sheet — four machine-owned tabs | Unit tests with a faked spreadsheet | No |
+| The sheet — the whole transaction history reaching a tab | Unit tests with a faked spreadsheet | No |
 | The sheet — refusing a tab it does not own | Unit tests with a faked spreadsheet | No |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
@@ -388,17 +389,17 @@ while every individual number looks right.
 
 ### 4. The sheet
 
-No tab needs creating: StonkSmith makes `Accounts`, `Holdings` and `Dashboard` on the
-first sync. Nor does this need a scrape any more — the sheet is a view of the
+No tab needs creating: StonkSmith makes `Accounts`, `Holdings`, `Transactions` and
+`Dashboard` on the first sync. Nor does this need a scrape any more — the sheet is a view of the
 databases, so it can be built from them alone:
 
 ```
 $ uv run stonksmithdb
 stonksmithdb (default) > sheet
-[*] Refreshed: 6 accounts, 23 holdings from ally, fidelity, snaptrade, tsp.
+[*] Refreshed: 6 accounts, 23 holdings, 412 movements from ally, fidelity, snaptrade, tsp.
 ```
 
-Four things to confirm on the tabs themselves, none of which a unit test can see:
+Five things to confirm on the tabs themselves, none of which a unit test can see:
 
 1. **The first cell of each tab carries the machine-owned banner**, and row 2 is the
    column contract exactly as `src/etc/portfolio.py` spells it.
@@ -412,6 +413,15 @@ Four things to confirm on the tabs themselves, none of which a unit test can see
    on an absent value arriving as an empty cell rather than as an empty string that
    `COUNTA` still counts. If that figure reads 0 where the tab visibly has blank
    `As Of` cells, the formula needs `COUNTIF(...,"<>")` instead.
+5. **`Transactions` holds every movement, not the newest five hundred.** Compare the
+   count on the line above against `show transactions` inside a broker shell, and do
+   it against a broker with a long history rather than a fresh one — five hundred is
+   the number the shell reader stops at, and a tab that silently agreed with it would
+   look entirely correct. Check the dates too: the 529 scraper stores `12/30/2025`
+   and SnapTrade stores ISO, so the tab is where they must both read `YYYY-MM-DD`,
+   sorted newest-first within each account. A `12/30/2025` reaching a cell means the
+   normalization was skipped, and the tab's order is then wrong wherever a December
+   row sits above a January one.
 
 Then the refusal, which is the point of the whole thing. Type something into a spare
 tab, rename it `Holdings`, and run `sheet` again:
@@ -422,7 +432,7 @@ tab, rename it `Holdings`, and run `sheet` again:
 ```
 
 Confirm your text is still there, and that `Accounts` was **not** rewritten either —
-all three tabs are claimed before any of them is cleared, so a refusal costs nothing
+every tab is claimed before any of them is cleared, so a refusal costs nothing
 rather than leaving one tab fresh beside a stale one.
 
 Worth knowing while verifying TSP specifically: the unit count's own date is column

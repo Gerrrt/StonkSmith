@@ -14,16 +14,22 @@ from unittest.mock import MagicMock
 
 from etc.broker_db import BrokerDatabase
 from etc.infrastructure import create_db_engine
-from etc.portfolio import ACCOUNT_COLUMNS, HOLDING_COLUMNS, read_workspace
+from etc.portfolio import (
+    ACCOUNT_COLUMNS,
+    HOLDING_COLUMNS,
+    TRANSACTION_COLUMNS,
+    read_workspace,
+)
 from etc.portfolio_sheet import (
     ACCOUNTS_TAB,
     BANNER,
     DASHBOARD_TAB,
     HOLDINGS_TAB,
     MACHINE_OWNED_TABS,
+    TRANSACTIONS_TAB,
     refresh,
 )
-from etc.records import AccountIdentity, Holding
+from etc.records import AccountIdentity, Holding, Transaction
 from helpers.sheets import SheetsUnavailable
 from keyring_isolation import MemoryKeyringMixin
 
@@ -69,7 +75,14 @@ class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
         self.root = Path(self.tmp.name)
         (self.root / "default").mkdir()
 
-    def _write(self, broker: str, key: str, value: float, holdings: Any = ()) -> None:
+    def _write(
+        self,
+        broker: str,
+        key: str,
+        value: float,
+        holdings: Any = (),
+        transactions: Any = (),
+    ) -> None:
         db = BrokerDatabase(
             db_engine=create_db_engine(db_path=self.root / "default" / f"{broker}.db"),
             broker=broker,
@@ -83,6 +96,7 @@ class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
             value=value,
             currency="USD",
             holdings=holdings,
+            transactions=transactions,
         )
         db.shutdown_db()
 
@@ -113,7 +127,7 @@ class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
         self.assertEqual(result.total, 3500.0)
         self.assertEqual(result.brokers_read, ("ally", "tsp"))
 
-    def test_only_the_three_machine_owned_tabs_are_ever_opened(self) -> None:
+    def test_only_the_machine_owned_tabs_are_ever_opened(self) -> None:
         # The guarantee that makes every other tab in the book safe to keep
         # things on: nothing else is so much as looked at.
         self._write(broker="tsp", key="C Fund", value=1000.0)
@@ -207,6 +221,72 @@ class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
             if call.args[1] == "A2:P2"
         ]
         self.assertEqual(headers, [list(HOLDING_COLUMNS)])
+
+    def test_the_transactions_header_carries_the_whole_contract(self) -> None:
+        self._write(broker="tsp", key="C Fund", value=1.0)
+
+        book = FakeBook()
+        refresh(workspace="default", root=self.root, book=book)
+
+        headers = [
+            call.args[0][0]
+            for call in book.tabs[TRANSACTIONS_TAB].update.call_args_list
+            if call.args[1] == "A2:O2"
+        ]
+        self.assertEqual(headers, [list(TRANSACTION_COLUMNS)])
+
+    def test_every_stored_movement_reaches_the_tab(self) -> None:
+        # The issue this closes, end to end. get_transactions() stops at 500 by
+        # default, so a tab built on it would write 500 rows and report success.
+        movements = tuple(
+            Transaction(
+                processed_on=f"2026-01-{day % 28 + 1:02d}",
+                tx_type="Contribution",
+                value=float(day),
+                raw=f"${day}.00",
+            )
+            for day in range(600)
+        )
+        self._write(broker="snaptrade", key="Busy", value=1.0, transactions=movements)
+
+        book = FakeBook()
+        result = refresh(workspace="default", root=self.root, book=book)
+
+        self.assertEqual(result.transactions, 600)
+        self.assertEqual(len(book.rows_written(tab=TRANSACTIONS_TAB, width="O")), 600)
+
+    def test_the_transactions_tab_is_exactly_what_the_read_path_says(self) -> None:
+        self._write(
+            broker="schwab529plan",
+            key="Ezekiel",
+            value=1234.56,
+            transactions=(
+                Transaction(
+                    processed_on="12/30/2025",
+                    traded_on="12/29/2025",
+                    tx_type="Contribution",
+                    units=1.5,
+                    price=100.0,
+                    value=150.0,
+                    raw="$150.00",
+                ),
+            ),
+        )
+
+        book = FakeBook()
+        refresh(workspace="default", root=self.root, book=book)
+
+        expected = read_workspace(workspace="default", root=self.root)
+
+        self.assertEqual(
+            book.rows_written(tab=TRANSACTIONS_TAB, width="O"),
+            [row.cells() for row in expected.transactions],
+        )
+        # And the date reaches the cell normalized, not as the source wrote it.
+        written = book.rows_written(tab=TRANSACTIONS_TAB, width="O")[0]
+        self.assertEqual(
+            written[TRANSACTION_COLUMNS.index("Processed On")], "2025-12-30"
+        )
 
 
 if __name__ == "__main__":
