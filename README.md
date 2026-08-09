@@ -312,9 +312,10 @@ Two things it does not do. It does not touch the sheet — only a scrape syncs, 
 `stonksmithdb`'s `sheet` command is what refreshes the tabs afterwards. And it
 does not notice new accounts, since it values what is already on record.
 
-#### What a browser run writes down
+#### What an Ally run writes down
 
-Every run that opens a browser leaves a response log in `~/.stonksmith/logs/`:
+Every Ally run that opens a browser leaves a response log in
+`~/.stonksmith/logs/`:
 
 ```text
 [*] Recorded 25 data call(s) and 1 refusal(s) to ~/.stonksmith/logs/ally-data-calls-20260809-041200.log
@@ -343,6 +344,14 @@ This is what makes Ally's unanswered questions answerable without a dedicated
 investigation: whether an activity endpoint exists, whether it takes a date
 range, and whether it is per-account are all readable off an ordinary run you
 were doing anyway.
+
+**Ally is the only broker that records.** Saving is generic — it happens in
+`BrowserConnection.teardown()`, so nothing has to remember it — but a connection
+writes a log only if it armed the recorder first, and Ally is the only one that
+does. Fidelity opens a browser and leaves no log. That is a one-line call away
+should Fidelity ever need the same treatment, and it is deliberately not made
+until it does: recording is only worth its clutter where there is a question
+outstanding.
 
 Ally runs Akamai, Dynatrace and Transmit on that login page, so the same
 attach-to-your-own-Chrome path Fidelity documents above applies here, pointed at

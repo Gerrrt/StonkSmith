@@ -175,11 +175,15 @@ network log.
 The write-up kept the count because the count was all the log printed: reporting ran
 only from `capture_page()`, which fires after something has already failed, and the
 recorder was armed only on the non-attached path -- so `--browser cdp`, the browser
-this section recommends, recorded nothing at all. Every run now writes
-`~/.stonksmith/logs/<broker>-data-calls-<stamp>.log` on the way out, whatever the
-outcome, and each line carries the endpoint's parameter *names* alongside its status
-and size. Values, bodies and headers are still never read. A future run of this
+this section recommends, recorded nothing at all. Every Ally run that opens a browser
+now writes `~/.stonksmith/logs/ally-data-calls-<stamp>.log` on the way out, whatever
+the outcome, and each line carries the endpoint's parameter *names* alongside its
+status and size. Values, bodies and headers are still never read. A future run of this
 procedure should therefore attach that file rather than a number.
+
+Ally is the only broker that arms the recorder, so a Fidelity run still leaves
+nothing. Saving is generic and needs no per-broker wiring; arming is one call, and
+worth adding there only if Fidelity acquires a question of its own.
 
 **The outcome: the Ally scrape cannot run unattended.** `--manual-login` on every
 scrape is the correct description, and the README says so. This is not a defect to fix
