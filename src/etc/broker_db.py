@@ -1215,12 +1215,21 @@ class BrokerDatabase:
         Carries ``description``, ``first_seen`` and ``external_id`` because the
         Transactions tab shows all three and this could not reach any of them,
         which made "Sheets is a view of what stonksmithdb reports" untrue for
-        this one table. ``raw`` and ``natural_key`` stay unselected, matching
-        what the tab omits.
+        this one table.
+
+        It carries ``natural_key`` and ``raw`` for the opposite reason: the tab
+        omits both deliberately and still should, but something has to read them
+        back. ``natural_keys()`` keeps the key as legible text rather than a hash
+        so that a source changing its date format can be *seen* -- and a key
+        readable by nothing is a hash with worse storage. This reader is where
+        that gets paid off, because it is the debugging surface and the tab is a
+        portfolio view. Which columns a screen can fit is decided above this, in
+        etc.broker_nav; both are wide, and neither reaches a terminal today.
         :param account_id: Restrict to one account
         :param limit: How many rows at most, or None for all of them
         :return: Rows of (id, account, processed_on, traded_on, tx_type, symbol,
-            description, units, price, value, currency, first_seen, external_id)
+            description, units, price, value, currency, first_seen, external_id,
+            natural_key, raw)
         :rtype: list[tuple[Any, ...]]
         """
 
@@ -1235,7 +1244,8 @@ class BrokerDatabase:
                 query=(
                     "SELECT t.id, a.display_name, t.processed_on, t.traded_on, "
                     "t.tx_type, t.symbol, t.description, t.units, t.price, "
-                    "t.value, t.currency, t.first_seen, t.external_id "
+                    "t.value, t.currency, t.first_seen, t.external_id, "
+                    "t.natural_key, t.raw "
                     "FROM transactions t "
                     f"JOIN accounts a ON a.id = t.account_id {where} "
                     "ORDER BY t.processed_on DESC, t.id DESC"
@@ -1360,6 +1370,11 @@ def natural_keys(rows: Sequence[Transaction]) -> list[str]:
     key, which is why the raw text is stored alongside every row and the key is
     kept readable rather than hashed. When a source changes its date format, a
     key you can read is worth more than sixteen saved bytes.
+
+    Read it with ``export transactions <file>``, which carries this column and
+    the raw text beside it. That is the whole of what "readable" buys: a hash
+    stored where nothing can look at it would cost the same to write and tell
+    you nothing when the format moves.
 
     What this rests on, stated precisely. The counter is keyed on the row's own
     content rather than on its position, so the keys a batch produces are a

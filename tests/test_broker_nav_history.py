@@ -21,7 +21,7 @@ from typing import Any
 from unittest.mock import patch
 
 import etc.broker_nav as broker_nav
-from etc.broker_db import BrokerDatabase
+from etc.broker_db import BrokerDatabase, natural_keys
 from etc.broker_nav import (
     CATEGORY_HEADERS,
     CURRENCY_HEADER,
@@ -388,6 +388,8 @@ class MoneyStillLandsOnMoneyTests(unittest.TestCase):
                     currency,
                     "2026-08-09 09:00:00",
                     "sn-1",
+                    "id:sn-1",
+                    "$750.00",
                 )
             ],
         )[0]
@@ -410,6 +412,17 @@ class MoneyStillLandsOnMoneyTests(unittest.TestCase):
 
         self.assertEqual(self._at(cells=cells, name="Description"), "Bought 3 VTI")
         self.assertEqual(self._at(cells=cells, name="External Id"), "sn-1")
+
+    def test_the_diagnostic_columns_are_left_alone(self) -> None:
+        # Both went on the end, which is where a positional table would notice
+        # nothing -- so the pin is that neither is *formatted*. Raw Value here
+        # is the source's own "$750.00": already money-shaped, and rendering it
+        # as money again is precisely what would destroy the one thing it is
+        # kept for, which is being byte-for-byte what the source wrote.
+        cells = self._row()
+
+        self.assertEqual(self._at(cells=cells, name="Natural Key"), "id:sn-1")
+        self.assertEqual(self._at(cells=cells, name="Raw Value"), "$750.00")
 
     def test_a_cad_movement_keeps_the_dollar_sign_off(self) -> None:
         # Proves the currency column is still found after the insertion. Read
@@ -566,6 +579,76 @@ class ExportWritesEverythingTests(MemoryKeyringMixin, unittest.TestCase):
         self.assertEqual(row[header.index("External Id")], "sn-8842")
         self.assertTrue(row[header.index("First Seen")])
 
+    def test_a_derived_key_reaches_the_csv_beside_the_text_it_was_built_from(
+        self,
+    ) -> None:
+        # The asymmetry this one opens, in the other direction. The tab has
+        # neither of these and still should not; the point is that a key kept
+        # legible rather than hashed is now legible *somewhere*, which is the
+        # entire justification for keeping it that way.
+        #
+        # No external_id, so the row takes the deriving branch and the key is
+        # the pipe-joined body rather than "id:...".
+        movement = Transaction(
+            processed_on="12/30/2025",
+            traded_on="12/30/2025",
+            tx_type="Contribution",
+            value=50.0,
+            raw="$50.00",
+        )
+        self.db.save_snapshot(
+            account=self.account,
+            scraped_at="2026-01-01 00:00:00",
+            value=1.0,
+            transactions=[movement],
+        )
+        target: Path = self.root / "tx.csv"
+
+        self.nav.do_export(f"transactions {target}")
+        header, row = self._rows_in(path=target)
+
+        # Pinned against the function rather than a literal: the two cannot
+        # drift apart, and a change to how keys are built shows up here as the
+        # export changing rather than as a test needing a new string typed in.
+        self.assertEqual(
+            row[header.index("Natural Key")], natural_keys(rows=[movement])[0]
+        )
+        # The source's own text, not the parsed number beside it. "50.0" here
+        # would mean the column had been sourced from `value`, which is the one
+        # thing it exists not to be.
+        self.assertEqual(row[header.index("Raw Value")], "$50.00")
+        self.assertIn("#0", row[header.index("Natural Key")])
+
+    def test_a_source_supplied_id_reaches_the_csv_as_the_key_it_becomes(self) -> None:
+        # The other branch, and the one a 529-only fixture would never show.
+        # A SnapTrade row derives nothing, so the column reads "id:<theirs>" --
+        # which is what tells you at a glance that a mismatch there is the
+        # source's doing rather than a format change on our side.
+        self.db.save_snapshot(
+            account=self.account,
+            scraped_at="2026-01-01 00:00:00",
+            value=1.0,
+            transactions=[
+                Transaction(
+                    processed_on="2026-08-01",
+                    tx_type="BUY",
+                    symbol="VTI",
+                    value=-750.0,
+                    external_id="sn-8842",
+                )
+            ],
+        )
+        target: Path = self.root / "tx.csv"
+
+        self.nav.do_export(f"transactions {target}")
+        header, row = self._rows_in(path=target)
+
+        self.assertEqual(row[header.index("Natural Key")], "id:sn-8842")
+        # raw is nullable and SnapTrade never sets it. An empty cell is the
+        # honest rendering of that; "None" is a four-letter value that sorts
+        # and filters like data.
+        self.assertEqual(row[header.index("Raw Value")], "")
+
     def test_the_csv_keeps_numbers_rather_than_currency_text(self) -> None:
         # export writes raw rows and never calls render(), which is what lets
         # the Value column sum in a spreadsheet.
@@ -684,9 +767,13 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
         self.assertEqual(len(data) - 1, 3)
         self.assertEqual(capped, [])
 
-    def test_the_wide_column_is_left_off_and_named(self) -> None:
+    def test_the_wide_columns_are_left_off_and_named(self) -> None:
         # Not shown, and not silently: a column missing without mention is the
         # same fault as a row count that stops without mention.
+        #
+        # Every one of them named, rather than any one of them: a regression
+        # that quietly stopped dropping a column, or dropped one without saying
+        # so, reads as a passing test if the assertion only looks for the first.
         self._movements(count=1)
 
         with (
@@ -700,13 +787,22 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
             str(object=call.kwargs["msg"]) for call in log.highlight.call_args_list
         )
 
-        self.assertNotIn("Description", header)
-        self.assertIn("Description", notices)
+        for name in ("Description", "Natural Key", "Raw Value"):
+            self.assertNotIn(name, header)
+            self.assertIn(name, notices)
+
+        # Plural, because there are three of them now. "is too wide" over a
+        # list of three is the kind of wrong that says the message was written
+        # for one column and never re-read.
+        self.assertIn("are too wide", notices)
         self.assertIn("export transactions", notices)
+        self.assertIn("includes them", notices)
 
     def test_the_bounded_new_columns_are_still_shown(self) -> None:
-        # Only Description is unbounded. A timestamp and an id fit, and twelve
-        # columns is the width holdings has always run at.
+        # Width is the only reason anything is dropped. A timestamp and an id
+        # fit, and twelve columns is the width holdings has always run at --
+        # what does not fit is free text, a whole row's text pipe-joined, and
+        # whatever a source happened to print.
         self._movements(count=1)
 
         with (
@@ -719,6 +815,7 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
 
         self.assertIn("First Seen", header)
         self.assertIn("External Id", header)
+        self.assertEqual(len(header), 12)
 
     def test_a_category_that_hides_nothing_says_nothing(self) -> None:
         self._movements(count=1)
