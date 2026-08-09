@@ -95,11 +95,11 @@ class SnapshotReadDbProtocol(SnapshotDbProtocol, Protocol):
     """
 
     def get_snapshots(
-        self, account_id: int | None = None, limit: int = 100
+        self, account_id: int | None = None, limit: int | None = 100
     ) -> list[tuple[Any, ...]]: ...
 
     def get_holdings(
-        self, snapshot_id: int | None = None, limit: int = 500
+        self, snapshot_id: int | None = None, limit: int | None = 500
     ) -> list[tuple[Any, ...]]: ...
 
 

@@ -13,16 +13,19 @@ none of these tables, and asking it for snapshots has to say so rather than
 raising an AttributeError at a user who typed a documented command.
 """
 
+import csv
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from etc.broker_db import BrokerDatabase
 from etc.broker_nav import (
     CATEGORY_HEADERS,
     HISTORY_FILTERS,
     HISTORY_READERS,
+    SHOW_LIMITS,
     BrokerNavigator,
 )
 from etc.infrastructure import create_db_engine
@@ -308,6 +311,205 @@ class HistoryRowsTests(MemoryKeyringMixin, unittest.TestCase):
         nav = BrokerNavigator(object(), _LegacyDb(), "fidelity")
 
         self.assertIsNone(nav.history_rows(category="snapshots"))
+
+
+class ExportWritesEverythingTests(MemoryKeyringMixin, unittest.TestCase):
+    """
+    A file is not a screenful.
+
+    `export` used to call the reader with no arguments and inherit whatever cap
+    it carried -- a hundred snapshots, five hundred movements -- then print
+    "Exported transactions" over a file missing most of them. Nothing reading
+    that CSV afterwards could tell. These are the assertions that fail before
+    the fix.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._dir = tempfile.TemporaryDirectory()
+        self.root = Path(self._dir.name)
+        self.db = BrokerDatabase(
+            create_db_engine(db_path=self.root / "b.db"), "schwab529plan"
+        )
+        self.account = AccountIdentity(account_key="Ezekiel", display_name="Ezekiel")
+        self.nav = BrokerNavigator(object(), self.db, "schwab529plan")
+
+    def tearDown(self) -> None:
+        self.db.shutdown_db()
+        self._dir.cleanup()
+        super().tearDown()
+
+    def _movements(self, count: int) -> None:
+        """Record `count` distinct movements against the one account."""
+
+        self.db.save_snapshot(
+            account=self.account,
+            scraped_at="2026-01-01 00:00:00",
+            value=1.0,
+            transactions=[
+                Transaction(
+                    processed_on=f"2026-01-{index % 28 + 1:02d}",
+                    tx_type="Contribution",
+                    value=float(index),
+                    raw=f"${index}.00",
+                )
+                for index in range(count)
+            ],
+        )
+
+    def _snapshots(self, count: int) -> None:
+        """Record `count` marks against the one account."""
+
+        for index in range(count):
+            self.db.save_snapshot(
+                account=self.account,
+                scraped_at=f"2026-02-{index % 28 + 1:02d} {index % 24:02d}:00:00",
+                value=float(index),
+            )
+
+    def _rows_in(self, path: Path) -> list[list[str]]:
+        """The CSV back off disk, header included."""
+
+        with path.open(newline="", encoding="utf-8") as handle:
+            return list(csv.reader(handle, delimiter=";"))
+
+    def test_every_movement_reaches_the_file(self) -> None:
+        # The regression. get_transactions caps at 500 by default, so this wrote
+        # 500 rows and reported success.
+        self._movements(count=640)
+        target: Path = self.root / "tx.csv"
+
+        self.nav.do_export(f"transactions {target}")
+
+        self.assertEqual(len(self._rows_in(path=target)), 641, "640 rows + header")
+
+    def test_every_snapshot_reaches_the_file(self) -> None:
+        # Same defect, a lower cap: get_snapshots stops at 100.
+        self._snapshots(count=130)
+        target: Path = self.root / "snaps.csv"
+
+        self.nav.do_export(f"snapshots {target}")
+
+        self.assertEqual(len(self._rows_in(path=target)), 131, "130 rows + header")
+
+    def test_the_export_says_how_many_rows_it_wrote(self) -> None:
+        # The count is the only thing that could ever have revealed a short
+        # file, since a truncated CSV looks exactly like a complete one.
+        self._movements(count=640)
+        target: Path = self.root / "tx.csv"
+
+        with patch("etc.broker_nav.stonksmith_logger") as log:
+            self.nav.do_export(f"transactions {target}")
+
+        message: str = str(object=log.success.call_args.kwargs["msg"])
+
+        self.assertIn("640", message)
+        self.assertEqual(len(self._rows_in(path=target)) - 1, 640)
+
+    def test_a_legacy_database_does_not_reach_the_writer(self) -> None:
+        # history_rows returning None must stop the export, not hand None to
+        # write_csv -- the show path already refuses; this one has to as well.
+        nav = BrokerNavigator(object(), _LegacyDb(), "fidelity")
+        target: Path = self.root / "never.csv"
+
+        nav.do_export(f"snapshots {target}")
+
+        self.assertFalse(target.exists())
+
+
+class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
+    """A screenful is a courtesy, but a silent one is the bug over again."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._dir = tempfile.TemporaryDirectory()
+        self.db = BrokerDatabase(
+            create_db_engine(db_path=Path(self._dir.name) / "b.db"), "schwab529plan"
+        )
+        self.account = AccountIdentity(account_key="Ezekiel", display_name="Ezekiel")
+        self.nav = BrokerNavigator(object(), self.db, "schwab529plan")
+
+    def tearDown(self) -> None:
+        self.db.shutdown_db()
+        self._dir.cleanup()
+        super().tearDown()
+
+    def _movements(self, count: int) -> None:
+        self.db.save_snapshot(
+            account=self.account,
+            scraped_at="2026-01-01 00:00:00",
+            value=1.0,
+            transactions=[
+                Transaction(
+                    processed_on=f"2026-01-{index % 28 + 1:02d}",
+                    tx_type="Contribution",
+                    value=float(index),
+                    raw=f"${index}.00",
+                )
+                for index in range(count)
+            ],
+        )
+
+    def _shown(self, category: str) -> tuple[list[list[str]], bool]:
+        """What reached the table, and whether the notice was printed."""
+
+        with (
+            patch("helpers.db.print_table") as table,
+            patch("etc.broker_nav.stonksmith_logger") as log,
+        ):
+            self.nav.do_show(category)
+
+        return table.call_args.kwargs["data"], log.highlight.called
+
+    def test_past_the_cap_it_says_so_and_names_export(self) -> None:
+        self._movements(count=SHOW_LIMITS["transactions"] + 1)
+
+        with (
+            patch("helpers.db.print_table"),
+            patch("etc.broker_nav.stonksmith_logger") as log,
+        ):
+            self.nav.do_show("transactions")
+
+        message: str = str(object=log.highlight.call_args.kwargs["msg"])
+
+        self.assertIn(str(object=SHOW_LIMITS["transactions"]), message)
+        self.assertIn("export transactions", message)
+
+    def test_the_extra_row_it_asked_for_never_reaches_the_screen(self) -> None:
+        # show asks for cap + 1 to learn whether there are more. That row is a
+        # probe, not data, and printing it would make the cap a lie.
+        self._movements(count=SHOW_LIMITS["transactions"] + 40)
+
+        data, _ = self._shown(category="transactions")
+
+        self.assertEqual(len(data) - 1, SHOW_LIMITS["transactions"], "header + cap")
+
+    def test_exactly_at_the_cap_it_says_nothing(self) -> None:
+        # There is nothing more to see, so claiming otherwise would be the same
+        # failure pointing the other way.
+        self._movements(count=SHOW_LIMITS["transactions"])
+
+        data, warned = self._shown(category="transactions")
+
+        self.assertEqual(len(data) - 1, SHOW_LIMITS["transactions"])
+        self.assertFalse(warned)
+
+    def test_under_the_cap_it_says_nothing(self) -> None:
+        self._movements(count=3)
+
+        data, warned = self._shown(category="transactions")
+
+        self.assertEqual(len(data) - 1, 3)
+        self.assertFalse(warned)
+
+    def test_a_category_with_no_cap_is_never_truncated(self) -> None:
+        # accounts is one row per account and its reader takes no limit.
+        self._movements(count=3)
+
+        _, warned = self._shown(category="accounts")
+
+        self.assertNotIn("accounts", SHOW_LIMITS)
+        self.assertFalse(warned)
 
 
 if __name__ == "__main__":

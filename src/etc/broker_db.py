@@ -959,12 +959,12 @@ class BrokerDatabase:
         )
 
     def get_snapshots(
-        self, account_id: int | None = None, limit: int = 100
+        self, account_id: int | None = None, limit: int | None = 100
     ) -> list[tuple[Any, ...]]:
         """
         List account values over time, newest first.
         :param account_id: Restrict to one account
-        :param limit: How many rows at most
+        :param limit: How many rows at most, or None for all of them
         :return: Rows of (id, account, as_of, scraped_at, value, currency)
         :rtype: list[tuple[Any, ...]]
         """
@@ -972,11 +972,16 @@ class BrokerDatabase:
         where: str = "WHERE s.account_id = :account_id" if account_id else ""
 
         return self._select(
-            "SELECT s.id, a.display_name, s.as_of, s.scraped_at, s.value, "
-            f"s.currency FROM account_snapshots s "
-            f"JOIN accounts a ON a.id = s.account_id {where} "
-            "ORDER BY s.scraped_at DESC, s.id DESC LIMIT :limit",
-            {"account_id": account_id, "limit": limit},
+            *_bounded(
+                query=(
+                    "SELECT s.id, a.display_name, s.as_of, s.scraped_at, s.value, "
+                    "s.currency FROM account_snapshots s "
+                    f"JOIN accounts a ON a.id = s.account_id {where} "
+                    "ORDER BY s.scraped_at DESC, s.id DESC"
+                ),
+                params={"account_id": account_id},
+                limit=limit,
+            )
         )
 
     def delete_snapshot(self, snapshot_id: int) -> bool:
@@ -1036,13 +1041,13 @@ class BrokerDatabase:
         )
 
     def get_holdings(
-        self, snapshot_id: int | None = None, limit: int = 500
+        self, snapshot_id: int | None = None, limit: int | None = 500
     ) -> list[tuple[Any, ...]]:
         """
         List positions. With no snapshot id, the positions behind each account's
         newest snapshot -- which is what a dashboard wants.
         :param snapshot_id: Restrict to one snapshot
-        :param limit: How many rows at most
+        :param limit: How many rows at most, or None for all of them
         :return: Rows of (account, symbol_or_fund, name, units, price, value,
             principal, earnings, cost_basis, currency, units_as_of)
         :rtype: list[tuple[Any, ...]]
@@ -1058,13 +1063,18 @@ class BrokerDatabase:
         )
 
         return self._select(
-            "SELECT a.display_name, COALESCE(h.symbol, h.fund_code), h.name, "
-            "h.units, h.price, h.value, h.principal, h.earnings, h.cost_basis, "
-            "h.currency, h.units_as_of FROM holdings h "
-            "JOIN account_snapshots s ON s.id = h.snapshot_id "
-            f"JOIN accounts a ON a.id = s.account_id {where} "
-            "ORDER BY a.display_name, h.position LIMIT :limit",
-            {"snapshot_id": snapshot_id, "limit": limit},
+            *_bounded(
+                query=(
+                    "SELECT a.display_name, COALESCE(h.symbol, h.fund_code), h.name, "
+                    "h.units, h.price, h.value, h.principal, h.earnings, "
+                    "h.cost_basis, h.currency, h.units_as_of FROM holdings h "
+                    "JOIN account_snapshots s ON s.id = h.snapshot_id "
+                    f"JOIN accounts a ON a.id = s.account_id {where} "
+                    "ORDER BY a.display_name, h.position"
+                ),
+                params={"snapshot_id": snapshot_id},
+                limit=limit,
+            )
         )
 
     def get_current_accounts(self) -> list[tuple[Any, ...]]:
@@ -1174,16 +1184,19 @@ class BrokerDatabase:
         )
 
     def get_transactions(
-        self, account_id: int | None = None, limit: int = 500
+        self, account_id: int | None = None, limit: int | None = 500
     ) -> list[tuple[Any, ...]]:
         """
         List movements, newest first.
 
-        Backs ``show transactions`` and ``export transactions`` in the shell,
-        where a limit is right because a human is scrolling. Anything rendering
-        a whole history wants get_current_transactions above instead.
+        Backs ``show transactions`` and ``export transactions`` in the shell.
+        The default cap is for the first of those, where a human is scrolling;
+        the second passes None, because a CSV that stops at five hundred rows
+        cannot tell anyone that it did. Anything rendering a whole history to a
+        sheet wants get_current_transactions above instead, which carries the
+        account key rather than the display name.
         :param account_id: Restrict to one account
-        :param limit: How many rows at most
+        :param limit: How many rows at most, or None for all of them
         :return: Rows of (id, account, processed_on, traded_on, tx_type, symbol,
             units, price, value, currency)
         :rtype: list[tuple[Any, ...]]
@@ -1192,38 +1205,51 @@ class BrokerDatabase:
         where: str = "WHERE t.account_id = :account_id" if account_id else ""
 
         return self._select(
-            "SELECT t.id, a.display_name, t.processed_on, t.traded_on, "
-            "t.tx_type, t.symbol, t.units, t.price, t.value, t.currency "
-            f"FROM transactions t JOIN accounts a ON a.id = t.account_id {where} "
-            "ORDER BY t.processed_on DESC, t.id DESC LIMIT :limit",
-            {"account_id": account_id, "limit": limit},
+            *_bounded(
+                query=(
+                    "SELECT t.id, a.display_name, t.processed_on, t.traded_on, "
+                    "t.tx_type, t.symbol, t.units, t.price, t.value, t.currency "
+                    "FROM transactions t "
+                    f"JOIN accounts a ON a.id = t.account_id {where} "
+                    "ORDER BY t.processed_on DESC, t.id DESC"
+                ),
+                params={"account_id": account_id},
+                limit=limit,
+            )
         )
 
-    def get_daily_change(self, limit: int = 100) -> list[tuple[Any, ...]]:
+    def get_daily_change(self, limit: int | None = 100) -> list[tuple[Any, ...]]:
         """
         The move between each snapshot and the one before it.
 
         This is the whole point of storing a number rather than "$1,234.56":
         the daily +/- is not a field any broker reports, it is a difference
         between two consecutive snapshots of the same account.
-        :param limit: How many rows at most
+        :param limit: How many rows at most, or None for all of them
         :return: Rows of (account, as_of, scraped_at, value, previous, delta,
             currency), newest first
         :rtype: list[tuple[Any, ...]]
         """
 
         return self._select(
-            "SELECT display_name, as_of, scraped_at, value, previous, "
-            "CASE WHEN previous IS NULL OR value IS NULL THEN NULL "
-            "     ELSE value - previous END, currency "
-            "FROM ("
-            "  SELECT a.display_name, s.as_of, s.scraped_at, s.value, s.currency,"
-            "    LAG(s.value) OVER ("
-            "      PARTITION BY s.account_id ORDER BY s.scraped_at, s.id"
-            "    ) AS previous"
-            "  FROM account_snapshots s JOIN accounts a ON a.id = s.account_id"
-            ") ORDER BY scraped_at DESC LIMIT :limit",
-            {"limit": limit},
+            *_bounded(
+                query=(
+                    "SELECT display_name, as_of, scraped_at, value, previous, "
+                    "CASE WHEN previous IS NULL OR value IS NULL THEN NULL "
+                    "     ELSE value - previous END, currency "
+                    "FROM ("
+                    "  SELECT a.display_name, s.as_of, s.scraped_at, s.value, "
+                    "    s.currency,"
+                    "    LAG(s.value) OVER ("
+                    "      PARTITION BY s.account_id ORDER BY s.scraped_at, s.id"
+                    "    ) AS previous"
+                    "  FROM account_snapshots s "
+                    "  JOIN accounts a ON a.id = s.account_id"
+                    ") ORDER BY scraped_at DESC"
+                ),
+                params={},
+                limit=limit,
+            )
         )
 
     def shutdown_db(self) -> None:
@@ -1242,6 +1268,37 @@ def _utc_now() -> str:
     """
 
     return datetime.datetime.now(tz=datetime.UTC).strftime(format="%Y-%m-%d %H:%M:%S")
+
+
+def _bounded(
+    query: str, params: dict[str, Any], limit: int | None
+) -> tuple[str, dict[str, Any]]:
+    """
+    Cap a read, or deliberately leave it uncapped.
+
+    Every reader below that a human scrolls takes a ``limit``, and every one of
+    them is also reachable from ``export``, which writes a file. Those want
+    different answers: a screenful is a courtesy, while a CSV that stops at five
+    hundred rows and says nothing is the failure this project keeps finding --
+    a result that looks complete with the missing part invisible. So the cap
+    became optional rather than the readers becoming two sets of readers.
+
+    The ``limit`` value goes in with the clause it belongs to and stays out when
+    there is no clause. Nothing forces that: the readers here already pass
+    ``account_id`` on reads whose WHERE clause is empty, and an unreferenced key
+    is carried without complaint. It is kept in step because a params dict that
+    matches its query is one fewer thing to reconcile when reading either.
+    :param query: The SQL, without a LIMIT clause
+    :param params: The bound parameters it already has
+    :param limit: How many rows at most, or None for all of them
+    :return: The SQL and parameters to run
+    :rtype: tuple[str, dict[str, Any]]
+    """
+
+    if limit is None:
+        return query, params
+
+    return f"{query} LIMIT :limit", {**params, "limit": limit}
 
 
 def _keep_known(incoming: Any, existing: Any) -> Any:
