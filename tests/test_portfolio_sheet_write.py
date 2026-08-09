@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
+    TRANSACTION_COLUMNS,
     AccountRow,
     HoldingRow,
 )
@@ -66,6 +67,7 @@ class ColumnLetterTests(unittest.TestCase):
     def test_the_contract_ends_where_it_says_it_does(self) -> None:
         self.assertEqual(last_column(columns=ACCOUNT_COLUMNS), "J")
         self.assertEqual(last_column(columns=HOLDING_COLUMNS), "P")
+        self.assertEqual(last_column(columns=TRANSACTION_COLUMNS), "O")
 
     def test_it_keeps_working_past_z(self) -> None:
         # Append-only makes a twenty-seventh column a question of when, not
