@@ -55,6 +55,7 @@ StonkSmith/
 |    |--- modules/           # per-broker scrape/sync modules
 |    |--- loaders/           # dynamic broker and module loading
 |    |--- helpers/           # db, sheets, logging helpers
+|--- docs/                # live verification, and what was decided against
 |--- scripts/             # one-off setup and probe scripts
 |--- tests/
 |--- pyproject.toml
@@ -322,8 +323,22 @@ Every Ally run that opens a browser leaves a response log in
 ```
 
 ```text
+401 https://live.invest.ally.com/api/session/checkSession (49 bytes) {keys: redirectUrl}
+```
+
+**That line is real. The next one is not** — it is the shape the open question
+turns on, written out so it can be recognised if it ever appears:
+
+```text
 200 https://live.invest.ally.com/api/account/<id>/activity ?endDate&jwt&pageSize&startDate (18422 bytes)
 ```
+
+**No activity endpoint has ever been observed.** Five endpoints have, across
+every run so far, and all five are session, auth and account-roster plumbing. So
+that second line illustrates the format rather than evidencing a feed — which
+matters, because "a log shows an activity endpoint" is the first of the three
+conditions that would reopen the question of Ally transactions, and this page's
+own example must not be mistakable for the thing that fires it.
 
 **Endpoints and parameter *names*; never values, bodies or headers.** A route
 called `activity` says nothing on its own. The same route taking `startDate` and
@@ -344,6 +359,13 @@ This is what makes Ally's unanswered questions answerable without a dedicated
 investigation: whether an activity endpoint exists, whether it takes a date
 range, and whether it is per-account are all readable off an ordinary run you
 were doing anyway.
+
+**Whether Ally gets a transactions producer is a decision, and it has been
+made.** Not now: no aggregator covers Ally Invest, no activity endpoint has ever
+been seen, a fetch would need a human sign-in every time, and the one job it
+would do — telling you the stored units went stale — costs the sign-in that
+would have refreshed them. `docs/ally-transactions.md` has the reasoning and the
+three things that would reopen it. This log is the first of them.
 
 **Ally is the only broker that records.** Saving is generic — it happens in
 `BrowserConnection.teardown()`, so nothing has to remember it — but a connection
