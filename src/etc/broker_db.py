@@ -615,7 +615,15 @@ class BrokerDatabase:
             c.pillaged_from,
         )
 
-        if filter_term:
+        # Presence, not truthiness -- the same fix as the history readers below,
+        # and the one place where dropping the filter hands back secrets. This
+        # takes a str, so the falsy value is "" rather than 0, and `--cred-id ""`
+        # reaches here: query_db_creds spells "no filter" as the literal "all",
+        # so anything else is a filter and has to be applied. Empty matched no
+        # id, so it returned every credential with its secret resolved, and the
+        # caller's "No credential with id" report was skipped because it had
+        # rows. An Integer column against "" matches nothing, which is right.
+        if filter_term is not None:
             query = query.filter(c.id == filter_term)
 
         return [tuple(row) for row in query.all()]
@@ -969,7 +977,12 @@ class BrokerDatabase:
         :rtype: list[tuple[Any, ...]]
         """
 
-        where: str = "WHERE s.account_id = :account_id" if account_id else ""
+        # Presence, not truthiness. Under `if account_id` an id of 0 dropped the
+        # clause and rendered the whole table, which looks exactly like a filter
+        # that matched everything -- while 999 correctly returned nothing.
+        where: str = (
+            "WHERE s.account_id = :account_id" if account_id is not None else ""
+        )
 
         return self._select(
             *_bounded(
@@ -1053,9 +1066,12 @@ class BrokerDatabase:
         :rtype: list[tuple[Any, ...]]
         """
 
+        # Presence, not truthiness -- see get_snapshots above. Here the dropped
+        # filter was quieter still: an id of 0 fell through to the branch below
+        # and answered with the current positions, not snapshot 0's.
         where: str = (
             "WHERE h.snapshot_id = :snapshot_id"
-            if snapshot_id
+            if snapshot_id is not None
             else "WHERE s.id = ("
             "  SELECT id FROM account_snapshots "
             "  WHERE account_id = a.id ORDER BY scraped_at DESC, id DESC LIMIT 1"
@@ -1208,7 +1224,11 @@ class BrokerDatabase:
         :rtype: list[tuple[Any, ...]]
         """
 
-        where: str = "WHERE t.account_id = :account_id" if account_id else ""
+        # Presence, not truthiness -- see get_snapshots above. An id of 0 asked
+        # for one account and got every one of them.
+        where: str = (
+            "WHERE t.account_id = :account_id" if account_id is not None else ""
+        )
 
         return self._select(
             *_bounded(
