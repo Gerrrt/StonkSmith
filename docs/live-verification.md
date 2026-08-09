@@ -33,8 +33,13 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*10 of 19 claims have been settled by a live run — 9 confirmed, 1 disproved. The
+*11 of 20 claims have been settled by a live run — 10 confirmed, 1 disproved. The
 remaining 9 rest on unit tests or on fixtures.*
+
+`tests/test_live_verification_tally.py` derives those five numbers from the table below
+and fails if this sentence disagrees with them. It exists because this paragraph said
+nineteen for four commits after the table reached twenty rows: the instruction to update
+it lives under *Recording a result*, and an instruction is not a mechanism.
 
 | Claim | Rests on | Observed live |
 | --- | --- | --- |
@@ -45,14 +50,14 @@ remaining 9 rest on unit tests or on fixtures.*
 | Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one. The `units_as_of` stamp on each holding postdates those runs and has not been written to a real one | Yes |
 | Ally — one row per account across runs | `uq_accounts_broker_key`; the row count was never checked across those runs | No |
 | Ally — valuing from published prices without a login | Unit tests over a fake DB and a canned payload, `tests/test_ally_from_prices.py` | No |
-| Ally — the published price feed answers | Yahoo's chart endpoint, one symbol at a time; no record of a real request | No |
+| Ally — the published price feed answers | A real request on 2026-08-09, written up below: 200 and 3,612 bytes of JSON for one symbol, read by `daily_closes()` into 23 dated closes | Yes |
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
 | TSP — statement parser | Real statements, read as issued through `-o STATEMENT=` | Yes, against real files |
 | TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files |
 | TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
 | TSP — share price download | A real request on 2026-08-07; response written up in #48 | Yes |
 | TSP — DFAS pay table parse | `tests/dfas_basic_pay_em.html`, a **reconstruction** of the live page | No |
-| TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused every request from the dev environment | No |
+| TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused two unrelated hosted environments, 2026-08-07 and 2026-08-09, and tsp.gov answered from both | No |
 | TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
 | TSP — database write | Unit tests with a mocked DB | No |
 | The sheet — four machine-owned tabs | Unit tests with a faked spreadsheet | No |
@@ -72,7 +77,8 @@ rather than a second witness to it.
 
 Seven steps. The whole sequence needs one signed-in browser session and about ten
 minutes — except step 6, which deliberately needs no session at all and has to be run
-on a later day than step 1 to mean anything.
+on a later day than step 1 to mean anything. An eighth check sits after them, unnumbered
+because it is not part of the sequence and needs nothing whatsoever.
 
 The `[+]`, `[!]`, `[*]` and `[-]` prefixes below are what the logger prints for
 success, highlight, display and failure respectively. Quoted strings are copied from
@@ -325,6 +331,47 @@ unchanged `Holdings` tab is expected rather than a failure. Run `sheet` in
 
 Covered by the shared step below.
 
+### The price feed, on its own
+
+Not one of the seven. This one needs no session, no account and no credential — it asks
+only whether the thing step 6 divides by is still there — so it is the one check on this
+page anybody can run, and it was run on 2026-08-09:
+
+```bash
+curl -sS -A "Mozilla/5.0 (compatible; stonksmith/0.1.0; +https://github.com/Gerrrt/StonkSmith)" \
+  -o chart.json -w '%{http_code} %{size_download} %{content_type}\n' \
+  "https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&range=1mo"
+```
+
+That URL and that User-Agent are `QUOTE_URL` and `QUOTE_USER_AGENT` in
+`src/modules/ally_module.py`, copied rather than approximated — the feed's answer is
+allowed to depend on who asks.
+
+```text
+200 3612 application/json;charset=utf-8
+```
+
+**A 200 is half the claim.** The other half is that `daily_closes()` in
+`src/helpers/quotes.py` can still read what came back, which is a different question and
+the one that a silent change of shape would fail. Against that payload it returned 23
+dated closes, 2026-07-08 to 2026-08-07, and two specific things held:
+
+- `meta.gmtoffset` was present, and `-14400`. That field is what dates a bar to a
+  calendar day, and the module's own docstring says reading the timestamps as UTC
+  instead would agree for a US market and quietly disagree for one that does not. It is
+  only a documented hazard while the feed keeps sending it.
+- `close_on(prices=..., day=2026-08-09)` returned `(2026-08-07, 773.26)`. The 9th was a
+  Sunday, so this is the weekend fallback working against live data — Friday's close,
+  returned *dated as Friday* rather than presented as Sunday's.
+
+**What this settles, and what it does not.** It settles the row *Ally — the published
+price feed answers*, whose gap was that no real request had ever been recorded. It does
+not settle *Ally — valuing from published prices without a login*, which is step 6, needs
+a real `ally.db` behind it, and stays `No`. One symbol was asked for, and an ETF rather
+than anything an account here holds; a feed that answers for `SPY` and not for some
+particular fund would still fail step 6, which is the reason the two are separate rows
+rather than one.
+
 ---
 
 ## TSP
@@ -508,6 +555,31 @@ Denied" page — every User-Agent tried, including the one tsp.gov accepts, and
 structure and not a saved response. Everything downstream of the parse is verified;
 the parse itself is verified against a shape that was read off the real page by eye.
 
+**Retried on 2026-08-09 from an unrelated hosted environment, with a control, and
+refused again:**
+
+```text
+GET https://www.dfas.mil/Military-Members/payentitlements/Pay-Tables/Basic-Pay/EM/
+-> 403, 455 bytes, text/html, Akamai "Access Denied"
+   Reference #18.8c623017.1786311998.2342bc08
+
+GET https://www.tsp.gov/data/fund-price-history.csv?startdate=...&enddate=...
+-> 200, 555,142 bytes            (same egress, same User-Agent, same minute)
+```
+
+The control is the part worth keeping. Without it, a 403 is equally well explained by a
+local proxy, and the first write-up — "refused every request from the development
+environment" — reads as a fact about one box. Another `.gov` host answering from the same
+place in the same minute rules that out: the refusal is DFAS's, it tracks the network
+rather than the request, and **re-running this from a third hosted environment will not
+help.** That is worth one line here because it is the cheap thing to try next and it is
+already known not to work.
+
+**What this does not say.** Two blocked cloud networks are not evidence about a home
+connection, so the README's TSP setup claim is left exactly as it stands. Only a run from
+a machine that is not in a data centre can qualify it, and that run is still the first
+half of this step.
+
 Two things to establish, in order.
 
 First, that the page can be fetched from a machine that DFAS will talk to:
@@ -599,9 +671,13 @@ several rows at once, and the failure is the one that writes itself up — it de
 post-mortem, and the successes are merely the run working. That asymmetry is how the
 table and the README come apart: #83 was five claims settled in one sitting, one of
 them written into the table and four of them left in prose. Update every row the run
-touched before closing the issue, and bring the count above the table into line.
+touched before closing the issue, and bring the count above the table into line — that
+last part is now checked, so a row settled without it is a failing test rather than a
+sentence nobody re-reads.
 
-Then change the README in the same pass, whichever way it went. A claim that has been
+Then change the README in the same pass, whichever way it went. **That half is still
+yours**: no test can tell whether a paragraph of prose still summarises the table
+correctly, only whether the arithmetic above it does. A claim that has been
 disproved and left standing is worse than one that was never checked, because the next
 reader has no way to tell them apart — and a claim that has been *proved* and left
 reading as unchecked sends them off to redo a run that has already been done.
