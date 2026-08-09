@@ -997,6 +997,23 @@ ordered and is not. So the stored text stays exactly as the source wrote it and
 the *view* renders `YYYY-MM-DD`. A date nothing can parse is passed through
 unchanged rather than blanked.
 
+**A movement the source gives no id is keyed on its own content**, and identical
+rows in one window are numbered so that two genuine $50 contributions on one day
+stay two rows rather than collapsing into one. The numbering counts content
+rather than position, so a window that comes back reversed or newest-first
+stores exactly what an in-order one would — sorting it first would buy nothing
+and would shift every key already written.
+
+What it does need is that a same-content group arrives *whole* in one window.
+Fetched one per window, the second $50 contribution is byte-identical to a
+re-scrape of the first, and gets skipped. Nothing keyed on content alone can
+separate those two cases, so the rule is to never duplicate and the split window
+is what that costs. Both current sources fetch a date window whole and the key
+carries both dates, so a same-day group cannot straddle one; a paginated source
+that could cut through the middle of one is where a real id stops being optional.
+SnapTrade already supplies one, which is why only the 529 scraper's rows are
+keyed this way at all.
+
 `src/etc/portfolio_sheet.py` is the only thing that writes them: one read of the
 workspace, one authorization, four tabs. Values go up raw, so a number arrives
 as a number — and so an account whose display name begins with `=` stays a name

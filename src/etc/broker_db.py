@@ -1361,9 +1361,25 @@ def natural_keys(rows: Sequence[Transaction]) -> list[str]:
     kept readable rather than hashed. When a source changes its date format, a
     key you can read is worth more than sixteen saved bytes.
 
-    The caveat this rests on: a source's same-day duplicates always appear
-    together in its window. Every broker seen so far returns transactions in date
-    order, so they do.
+    What this rests on, stated precisely. The counter is keyed on the row's own
+    content rather than on its position, so the keys a batch produces are a
+    function of what is *in* it and never of the order it arrived in: a window
+    that comes back reversed, interleaved or newest-first yields exactly the same
+    keys an in-order one would. Sorting each batch first would therefore buy
+    nothing, while shifting every key already stored.
+
+    Where it stops is batch composition. A same-content group has to arrive whole
+    in one window: two $50 contributions on one day, fetched one per window, are
+    byte-identical to the same contribution fetched twice, so the second is
+    skipped. That is a limit of keying on content rather than a defect to be
+    fixed -- with nothing but the row's own text, a movement seen again and a
+    genuine second one cannot be told apart, and any scheme must pick which way
+    to be wrong. This one never duplicates.
+
+    Both producers currently fetch a date window whole, and the body carries both
+    dates, so a same-day group cannot straddle one. A paginated source could, and
+    that is the point at which a derived key stops being enough and the source
+    has to supply a real id.
     :param rows: Movements in the order the source returned them
     :return: One key per row, in the same order
     :rtype: list[str]
