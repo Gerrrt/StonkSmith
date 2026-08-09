@@ -335,6 +335,24 @@ class HistoryRowsTests(MemoryKeyringMixin, unittest.TestCase):
         assert missing is not None
         self.assertEqual(len(missing), 0, "an unknown id must narrow to nothing")
 
+    def test_an_id_of_zero_narrows_like_any_other_unknown_id(self) -> None:
+        # This method gates on `if not argument`, which "0" passes, while the
+        # readers gated on `if account_id`, which 0 does not. The two disagreed
+        # on exactly one value, and 'show snapshots 0' rendered every account.
+        self.db.save_snapshot(
+            account=AccountIdentity(account_key="Other", display_name="Other"),
+            scraped_at="2026-01-02 00:00:00",
+            value=5.0,
+        )
+
+        everything = self.nav.history_rows(category="snapshots")
+        assert everything is not None
+        self.assertEqual(len(everything), 2)
+
+        narrowed = self.nav.history_rows(category="snapshots", argument="0")
+        assert narrowed is not None
+        self.assertEqual(len(narrowed), 0, "no account has id 0, so nothing matches")
+
     def test_a_legacy_database_explains_itself(self) -> None:
         nav = BrokerNavigator(object(), _LegacyDb(), "fidelity")
 

@@ -467,5 +467,54 @@ class CurrentTransactionsTests(_SnapshotTestCase):
         self.assertEqual(len(self.db.get_current_transactions()), 2)
 
 
+class FalsyIdsStillNarrowTests(_SnapshotTestCase):
+    """
+    Id 0 is an unknown id, not an absent filter.
+
+    Every reader here built its WHERE clause on `if account_id`, so the one
+    falsy id dropped the clause instead of matching nothing -- and 999 already
+    returned nothing, which made 0 the only id that behaved differently. Two
+    accounts, because with one the dropped filter and the applied one both
+    return the same single row.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.save(holdings=[FUND], transactions=[CONTRIBUTION])
+        self.db.save_snapshot(
+            account=AccountIdentity(account_key="Other", display_name="Other"),
+            scraped_at="2026-01-02 00:00:00",
+            value=750.0,
+            holdings=[POSITION],
+            transactions=[
+                Transaction(
+                    processed_on="12/31/2025", tx_type="Contribution", value=5.0
+                )
+            ],
+        )
+
+    def test_account_id_zero_narrows_snapshots_rather_than_showing_all(self) -> None:
+        self.assertEqual(len(self.db.get_snapshots()), 2, "both accounts are stored")
+
+        self.assertEqual(self.db.get_snapshots(account_id=0), [])
+
+    def test_account_id_zero_narrows_transactions_rather_than_showing_all(
+        self,
+    ) -> None:
+        stored = self.db.get_transactions()
+        self.assertEqual(len(stored), 2, "both movements are stored")
+
+        self.assertEqual(self.db.get_transactions(account_id=0), [])
+
+    def test_snapshot_id_zero_narrows_holdings_rather_than_meaning_current(
+        self,
+    ) -> None:
+        # The quieter half: a falsy id here selected the newest-snapshot branch,
+        # so `show holdings 0` answered with current positions rather than none.
+        self.assertEqual(len(self.db.get_holdings()), 2, "one per account, newest each")
+
+        self.assertEqual(self.db.get_holdings(snapshot_id=0), [])
+
+
 if __name__ == "__main__":
     unittest.main()
