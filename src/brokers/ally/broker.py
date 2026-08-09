@@ -252,6 +252,17 @@ class Ally(BrowserConnection):
         :rtype: bool
         """
 
+        # Armed before either branch, and before anything navigates. Recording
+        # is passive -- a listener on the page that appends to two lists -- so
+        # it does not touch the request the CDP rule below is protecting.
+        #
+        # It used to sit inside the else, which meant --browser cdp recorded
+        # nothing at all. That is the path the README recommends for surviving
+        # Ally's bot protection, so the runs most likely to be worth reading
+        # were the ones producing no evidence. The listener outlives the manual
+        # sign-in, so arming here catches the whole session either way.
+        self.watch_responses()
+
         # Never navigate an attached browser before the operator has signed in.
         # Driving an unauthenticated page over CDP is what trips Akamai's
         # sensor for that profile; every later attempt in the same profile is
@@ -268,13 +279,10 @@ class Ally(BrowserConnection):
                 return False
 
         else:
-            # Before navigating, so the check's own requests are recorded. The
-            # holdings URL renders for a live session -- ally_module opens the
-            # same one -- so when it comes up empty the answer is in what the
-            # page asked for and was refused, not in the markup it managed to
-            # render.
-            self.watch_responses()
-
+            # The holdings URL renders for a live session -- ally_module opens
+            # the same one -- so when it comes up empty the answer is in what
+            # the page asked for and was refused, not in the markup it managed
+            # to render. The recorder was armed above, before this navigates.
             try:
                 self.active_page.goto(url=self.holdings_url)
 

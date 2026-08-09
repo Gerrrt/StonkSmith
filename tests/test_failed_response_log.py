@@ -24,8 +24,10 @@ What the recording owes its reader:
   diagnostic never having been wired up
 """
 
+import tempfile
 import unittest
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import etc.browser_connection as browser_mod
 
@@ -820,6 +822,207 @@ class ErrorShape(unittest.TestCase):
         _emit(conn, _refused(payload=b"not json at all"))
 
         self.assertIn("401", conn.failed_responses[0])
+
+
+class QueryShape(unittest.TestCase):
+    """
+    Which parameters an endpoint takes, and none of what was passed to them.
+
+    A route named `activity` says nothing on its own. The same route taking
+    `startDate` and `endDate` says it is a windowed history feed, which is the
+    question a discovery run exists to answer -- and answering it must not cost
+    the redaction that lets these lines be pasted into an issue.
+    """
+
+    def test_the_names_survive_and_the_values_do_not(self) -> None:
+        shape = browser_mod.query_shape(
+            url="https://live.invest.ally.com/api/activity"
+            "?jwt=SECRET&acct=12345&startDate=2026-01-01"
+        )
+
+        self.assertIn("startDate", shape)
+        self.assertIn("acct", shape)
+        self.assertNotIn("SECRET", shape)
+        self.assertNotIn("12345", shape)
+        self.assertNotIn("2026-01-01", shape)
+
+    def test_no_query_string_adds_nothing(self) -> None:
+        self.assertEqual(
+            browser_mod.query_shape(url="https://live.invest.ally.com/api/accounts"), ""
+        )
+
+    def test_the_order_the_app_used_does_not_make_a_second_line(self) -> None:
+        # One endpoint polled with its parameters in two orders is one fact.
+        self.assertEqual(
+            browser_mod.query_shape(url="https://x/a?b=1&a=2"),
+            browser_mod.query_shape(url="https://x/a?a=9&b=8"),
+        )
+
+    def test_a_parameter_with_no_value_is_still_a_parameter(self) -> None:
+        # Present and empty says the endpoint accepts it, which is the fact
+        # being recorded.
+        self.assertIn("page", browser_mod.query_shape(url="https://x/a?page="))
+
+    def test_a_repeated_parameter_is_named_once(self) -> None:
+        self.assertEqual(browser_mod.query_shape(url="https://x/a?id=1&id=2"), " ?id")
+
+    def test_the_data_call_line_carries_it(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/activity"
+                "?startDate=2026-01-01&endDate=2026-06-30",
+            ),
+        )
+
+        self.assertEqual(
+            conn.data_responses,
+            ["200 https://live.invest.ally.com/api/activity ?endDate&startDate"],
+        )
+
+    def test_the_refusal_line_does_not(self) -> None:
+        # A refusal is about one request going wrong and its line is quoted
+        # verbatim into issues. The map of what the app can ask for is the
+        # other list's job.
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=403,
+                url="https://live.invest.ally.com/api/holdings?jwt=SECRET&acct=1",
+            ),
+        )
+
+        self.assertEqual(
+            conn.failed_responses, ["403 https://live.invest.ally.com/api/holdings"]
+        )
+
+
+class SavingTheRecording(unittest.TestCase):
+    """
+    A run that worked is the one worth reading, and it used to throw it away.
+
+    report_responses() prints, and its only caller is capture_page(), which runs
+    after something has already gone wrong. One live Ally session was observed
+    making twenty-five successful data calls; what survives of it is the number,
+    because nothing wrote the list down.
+    """
+
+    def setUp(self) -> None:
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.logs = Path(self._dir.name)
+        patcher = patch.object(browser_mod, "logs_path", self.logs)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _written(self) -> list[Path]:
+        return sorted(self.logs.glob(pattern="*-data-calls-*.log"))
+
+    def test_a_clean_run_still_leaves_the_list_behind(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(status=200, url="https://live.invest.ally.com/api/activity?page=1"),
+            _xhr(status=200, url="https://live.invest.ally.com/api/accounts"),
+        )
+
+        path = conn.save_response_log()
+
+        assert path is not None
+        text: str = path.read_text(encoding="utf-8")
+        self.assertIn("api/activity ?page", text)
+        self.assertIn("api/accounts", text)
+
+    def test_nothing_recorded_writes_no_file(self) -> None:
+        # A --from-prices run never opens a browser. A file per run saying "no
+        # data calls" is clutter with no reader.
+        conn = _connection()
+        conn.watch_responses()
+
+        self.assertIsNone(conn.save_response_log())
+        self.assertEqual(self._written(), [])
+
+    def test_never_armed_writes_no_file(self) -> None:
+        conn = _connection()
+
+        self.assertIsNone(conn.save_response_log())
+        self.assertEqual(self._written(), [])
+
+    def test_no_value_reaches_the_file(self) -> None:
+        # The whole reason this can be written at all.
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(
+                status=200,
+                url="https://live.invest.ally.com/api/holdings"
+                "?jwt=SECRET&acct=12345678",
+            ),
+        )
+
+        path = conn.save_response_log()
+
+        assert path is not None
+        text: str = path.read_text(encoding="utf-8")
+        self.assertNotIn("SECRET", text)
+        self.assertNotIn("12345678", text)
+        self.assertIn("?acct&jwt", text)
+
+    def test_the_refusals_are_in_there_too(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _xhr(status=401, url="https://live.invest.ally.com/api/session"))
+
+        path = conn.save_response_log()
+
+        assert path is not None
+        self.assertIn("401", path.read_text(encoding="utf-8"))
+
+    def test_an_endpoint_that_answered_twice_is_called_out(self) -> None:
+        conn = _connection()
+        conn.watch_responses()
+        _emit(
+            conn,
+            _xhr(status=200, url="https://x/api/a", content_length="40"),
+            _xhr(status=200, url="https://x/api/a", content_length="400"),
+        )
+
+        path = conn.save_response_log()
+
+        assert path is not None
+        self.assertIn("answered differently", path.read_text(encoding="utf-8"))
+
+    def test_the_run_survives_an_unwritable_log(self) -> None:
+        # Best-effort, like the screenshot in capture_page.
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _xhr(status=200, url="https://x/api/a"))
+
+        with patch.object(
+            browser_mod.Path, "write_text", side_effect=OSError("read-only")
+        ):
+            self.assertIsNone(conn.save_response_log())
+
+    def test_teardown_writes_it_without_being_asked(self) -> None:
+        # The property that matters: every exit path, including the ones that
+        # end by raising or by the operator giving up at the sign-in.
+        conn = _connection()
+        conn.watch_responses()
+        _emit(conn, _xhr(status=200, url="https://x/api/a"))
+        conn.context = None
+        conn.browser = None
+        conn.playwright = None
+
+        conn.teardown()
+
+        self.assertEqual(len(self._written()), 1)
 
 
 if __name__ == "__main__":

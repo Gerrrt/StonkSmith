@@ -47,7 +47,7 @@ import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 from playwright.sync_api import (
     Browser,
@@ -196,6 +196,47 @@ def endpoint_of(url: str) -> str:
     ]
 
     return f"{split.scheme}://{split.netloc}{'/'.join(segments)}"
+
+
+def query_shape(url: str) -> str:
+    """
+    Which parameters a call takes, and none of what it passed them.
+
+    ``endpoint_of`` drops the query string whole, because Ally's carries the jwt
+    and the account id. That is right for a line meant to be pasted into an
+    issue, and it also throws away the one thing a reader needs when the
+    question is *what an endpoint can be asked for*: whether it accepts a date
+    range, an account, a page. A route named ``activity`` says nothing; the same
+    route taking ``startDate`` and ``endDate`` says it is a windowed history
+    feed.
+
+    So the names survive and the values do not, which is the whole trick. A
+    parameter name is a fact about the endpoint; its value is a fact about the
+    person using it. ``?jwt=SECRET&acct=12345`` becomes ``?acct&jwt`` -- the
+    shape is legible and there is nothing in it worth redacting later.
+
+    Sorted and deduplicated so one endpoint polled with its parameters in two
+    orders is one line rather than two.
+    :param url: The full request URL
+    :return: " ?name&name", or "" when there is no query string
+    :rtype: str
+    """
+
+    query: str = urlparse(url=url).query
+
+    if not query:
+        return ""
+
+    # keep_blank_values, because a parameter present and empty is still a
+    # parameter the endpoint accepts, which is exactly what is being recorded.
+    names: set[str] = {
+        name for name, _ in parse_qsl(qs=query, keep_blank_values=True) if name
+    }
+
+    if not names:
+        return ""
+
+    return f" ?{'&'.join(sorted(names))}"
 
 
 def size_suffix(response: PlaywrightResponse) -> str:
@@ -822,8 +863,15 @@ class BrowserConnection(Connection):
             # nothing about whether the app went looking for data.
             if response.request.resource_type in DATA_RESOURCE_TYPES:
                 answer: str = f"{response.status}{size_suffix(response=response)}"
+                # The parameter names ride along here and not on the failure
+                # line above. A refusal is about one request going wrong and its
+                # line is quoted verbatim into issues; this list is the map of
+                # what the app can ask for, which is the thing that has to say
+                # whether an endpoint takes a window.
                 call: str = (
-                    f"{response.status} {endpoint}{size_suffix(response=response)}"
+                    f"{response.status} {endpoint}"
+                    f"{query_shape(url=response.url)}"
+                    f"{size_suffix(response=response)}"
                 )
 
                 if call not in self.data_responses:
@@ -909,6 +957,84 @@ class BrowserConnection(Connection):
         if len(changed) > len(shown):
             self.logger.fail(msg=f"    ... and {len(changed) - len(shown)} more")
 
+    def save_response_log(self) -> Path | None:
+        """
+        Write down what the page asked for, on a run that went fine.
+
+        ``report_responses`` prints, and its only caller is ``capture_page``,
+        which runs when something has already gone wrong. So a run that worked
+        recorded everything and then dropped it -- and the runs that work are
+        the ones that reached the pages worth mapping. One live Ally session was
+        observed making twenty-five successful data calls; what survives of it
+        is the number twenty-five, because nothing wrote the list down.
+
+        A file rather than more console output. The list is long by design (see
+        DATA_RESPONSE_LIMIT) and nobody wants it between them and their
+        balances, but it costs nothing to keep and answers a question that
+        otherwise needs a second live sign-in to ask.
+
+        Everything in it has already been through ``endpoint_of`` and
+        ``query_shape``: hosts, routes, parameter names, statuses and sizes.
+        No values, no bodies, no headers. Written with the same restricted
+        permissions as a page capture, on the same principle -- it is a
+        description of somebody's brokerage session even without a secret in it.
+        :return: Path to the log, or None when there was nothing to write
+        :rtype: Path | None
+        """
+
+        if not self.watching_responses:
+            return None
+
+        # Nothing recorded is a finding when a page came up empty, and
+        # report_responses says so out loud in that case. Here it just means the
+        # run had no browser work in it, and a file saying "no data calls" for
+        # every --from-prices run is clutter with no reader.
+        if not self.data_responses and not self.failed_responses:
+            return None
+
+        stamp: str = datetime.now(tz=UTC).strftime(format="%Y%m%d-%H%M%S")
+        target: Path = logs_path / f"{self.browser_slug}-data-calls-{stamp}.log"
+
+        sections: list[str] = [
+            f"# {self.browser_slug} response log, {stamp}",
+            "# Endpoints and parameter names only -- no values, bodies or headers.",
+            "",
+            f"## data calls ({len(self.data_responses)})",
+            *(self.data_responses or ["(none)"]),
+            "",
+            f"## refused ({len(self.failed_responses)})",
+            *(self.failed_responses or ["(none)"]),
+        ]
+
+        changed: list[str] = [
+            f"{endpoint}: {' then '.join(answers)}"
+            for endpoint, answers in self.endpoint_answers.items()
+            if len(answers) > 1
+        ]
+
+        if changed:
+            sections += ["", f"## answered differently ({len(changed)})", *changed]
+
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(data="\n".join(sections) + "\n", encoding="utf-8")
+            restrict(path=target)
+
+        except Exception as e:
+            # Best-effort, like the screenshot in capture_page: a diagnostic
+            # that cannot be written must not take the run down with it.
+            self.logger.fail(msg=f"Could not write the response log: {e}")
+            return None
+
+        self.logger.display(
+            msg=(
+                f"Recorded {len(self.data_responses)} data call(s) and "
+                f"{len(self.failed_responses)} refusal(s) to {target}"
+            )
+        )
+
+        return target
+
     def _report_lines(self, lines: list[str], limit: int, some: str, none: str) -> None:
         """
         Log one capped, self-describing list of recorded responses.
@@ -988,6 +1114,13 @@ class BrowserConnection(Connection):
         Called by Connection.__call__ on every exit path. Without this, each run
         leaves an orphaned browser process and a running Playwright driver.
         """
+
+        # Here rather than at any one broker's last line, because "every exit
+        # path" is the property that matters: a run that ends by raising, or by
+        # the operator giving up at the sign-in, has still recorded whatever it
+        # reached, and that is often the run worth reading. Writes nothing when
+        # nothing was recorded.
+        self.save_response_log()
 
         if self.context is not None:
             # Save before closing: cookies set during this run (including any
