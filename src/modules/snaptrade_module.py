@@ -297,7 +297,14 @@ def activity_transaction(activity: dict[str, Any]) -> Transaction:
 
     ``external_id`` is carried through because SnapTrade supplies one. That
     matters for deduplication: with a real id there is nothing to derive, and a
-    derived key would break the moment SnapTrade reordered its window.
+    derived key only holds while a same-content group keeps arriving whole in one
+    window. SnapTrade is the producer that windows and paginates, so it is the
+    one where that could stop being true.
+
+    An activity that arrives without an id falls back to ``None`` here rather
+    than failing, and ``natural_keys()`` then derives a key for it like any
+    scraped row. That is the safe reading of a missing field, and it is also the
+    one place a SnapTrade movement inherits the scraper's exposure.
     :param activity: One activity as returned by SnapTrade
     :return: The transaction
     :rtype: Transaction

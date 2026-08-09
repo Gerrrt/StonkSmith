@@ -16,6 +16,7 @@ Three properties matter here, and each has a way of failing quietly:
   money permanently.
 """
 
+import itertools
 import tempfile
 import unittest
 from pathlib import Path
@@ -86,6 +87,13 @@ class _SnapshotTestCase(MemoryKeyringMixin, unittest.TestCase):
     def count(self, table: str) -> int:
         with self.db.db_engine.connect() as conn:
             return int(conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar_one())
+
+    def stored_keys(self) -> list[str]:
+        with self.db.db_engine.connect() as conn:
+            return sorted(
+                str(object=row[0])
+                for row in conn.execute(text("SELECT natural_key FROM transactions"))
+            )
 
     def save(self, **overrides: Any) -> int:
         kwargs: dict[str, Any] = {
@@ -277,8 +285,10 @@ class DuplicateTransactionTests(_SnapshotTestCase):
         self.assertEqual(keys, natural_keys(rows=[CONTRIBUTION, CONTRIBUTION]))
 
     def test_a_source_supplied_id_is_used_directly(self) -> None:
-        # SnapTrade gives every activity an id. There is nothing to derive, and
-        # deriving one anyway would break when it reorders its window.
+        # SnapTrade gives every activity an id, so there is nothing to derive.
+        # A real id also survives what a derived key cannot: the same movement
+        # reaching two windows separately is still one row here, where a derived
+        # key would have to guess. See WindowOrderTests for that boundary.
         rows = [
             Transaction(external_id="abc", tx_type="BUY", value=1.0),
             Transaction(external_id="abc", tx_type="BUY", value=1.0),
@@ -288,6 +298,97 @@ class DuplicateTransactionTests(_SnapshotTestCase):
 
         self.save(transactions=rows)
         self.assertEqual(self.count("transactions"), 1)
+
+
+class WindowOrderTests(_SnapshotTestCase):
+    """How much reordering the derived key survives, and where it stops."""
+
+    #: Same day, same amount, same everything: only the ordinal separates them.
+    TWIN = CONTRIBUTION
+    OTHER = Transaction(
+        processed_on="01/15/2026",
+        traded_on="01/14/2026",
+        tx_type="Dividend",
+        value=3.10,
+        raw="$3.10",
+    )
+
+    def test_a_reversed_window_produces_the_same_keys(self) -> None:
+        window = [self.TWIN, self.TWIN, self.OTHER]
+
+        self.assertEqual(
+            sorted(natural_keys(rows=window)),
+            sorted(natural_keys(rows=list(reversed(window)))),
+        )
+
+    def test_every_ordering_of_one_window_produces_the_same_keys(self) -> None:
+        # The ordinal counts identical *content*, not position, so the keys are
+        # a function of what the window holds rather than the order it came in.
+        window = [self.TWIN, self.TWIN, self.OTHER]
+        expected = sorted(natural_keys(rows=window))
+
+        for ordering in itertools.permutations(window):
+            self.assertEqual(
+                sorted(natural_keys(rows=list(ordering))),
+                expected,
+                f"order changed the keys: {ordering}",
+            )
+
+    def test_a_newest_first_re_scrape_neither_duplicates_nor_drops(self) -> None:
+        # The failure this guards: a source that starts paginating newest-first
+        # would re-key its whole window, and every row would insert again.
+        window = [self.OTHER, self.TWIN, self.TWIN]
+        self.save(transactions=window)
+
+        before = self.stored_keys()
+        self.save(scraped_at="2026-01-02 00:00:00", transactions=list(reversed(window)))
+
+        self.assertEqual(self.count("transactions"), 3)
+        self.assertEqual(self.stored_keys(), before)
+
+    def test_a_window_that_widens_still_gains_the_sibling(self) -> None:
+        # One contribution stored, then a window holding both: the ordinal
+        # reaches past what is already there rather than colliding with it.
+        self.save(transactions=[self.TWIN])
+        self.save(scraped_at="2026-01-02 00:00:00", transactions=[self.TWIN, self.TWIN])
+
+        self.assertEqual(self.count("transactions"), 2)
+
+    def test_a_pair_split_across_two_windows_cannot_be_told_from_a_re_scrape(
+        self,
+    ) -> None:
+        # This is the bound, not an oversight. These two batches are
+        # byte-identical to the same movement fetched twice -- which is exactly
+        # what IdempotenceTests asserts must collapse to one row. No key derived
+        # from content alone can separate the two cases, so the scheme picks the
+        # side that never duplicates, and a genuine second contribution split
+        # across windows is the price.
+        self.save(transactions=[self.TWIN])
+        self.save(scraped_at="2026-01-02 00:00:00", transactions=[self.TWIN])
+
+        self.assertEqual(self.count("transactions"), 1)
+
+    def test_a_source_supplied_id_is_unaffected_by_its_neighbours_moving(self) -> None:
+        # A batch can hold both kinds at once: SnapTrade omitting an id on one
+        # activity puts that row on the derived branch beside the others.
+        window = [
+            Transaction(external_id="act-1", tx_type="BUY", value=1.0),
+            self.TWIN,
+            self.TWIN,
+            Transaction(external_id="act-2", tx_type="DIVIDEND", value=2.0),
+        ]
+
+        self.assertEqual(
+            sorted(natural_keys(rows=window)),
+            sorted(natural_keys(rows=list(reversed(window)))),
+        )
+
+        self.save(transactions=window)
+        stored = self.stored_keys()
+        self.save(scraped_at="2026-01-02 00:00:00", transactions=list(reversed(window)))
+
+        self.assertEqual(self.count("transactions"), 4)
+        self.assertEqual(self.stored_keys(), stored)
 
 
 class AtomicityTests(_SnapshotTestCase):
