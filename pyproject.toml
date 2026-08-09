@@ -10,7 +10,7 @@ dependencies = [
     "playwright-stealth>=2",
     # Reads TSP quarterly statements, which are the only place a unit count
     # is stated without a login.
-    "pypdf>=5",
+    "pypdf>=6.15.0",
     "requests>=2.33.1",
     "rich>=13.7",
     "snaptrade-python-sdk>=12.0.4",
