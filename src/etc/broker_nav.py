@@ -62,6 +62,8 @@ CATEGORY_HEADERS: dict[str, tuple[str, ...]] = {
         "Currency",
         "First Seen",
         "External Id",
+        "Natural Key",
+        "Raw Value",
     ),
     "deltas": (
         "Account",
@@ -86,17 +88,26 @@ HISTORY_READERS: dict[str, str] = {
 #: Which columns `show` prints, per category. A category absent from here prints
 #: all of them, which is every category but one.
 #:
-#: `transactions` omits Description, and only Description. It is free text a
-#: source wrote -- SnapTrade's runs to a sentence -- while print_table hands
-#: rows to tabulate with no width limit and nothing here truncates a cell, so
-#: one long movement turns the whole grid into wrapped soup. Every other column
-#: the tab shows is bounded and stays: First Seen is a timestamp and External Id
-#: is an id, and twelve columns is the width `holdings` has always run at.
+#: `transactions` omits three, all of them for width. print_table hands rows to
+#: tabulate with no limit and nothing here truncates a cell, so one long value
+#: turns the whole grid into wrapped soup. Description is free text a source
+#: wrote and SnapTrade's runs to a sentence; Natural Key is a whole row's text
+#: pipe-joined, so it is as wide as the row it keys; Raw Value is whatever the
+#: source printed, bounded by nothing. Everything else the tab shows is bounded
+#: and stays -- First Seen is a timestamp, External Id is an id -- and twelve
+#: columns is the width `holdings` has always run at.
 #:
-#: Dropping it is not free, and do_show says so out loud rather than quietly
-#: handing back a narrower table than the export contract promises. A column
-#: missing without mention is the same fault as a row count that stops without
-#: mention.
+#: The last two are also the two the tab does not have, and that asymmetry is
+#: the point rather than an oversight. Sheets is a view of what stonksmithdb
+#: reports, which is a floor and not a ceiling: every column the tab shows must
+#: be reachable from here, while a column that only answers "why did this row
+#: not dedup" has no business on a portfolio tab and every business in a CSV
+#: pulled to find out.
+#:
+#: Dropping a column is not free, and do_show says so out loud rather than
+#: quietly handing back a narrower table than the export contract promises. A
+#: column missing without mention is the same fault as a row count that stops
+#: without mention.
 SHOW_COLUMNS: dict[str, tuple[str, ...]] = {
     "transactions": (
         "ID",

@@ -707,7 +707,7 @@ Each broker gets its own SQLite file at
 | `accounts` | account, ever | broker, brokerage, display name, beneficiary, kind |
 | `account_snapshots` | account per run | a **numeric** value, its currency, the source's own as-of date, and the text the source printed |
 | `holdings` | position per snapshot | fund code or ticker, name, units, price, value, principal, earnings, cost basis, and the unit count's own as-of date where a source dates its quantity apart from its value |
-| `transactions` | movement | processed and traded dates, type, units, price, value |
+| `transactions` | movement | processed and traded dates, type, symbol, description, units, price, value, currency, the source's own id where it has one, when StonkSmith first saw it, the key it is deduplicated on, and the value's original text |
 
 Two things about that shape are deliberate:
 
@@ -745,20 +745,33 @@ schwab529plan > export transactions ~/tx.csv
 [+] Exported 2043 transactions to ~/tx.csv
 ```
 
-**It is fewer columns as well as fewer rows.** `show transactions` leaves out
-`Description` — free text a source wrote, and the one column that can be a whole
-sentence — and says which column it dropped and where to get it. Everything else
-the `Transactions` tab shows, `show` shows too, and `export` writes all thirteen:
-
-```
-schwab529plan > show transactions
-[!] Description is too wide for a terminal and not shown; 'export transactions
-    <file>' includes it.
-```
-
 That count is not decoration. A CSV that stopped early looks exactly like a
 complete one, and nothing reading it afterwards can tell — which is the same
 failure the `Transactions` tab exists to avoid, in a file instead of a tab.
+
+**It is fewer columns as well as fewer rows.** `show transactions` leaves out
+three of them and says which three and where to get them. Everything else the
+`Transactions` tab shows, `show` shows too, and `export` writes all fifteen:
+
+```
+schwab529plan > show transactions
+[!] Description, Natural Key, Raw Value are too wide for a terminal and not
+    shown; 'export transactions <file>' includes them.
+```
+
+All three are dropped for width, and nothing here truncates a cell: `Description`
+is free text a source wrote and can be a whole sentence, `Natural Key` is a whole
+row's text pipe-joined, and `Raw Value` is whatever the source printed.
+
+**The last two are also the two the `Transactions` tab does not have**, and that
+is deliberate in both places. `Natural Key` is the key a movement is
+deduplicated on and `Raw Value` is the value's text before anything parsed it;
+together they are how you tell a row that is genuinely new from one whose key
+moved because a source changed its date format. That is a debugging question, so
+it belongs in a CSV you pulled to answer it and not on a tab you read your
+portfolio from. The key is stored as legible text rather than as a hash for
+exactly this, and that choice only pays for itself if something can show it to
+you.
 
 `delete snapshot` is there because a wrong mark does not correct itself. The
 next sync writes a row *beside* it, not over it — snapshots record what was
@@ -772,6 +785,11 @@ Google Sheets is a view of this, not the other way round. Each tab is cleared
 and rewritten from what the database holds, so what you see there is what
 `stonksmithdb` reports. That has a consequence worth stating outright — see
 [The sheet is output](#the-sheet-is-output) below.
+
+It is a floor rather than a ceiling: every column a tab shows has to be reachable
+from `stonksmithdb`, and `stonksmithdb` may carry columns no tab wants. The two
+above are the whole of that today. The shell is where you go to ask why the
+database holds what it holds; the sheet is where you go to read what it holds.
 
 **Upgrading an existing database.** Databases written before account history
 have a single `accounts` table of per-run rows with a text balance. Opening one
