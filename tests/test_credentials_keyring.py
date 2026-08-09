@@ -125,6 +125,26 @@ class CredentialKeyringTests(unittest.TestCase):
         self.assertEqual(db.get_credentials()[0][2], "")
         db.shutdown_db()
 
+    def test_an_empty_filter_matches_nothing_rather_than_every_credential(self) -> None:
+        # Connection.query_db_creds spells "no filter" as the literal "all", so
+        # every other value is a filter. `--cred-id ""` used to be dropped on
+        # the floor by `if filter_term:`, which handed back every credential --
+        # with secrets resolved -- and looked like a filter that matched all.
+        engine = create_db_engine(db_path=self.tmp / "empty_filter.db")
+        db = self.Database(engine, "schwab529plan")
+        db.add_credential(username="alice", secret="hunter2")
+        db.add_credential(username="bob", secret="s3cret")
+
+        self.assertEqual(len(db.get_credential_refs()), 2, "both are stored")
+
+        self.assertEqual(db.get_credential_refs(filter_term=""), [])
+        self.assertEqual(db.get_credentials(filter_term=""), [])
+
+        # An id that does exist still narrows, and "1" is a str here because
+        # that is what argparse hands over.
+        self.assertEqual(len(db.get_credentials(filter_term="1")), 1)
+        db.shutdown_db()
+
 
 if __name__ == "__main__":
     unittest.main()

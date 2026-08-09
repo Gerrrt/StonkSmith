@@ -615,7 +615,15 @@ class BrokerDatabase:
             c.pillaged_from,
         )
 
-        if filter_term:
+        # Presence, not truthiness -- the same fix as the history readers below,
+        # and the one place where dropping the filter hands back secrets. This
+        # takes a str, so the falsy value is "" rather than 0, and `--cred-id ""`
+        # reaches here: query_db_creds spells "no filter" as the literal "all",
+        # so anything else is a filter and has to be applied. Empty matched no
+        # id, so it returned every credential with its secret resolved, and the
+        # caller's "No credential with id" report was skipped because it had
+        # rows. An Integer column against "" matches nothing, which is right.
+        if filter_term is not None:
             query = query.filter(c.id == filter_term)
 
         return [tuple(row) for row in query.all()]
