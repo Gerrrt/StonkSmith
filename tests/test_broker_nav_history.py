@@ -20,11 +20,15 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import etc.broker_nav as broker_nav
 from etc.broker_db import BrokerDatabase
 from etc.broker_nav import (
     CATEGORY_HEADERS,
+    CURRENCY_HEADER,
     HISTORY_FILTERS,
     HISTORY_READERS,
+    MONEY_HEADERS,
+    SHOW_COLUMNS,
     SHOW_LIMITS,
     BrokerNavigator,
 )
@@ -122,6 +126,30 @@ class HeaderContractTests(MemoryKeyringMixin, unittest.TestCase):
                     self.assertNotIn("snapshot_id", signature.parameters)
 
             db.shutdown_db()
+
+    def test_every_money_column_is_one_the_contract_has(self) -> None:
+        # What the integers could not give. MONEY_COLUMNS held positions, so a
+        # column inserted mid-tuple moved the money without moving the numbers,
+        # and formatting a bare float as currency looks entirely correct.
+        for category, names in MONEY_HEADERS.items():
+            with self.subTest(category=category):
+                for name in names:
+                    self.assertIn(name, CATEGORY_HEADERS[category])
+
+    def test_every_currency_column_is_one_the_contract_has(self) -> None:
+        for category, name in CURRENCY_HEADER.items():
+            with self.subTest(category=category):
+                self.assertIn(name, CATEGORY_HEADERS[category])
+
+    def test_the_screen_only_asks_for_columns_the_export_has(self) -> None:
+        # SHOW_COLUMNS is a subset selected from CATEGORY_HEADERS, not a second
+        # list written out beside it -- which is what keeps show and export from
+        # disagreeing about what a column means or where it sits.
+        for category, names in SHOW_COLUMNS.items():
+            with self.subTest(category=category):
+                self.assertIn(category, CATEGORY_HEADERS)
+                for name in names:
+                    self.assertIn(name, CATEGORY_HEADERS[category])
 
     def test_headers_match_what_the_database_returns(self) -> None:
         # A header list one column short silently mislabels every column after
@@ -313,6 +341,79 @@ class HistoryRowsTests(MemoryKeyringMixin, unittest.TestCase):
         self.assertIsNone(nav.history_rows(category="snapshots"))
 
 
+class MoneyStillLandsOnMoneyTests(unittest.TestCase):
+    """
+    The assertion that fails if the positional tables come back.
+
+    `Description` went in after `Symbol`, which moved Units, Price, Value and
+    Currency one place right. Under the old MONEY_COLUMNS of (7, 8) that put
+    Units and Price in the money columns and read the currency off Value.
+    """
+
+    def _row(self, currency: str = "USD") -> list[str]:
+        """One rendered transactions row, in export-contract order."""
+
+        return BrokerNavigator.render(
+            category="transactions",
+            rows=[
+                (
+                    1,
+                    "Brokerage",
+                    "2026-08-01",
+                    "2026-07-31",
+                    "BUY",
+                    "VTI",
+                    "Bought 3 VTI",
+                    3.0,
+                    250.0,
+                    750.0,
+                    currency,
+                    "2026-08-09 09:00:00",
+                    "sn-1",
+                )
+            ],
+        )[0]
+
+    def _at(self, cells: list[str], name: str) -> str:
+        return cells[CATEGORY_HEADERS["transactions"].index(name)]
+
+    def test_price_and_value_are_money(self) -> None:
+        cells = self._row()
+
+        self.assertEqual(self._at(cells=cells, name="Price"), "$250.00")
+        self.assertEqual(self._at(cells=cells, name="Value"), "$750.00")
+
+    def test_units_are_not_money(self) -> None:
+        # The one that catches the shift: Units sits where Price used to.
+        self.assertEqual(self._at(cells=self._row(), name="Units"), "3.0")
+
+    def test_the_new_columns_are_left_alone(self) -> None:
+        cells = self._row()
+
+        self.assertEqual(self._at(cells=cells, name="Description"), "Bought 3 VTI")
+        self.assertEqual(self._at(cells=cells, name="External Id"), "sn-1")
+
+    def test_a_cad_movement_keeps_the_dollar_sign_off(self) -> None:
+        # Proves the currency column is still found after the insertion. Read
+        # one place left, it would have picked up "750.0" and formatted as USD.
+        self.assertEqual(
+            self._at(cells=self._row(currency="CAD"), name="Value"), "750.00 CAD"
+        )
+
+    def test_an_unknown_header_is_refused_rather_than_skipped(self) -> None:
+        # A name the contract does not have is a typo. Formatting nothing is
+        # indistinguishable from formatting correctly, so it has to raise.
+        with (
+            patch.dict(
+                broker_nav.MONEY_HEADERS,
+                {"transactions": ("Nonexistent",)},
+                clear=False,
+            ),
+            self.assertRaises(KeyError),
+        ):
+            self._row()
+
+
 class ExportWritesEverythingTests(MemoryKeyringMixin, unittest.TestCase):
     """
     A file is not a screenful.
@@ -416,6 +517,56 @@ class ExportWritesEverythingTests(MemoryKeyringMixin, unittest.TestCase):
 
         self.assertFalse(target.exists())
 
+    def test_the_columns_the_tab_shows_reach_the_csv(self) -> None:
+        # The asymmetry this closes. The Transactions tab has Description,
+        # First Seen and External Id; the shell could not reach any of them,
+        # which made "Sheets is a view of what stonksmithdb reports" untrue.
+        self.db.save_snapshot(
+            account=self.account,
+            scraped_at="2026-01-01 00:00:00",
+            value=1.0,
+            transactions=[
+                Transaction(
+                    processed_on="2026-08-01",
+                    tx_type="BUY",
+                    symbol="VTI",
+                    description="Bought 3 VTI @ 250.00",
+                    value=-750.0,
+                    external_id="sn-8842",
+                )
+            ],
+        )
+        target: Path = self.root / "tx.csv"
+
+        self.nav.do_export(f"transactions {target}")
+        header, row = self._rows_in(path=target)
+
+        for name in ("Description", "First Seen", "External Id"):
+            self.assertIn(name, header)
+
+        self.assertEqual(row[header.index("Description")], "Bought 3 VTI @ 250.00")
+        self.assertEqual(row[header.index("External Id")], "sn-8842")
+        self.assertTrue(row[header.index("First Seen")])
+
+    def test_the_csv_keeps_numbers_rather_than_currency_text(self) -> None:
+        # export writes raw rows and never calls render(), which is what lets
+        # the Value column sum in a spreadsheet.
+        self.db.save_snapshot(
+            account=self.account,
+            scraped_at="2026-01-01 00:00:00",
+            value=1.0,
+            transactions=[
+                Transaction(processed_on="2026-08-01", tx_type="BUY", value=-750.0)
+            ],
+        )
+        target: Path = self.root / "tx.csv"
+
+        self.nav.do_export(f"transactions {target}")
+        header, row = self._rows_in(path=target)
+
+        self.assertEqual(float(row[header.index("Value")]), -750.0)
+        self.assertNotIn("$", row[header.index("Value")])
+
 
 class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
     """A screenful is a courtesy, but a silent one is the bug over again."""
@@ -450,8 +601,17 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
             ],
         )
 
-    def _shown(self, category: str) -> tuple[list[list[str]], bool]:
-        """What reached the table, and whether the notice was printed."""
+    def _shown(self, category: str) -> tuple[list[list[str]], list[str]]:
+        """
+        What reached the table, and the row-cap notices that went with it.
+
+        The second half was a bool until `show` gained a second thing it can
+        say. Returning the matching messages rather than "highlight was called"
+        is what stops the column notice from standing in for this one.
+        :param category: The category to show
+        :return: The table rows, and any notice saying rows were left off
+        :rtype: tuple[list[list[str]], list[str]]
+        """
 
         with (
             patch("helpers.db.print_table") as table,
@@ -459,21 +619,25 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
         ):
             self.nav.do_show(category)
 
-        return table.call_args.kwargs["data"], log.highlight.called
+        notices = [
+            str(object=call.kwargs["msg"]) for call in log.highlight.call_args_list
+        ]
+
+        # `show` has two things it may say, and they are different findings: it
+        # stopped early, and it left a column out. Matched on wording rather
+        # than on "highlight was called", so one cannot stand in for the other.
+        return table.call_args.kwargs["data"], [
+            notice for notice in notices if "there are more" in notice
+        ]
 
     def test_past_the_cap_it_says_so_and_names_export(self) -> None:
         self._movements(count=SHOW_LIMITS["transactions"] + 1)
 
-        with (
-            patch("helpers.db.print_table"),
-            patch("etc.broker_nav.stonksmith_logger") as log,
-        ):
-            self.nav.do_show("transactions")
+        _, capped = self._shown(category="transactions")
 
-        message: str = str(object=log.highlight.call_args.kwargs["msg"])
-
-        self.assertIn(str(object=SHOW_LIMITS["transactions"]), message)
-        self.assertIn("export transactions", message)
+        self.assertEqual(len(capped), 1)
+        self.assertIn(str(object=SHOW_LIMITS["transactions"]), capped[0])
+        self.assertIn("export transactions", capped[0])
 
     def test_the_extra_row_it_asked_for_never_reaches_the_screen(self) -> None:
         # show asks for cap + 1 to learn whether there are more. That row is a
@@ -489,27 +653,78 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
         # failure pointing the other way.
         self._movements(count=SHOW_LIMITS["transactions"])
 
-        data, warned = self._shown(category="transactions")
+        data, capped = self._shown(category="transactions")
 
         self.assertEqual(len(data) - 1, SHOW_LIMITS["transactions"])
-        self.assertFalse(warned)
+        self.assertEqual(capped, [])
 
     def test_under_the_cap_it_says_nothing(self) -> None:
         self._movements(count=3)
 
-        data, warned = self._shown(category="transactions")
+        data, capped = self._shown(category="transactions")
 
         self.assertEqual(len(data) - 1, 3)
-        self.assertFalse(warned)
+        self.assertEqual(capped, [])
+
+    def test_the_wide_column_is_left_off_and_named(self) -> None:
+        # Not shown, and not silently: a column missing without mention is the
+        # same fault as a row count that stops without mention.
+        self._movements(count=1)
+
+        with (
+            patch("helpers.db.print_table") as table,
+            patch("etc.broker_nav.stonksmith_logger") as log,
+        ):
+            self.nav.do_show("transactions")
+
+        header: list[str] = table.call_args.kwargs["data"][0]
+        notices: str = "\n".join(
+            str(object=call.kwargs["msg"]) for call in log.highlight.call_args_list
+        )
+
+        self.assertNotIn("Description", header)
+        self.assertIn("Description", notices)
+        self.assertIn("export transactions", notices)
+
+    def test_the_bounded_new_columns_are_still_shown(self) -> None:
+        # Only Description is unbounded. A timestamp and an id fit, and twelve
+        # columns is the width holdings has always run at.
+        self._movements(count=1)
+
+        with (
+            patch("helpers.db.print_table") as table,
+            patch("etc.broker_nav.stonksmith_logger"),
+        ):
+            self.nav.do_show("transactions")
+
+        header: list[str] = table.call_args.kwargs["data"][0]
+
+        self.assertIn("First Seen", header)
+        self.assertIn("External Id", header)
+
+    def test_a_category_that_hides_nothing_says_nothing(self) -> None:
+        self._movements(count=1)
+
+        with (
+            patch("helpers.db.print_table"),
+            patch("etc.broker_nav.stonksmith_logger") as log,
+        ):
+            self.nav.do_show("snapshots")
+
+        notices: str = "\n".join(
+            str(object=call.kwargs["msg"]) for call in log.highlight.call_args_list
+        )
+
+        self.assertNotIn("too wide", notices)
 
     def test_a_category_with_no_cap_is_never_truncated(self) -> None:
         # accounts is one row per account and its reader takes no limit.
         self._movements(count=3)
 
-        _, warned = self._shown(category="accounts")
+        _, capped = self._shown(category="accounts")
 
         self.assertNotIn("accounts", SHOW_LIMITS)
-        self.assertFalse(warned)
+        self.assertEqual(capped, [])
 
 
 if __name__ == "__main__":

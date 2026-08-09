@@ -1195,10 +1195,16 @@ class BrokerDatabase:
         cannot tell anyone that it did. Anything rendering a whole history to a
         sheet wants get_current_transactions above instead, which carries the
         account key rather than the display name.
+
+        Carries ``description``, ``first_seen`` and ``external_id`` because the
+        Transactions tab shows all three and this could not reach any of them,
+        which made "Sheets is a view of what stonksmithdb reports" untrue for
+        this one table. ``raw`` and ``natural_key`` stay unselected, matching
+        what the tab omits.
         :param account_id: Restrict to one account
         :param limit: How many rows at most, or None for all of them
         :return: Rows of (id, account, processed_on, traded_on, tx_type, symbol,
-            units, price, value, currency)
+            description, units, price, value, currency, first_seen, external_id)
         :rtype: list[tuple[Any, ...]]
         """
 
@@ -1208,7 +1214,8 @@ class BrokerDatabase:
             *_bounded(
                 query=(
                     "SELECT t.id, a.display_name, t.processed_on, t.traded_on, "
-                    "t.tx_type, t.symbol, t.units, t.price, t.value, t.currency "
+                    "t.tx_type, t.symbol, t.description, t.units, t.price, "
+                    "t.value, t.currency, t.first_seen, t.external_id "
                     "FROM transactions t "
                     f"JOIN accounts a ON a.id = t.account_id {where} "
                     "ORDER BY t.processed_on DESC, t.id DESC"

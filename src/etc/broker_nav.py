@@ -25,7 +25,12 @@ from helpers.normalize import format_amount
 
 #: Column headers for each thing the shell can show or export, in the order the
 #: corresponding read method returns them. One place, so `show` and `export`
-#: cannot drift apart.
+#: cannot drift apart about what a column means or where it sits.
+#:
+#: This is the *export* contract: everything the reader returns. `show` renders
+#: a subset of it, named in SHOW_COLUMNS below and selected from these rather
+#: than written out separately -- which is what keeps the sentence above true
+#: while letting a terminal decline a column it cannot fit.
 CATEGORY_HEADERS: dict[str, tuple[str, ...]] = {
     "creds": ("ID", "User", "Pass", "Type", "Source"),
     "accounts": ("ID", "Source", "Account", "Beneficiary", "Kind", "Last Seen"),
@@ -50,10 +55,13 @@ CATEGORY_HEADERS: dict[str, tuple[str, ...]] = {
         "Traded",
         "Type",
         "Symbol",
+        "Description",
         "Units",
         "Price",
         "Value",
         "Currency",
+        "First Seen",
+        "External Id",
     ),
     "deltas": (
         "Account",
@@ -75,6 +83,37 @@ HISTORY_READERS: dict[str, str] = {
     "deltas": "get_daily_change",
 }
 
+#: Which columns `show` prints, per category. A category absent from here prints
+#: all of them, which is every category but one.
+#:
+#: `transactions` omits Description, and only Description. It is free text a
+#: source wrote -- SnapTrade's runs to a sentence -- while print_table hands
+#: rows to tabulate with no width limit and nothing here truncates a cell, so
+#: one long movement turns the whole grid into wrapped soup. Every other column
+#: the tab shows is bounded and stays: First Seen is a timestamp and External Id
+#: is an id, and twelve columns is the width `holdings` has always run at.
+#:
+#: Dropping it is not free, and do_show says so out loud rather than quietly
+#: handing back a narrower table than the export contract promises. A column
+#: missing without mention is the same fault as a row count that stops without
+#: mention.
+SHOW_COLUMNS: dict[str, tuple[str, ...]] = {
+    "transactions": (
+        "ID",
+        "Account",
+        "Processed",
+        "Traded",
+        "Type",
+        "Symbol",
+        "Units",
+        "Price",
+        "Value",
+        "Currency",
+        "First Seen",
+        "External Id",
+    ),
+}
+
 #: How many rows `show` prints, per category. A category absent from here has no
 #: cap -- `accounts` is one row per account and its reader takes no limit.
 #:
@@ -91,21 +130,35 @@ SHOW_LIMITS: dict[str, int] = {
     "deltas": 100,
 }
 
-#: Column positions holding money, per category, so a stored number is shown as
-#: currency rather than as a bare float.
-MONEY_COLUMNS: dict[str, tuple[int, ...]] = {
-    "snapshots": (4,),
-    "holdings": (4, 5, 6, 7, 8),
-    "transactions": (7, 8),
-    "deltas": (3, 4, 5),
+#: Columns holding money, per category, so a stored number is shown as currency
+#: rather than as a bare float.
+#:
+#: Named rather than numbered, which they were until a column had to go into the
+#: middle of one of these tuples. A position is not a fact about a column; it is
+#: a fact about every column to its left. Inserting "Description" after "Symbol"
+#: moved Price, Value and Currency along by one, and the old (7, 8) then
+#: formatted Symbol and Units as money and read the currency off Value -- with
+#: nothing to notice, since a number formats as currency perfectly well.
+#:
+#: etc.portfolio_sheet reached the same conclusion for the same reason and its
+#: column_of() says so: "Every formula in this module is built through here
+#: rather than typed. That is the whole of what makes them append-only-safe."
+MONEY_HEADERS: dict[str, tuple[str, ...]] = {
+    "snapshots": ("Value",),
+    # Not "Units": a quantity is a count, not money, and (4, 5, 6, 7, 8) began
+    # one past it for exactly that reason.
+    "holdings": ("Price", "Value", "Principal", "Earnings", "Cost Basis"),
+    "transactions": ("Price", "Value"),
+    "deltas": ("Value", "Previous", "Change"),
 }
 
-#: Where the currency code sits, so a CAD balance is not rendered with a "$".
-CURRENCY_COLUMN: dict[str, int] = {
-    "snapshots": 5,
-    "holdings": 9,
-    "transactions": 9,
-    "deltas": 6,
+#: Which column carries the currency code, so a CAD balance is not rendered with
+#: a "$". Named for the same reason as the tuples above.
+CURRENCY_HEADER: dict[str, str] = {
+    "snapshots": "Currency",
+    "holdings": "Currency",
+    "transactions": "Currency",
+    "deltas": "Currency",
 }
 
 #: Which categories accept an id to narrow by, and what that id means. A
@@ -412,14 +465,44 @@ class BrokerNavigator(cmd.Cmd):
         A stored value is a number. Printing it raw shows "1234.56" where every
         other surface in StonkSmith shows "$1,234.56", and shows a CAD balance
         wearing a dollar sign if the currency column is ignored.
+
+        Which columns those are is looked up by name every call rather than
+        stored as positions. See MONEY_HEADERS for why. A name the contract does
+        not have raises here rather than being skipped: a source that gave no
+        number is an ordinary thing and is handled below, but a header this
+        module asked for and cannot find is a typo, and formatting nothing is
+        indistinguishable from formatting correctly.
         :param category: Which table these rows came from
         :param rows: The rows
         :return: One list of cells per row
         :rtype: list[list[str]]
+        :raises KeyError: if a money or currency header is not in the contract
         """
 
-        money_at: tuple[int, ...] = MONEY_COLUMNS.get(category, ())
-        currency_at: int | None = CURRENCY_COLUMN.get(category)
+        headers: tuple[str, ...] = CATEGORY_HEADERS[category]
+
+        def position(name: str) -> int:
+            """
+            Where a named column sits in this category's contract.
+            :param name: The header, exactly as CATEGORY_HEADERS spells it
+            :return: Its index
+            :rtype: int
+            :raises KeyError: if the contract has no such column
+            """
+
+            try:
+                return headers.index(name)
+
+            except ValueError as e:
+                raise KeyError(f"no column named {name!r} in {list(headers)}") from e
+
+        money_at: tuple[int, ...] = tuple(
+            position(name=name) for name in MONEY_HEADERS.get(category, ())
+        )
+        currency_name: str | None = CURRENCY_HEADER.get(category)
+        currency_at: int | None = (
+            None if currency_name is None else position(name=currency_name)
+        )
 
         rendered: list[list[str]] = []
 
@@ -531,8 +614,18 @@ class BrokerNavigator(cmd.Cmd):
             more: bool = cap is not None and len(rows) > cap
             shown: Sequence[Sequence[object]] = rows if cap is None else rows[:cap]
 
-            table: list[list[str]] = [list(CATEGORY_HEADERS[category])]
-            table.extend(self.render(category=category, rows=shown))
+            # Rendered at full width first, then narrowed. render() finds its
+            # money and currency columns by name against the export contract,
+            # so formatting has to happen before any column is taken away.
+            headers: tuple[str, ...] = CATEGORY_HEADERS[category]
+            display: tuple[str, ...] = SHOW_COLUMNS.get(category, headers)
+            keep: list[int] = [headers.index(name) for name in display]
+
+            table: list[list[str]] = [list(display)]
+            table.extend(
+                [cells[index] for index in keep]
+                for cells in self.render(category=category, rows=shown)
+            )
 
             helper_db.print_table(
                 data=table, title=f"{self.broker} {category.capitalize()}"
@@ -543,6 +636,18 @@ class BrokerNavigator(cmd.Cmd):
                     msg=(
                         f"Showing the first {cap} {category}; there are more. "
                         f"'export {category} <file>' writes all of them."
+                    )
+                )
+
+            dropped: list[str] = [name for name in headers if name not in display]
+
+            if dropped:
+                stonksmith_logger.highlight(
+                    msg=(
+                        f"{', '.join(dropped)} {'is' if len(dropped) == 1 else 'are'} "
+                        f"too wide for a terminal and not shown; "
+                        f"'export {category} <file>' includes "
+                        f"{'it' if len(dropped) == 1 else 'them'}."
                     )
                 )
 
