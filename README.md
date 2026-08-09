@@ -689,9 +689,24 @@ show snapshots [<account id>]  what each was worth, over time
 show holdings [<snapshot id>]  the positions behind a snapshot
 show transactions [<account>]  recorded movements
 show deltas                    the change between consecutive snapshots
-export <category> <file>       any of the above, as CSV
+export <category> <file>       any of the above, as CSV — all of it
 delete snapshot <snapshot id>  remove one wrong mark and its holdings
 ```
+
+**`show` is a screenful; `export` is the whole table.** `show` prints the newest
+hundred snapshots or five hundred movements and then says so, naming `export` —
+printing fifty thousand rows into a terminal helps nobody, but a table that
+stops without mentioning it is a different problem. `export` takes no limit at
+all and reports how many rows it wrote:
+
+```
+schwab529plan > export transactions ~/tx.csv
+[+] Exported 2043 transactions to ~/tx.csv
+```
+
+That count is not decoration. A CSV that stopped early looks exactly like a
+complete one, and nothing reading it afterwards can tell — which is the same
+failure the `Transactions` tab exists to avoid, in a file instead of a tab.
 
 `delete snapshot` is there because a wrong mark does not correct itself. The
 next sync writes a row *beside* it, not over it — snapshots record what was

@@ -412,6 +412,44 @@ class CurrentTransactionsTests(_SnapshotTestCase):
         self.assertEqual(len(self.db.get_transactions()), 500)
         self.assertEqual(len(self.db.get_current_transactions()), 640)
 
+    def test_every_capped_reader_can_be_asked_for_all_of_it(self) -> None:
+        # What `export` passes. The cap stays the default, because `show` still
+        # wants one -- but a CSV that stops at five hundred rows cannot tell
+        # anyone that it did, so the option has to exist.
+        self.save(transactions=self._many(count=640))
+
+        for index in range(130):
+            self.save(
+                scraped_at=f"2026-03-{index % 28 + 1:02d} {index % 24:02d}:00:00",
+                value=float(index),
+            )
+
+        for reader, default, total in (
+            (self.db.get_transactions, 500, 640),
+            (self.db.get_snapshots, 100, 131),
+            (self.db.get_daily_change, 100, 131),
+        ):
+            with self.subTest(reader=reader.__name__):
+                self.assertEqual(len(reader()), default, "the default still caps")
+                self.assertEqual(len(reader(limit=None)), total, "None means all")
+
+    def test_a_filter_still_narrows_when_uncapped(self) -> None:
+        # The limit and the filter are independent; asking for everything must
+        # not quietly widen which account it came from.
+        self.save(transactions=self._many(count=640))
+        self.db.save_snapshot(
+            account=AccountIdentity(account_key="Other", display_name="Other"),
+            scraped_at="2026-01-02 00:00:00",
+            transactions=[CONTRIBUTION],
+            value=5.0,
+        )
+
+        everything = self.db.get_transactions(limit=None)
+        just_one = self.db.get_transactions(account_id=1, limit=None)
+
+        self.assertEqual(len(everything), 641)
+        self.assertEqual(len(just_one), 640)
+
     def test_it_is_not_scoped_to_the_newest_snapshot(self) -> None:
         # Unlike the other two current-state readers. A movement is recorded
         # once and deduped thereafter, so every stored row is current -- an

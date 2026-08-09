@@ -75,6 +75,22 @@ HISTORY_READERS: dict[str, str] = {
     "deltas": "get_daily_change",
 }
 
+#: How many rows `show` prints, per category. A category absent from here has no
+#: cap -- `accounts` is one row per account and its reader takes no limit.
+#:
+#: The numbers are the ones these reads have always used; what is new is that
+#: the shell states the cap rather than inheriting four different ones from the
+#: database layer without knowing it. That mattered because `export` inherited
+#: them too, and wrote a five-hundred-row CSV that looked like a whole file.
+#: Printing is a screenful and a cap is a courtesy; a file is not, so `export`
+#: passes None and these do not apply to it.
+SHOW_LIMITS: dict[str, int] = {
+    "snapshots": 100,
+    "holdings": 500,
+    "transactions": 500,
+    "deltas": 100,
+}
+
 #: Column positions holding money, per category, so a stored number is shown as
 #: currency rather than as a bare float.
 MONEY_COLUMNS: dict[str, tuple[int, ...]] = {
@@ -177,7 +193,8 @@ class BrokerNavigator(cmd.Cmd):
             "    show deltas              the change between consecutive snapshots\n"
             "    export creds <file>      write a CSV (never includes secrets)\n"
             "    export <category> <file> also accounts, snapshots, holdings,\n"
-            "                             transactions or deltas\n"
+            "                             transactions or deltas -- the whole\n"
+            "                             table, however long, unlike show\n"
             "    delete creds <id>        remove a credential\n"
             "    delete snapshot <id>     remove one wrong mark and its holdings\n"
             "    broker <name>            switch straight to another broker\n"
@@ -323,7 +340,7 @@ class BrokerNavigator(cmd.Cmd):
             stonksmith_logger.fail(msg=f"No {target} with id {row_id}")
 
     def history_rows(
-        self, category: str, argument: str = ""
+        self, category: str, argument: str = "", limit: int | None = None
     ) -> list[tuple[object, ...]] | None:
         """
         Read one of the history tables, or explain why it cannot be read.
@@ -331,8 +348,16 @@ class BrokerNavigator(cmd.Cmd):
         Probed rather than assumed, the way every other optional capability
         here is: a database written against the older contract has no snapshot
         tables, and saying so beats an AttributeError.
+
+        ``limit`` defaults to None, meaning everything, and a caller that wants
+        less has to say so. That is deliberately the opposite way round from
+        how this read: it used to call the reader with no arguments and take
+        whatever default the database happened to carry, which is how ``export``
+        came to write a five-hundred-row CSV and report success. A cap is a
+        display choice, so it belongs to the thing doing the displaying.
         :param category: One of HISTORY_READERS
         :param argument: An optional account or snapshot id to filter on
+        :param limit: How many rows at most, or None for all of them
         :return: The rows, or None when this database cannot answer
         :rtype: list[tuple[object, ...]] | None
         """
@@ -348,8 +373,14 @@ class BrokerNavigator(cmd.Cmd):
             )
             return None
 
+        # get_accounts takes no limit at all -- one row per account is already
+        # the whole of it -- so it is called the way it always was.
+        capped: dict[str, typing.Any] = (
+            {} if category not in SHOW_LIMITS else {"limit": limit}
+        )
+
         if not argument:
-            return list(reader())
+            return list(reader(**capped))
 
         parameter: str | None = HISTORY_FILTERS.get(category)
 
@@ -371,7 +402,7 @@ class BrokerNavigator(cmd.Cmd):
             stonksmith_logger.fail(msg=f"Not an id: {argument}")
             return None
 
-        return list(reader(**{parameter: target}))
+        return list(reader(**{parameter: target}, **capped))
 
     @staticmethod
     def render(category: str, rows: Sequence[Sequence[object]]) -> list[list[str]]:
@@ -413,6 +444,12 @@ class BrokerNavigator(cmd.Cmd):
         """
         Export data to CSV. Secrets are never written; the keyring reference is
         exported instead.
+
+        Writes everything, and says how many rows that was. Both halves matter:
+        this used to inherit whatever cap the reader carried -- a hundred
+        snapshots, five hundred movements -- and print "Exported transactions"
+        over a file that was missing most of them. A short file is invisible
+        once it is on disk, so the count is the only thing that could have said.
         Usage: export creds|accounts|snapshots|holdings|transactions|deltas <file>
         :param line:
         """
@@ -435,7 +472,9 @@ class BrokerNavigator(cmd.Cmd):
             headers: Sequence[str] = ("ID", "User", "KeyringRef", "Type", "Source")
 
         elif category in HISTORY_READERS:
-            found = self.history_rows(category=category)
+            # None, explicitly: a file is not a screenful, and nothing reading
+            # the CSV afterwards could tell it had been cut short.
+            found = self.history_rows(category=category, limit=None)
 
             if found is None:
                 return
@@ -448,7 +487,7 @@ class BrokerNavigator(cmd.Cmd):
             return
 
         helper_db.write_csv(filename=filename, headers=headers, entries=rows)
-        stonksmith_logger.success(msg=f"Exported {category} to {filename}")
+        stonksmith_logger.success(msg=f"Exported {len(rows)} {category} to {filename}")
 
     def do_show(self, line: str) -> None:
         """
@@ -475,17 +514,37 @@ class BrokerNavigator(cmd.Cmd):
             helper_db.print_table(data=table_data, title=f"{self.broker} Credentials")
 
         elif category in HISTORY_READERS:
-            rows = self.history_rows(category=category, argument=argument)
+            cap: int | None = SHOW_LIMITS.get(category)
+            # One more than will be printed. That extra row is never displayed;
+            # it is how this knows there *are* more without a second count
+            # query, which makes the notice below a fact rather than a guess.
+            # A table of exactly `cap` rows says nothing, and is right to.
+            rows = self.history_rows(
+                category=category,
+                argument=argument,
+                limit=None if cap is None else cap + 1,
+            )
 
             if rows is None:
                 return
 
+            more: bool = cap is not None and len(rows) > cap
+            shown: Sequence[Sequence[object]] = rows if cap is None else rows[:cap]
+
             table: list[list[str]] = [list(CATEGORY_HEADERS[category])]
-            table.extend(self.render(category=category, rows=rows))
+            table.extend(self.render(category=category, rows=shown))
 
             helper_db.print_table(
                 data=table, title=f"{self.broker} {category.capitalize()}"
             )
+
+            if more:
+                stonksmith_logger.highlight(
+                    msg=(
+                        f"Showing the first {cap} {category}; there are more. "
+                        f"'export {category} <file>' writes all of them."
+                    )
+                )
 
         else:
             stonksmith_logger.fail(
