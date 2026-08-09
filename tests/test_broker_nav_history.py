@@ -601,8 +601,17 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
             ],
         )
 
-    def _shown(self, category: str) -> tuple[list[list[str]], bool]:
-        """What reached the table, and whether the notice was printed."""
+    def _shown(self, category: str) -> tuple[list[list[str]], list[str]]:
+        """
+        What reached the table, and the row-cap notices that went with it.
+
+        The second half was a bool until `show` gained a second thing it can
+        say. Returning the matching messages rather than "highlight was called"
+        is what stops the column notice from standing in for this one.
+        :param category: The category to show
+        :return: The table rows, and any notice saying rows were left off
+        :rtype: tuple[list[list[str]], list[str]]
+        """
 
         with (
             patch("helpers.db.print_table") as table,
