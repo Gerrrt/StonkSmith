@@ -49,6 +49,7 @@ from etc.context import Context
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
+    ISO_DATE_PATTERN,
     TRANSACTION_COLUMNS,
     Portfolio,
     read_workspace,
@@ -484,9 +485,17 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         # the same reason only because etc.portfolio normalizes Processed On to
         # ISO on the way out of the database. It is stored as the source wrote
         # it, and "12/30/2025" sorts above "01/15/2026".
+        #
+        # Filtered on the shape of a date rather than on <>"", which the two
+        # cells above can afford and this one cannot. Scraped At is written by
+        # StonkSmith and is always a timestamp; Processed On comes from a source
+        # and is kept verbatim when it will not parse, deliberately. Sorted as
+        # text, one such row wins -- every letter compares above every digit --
+        # so the cell would answer "whenever" and look authoritative. The row
+        # keeps its place on the tab; it just cannot be the answer here.
         [
             f"=IFERROR(INDEX(SORT(UNIQUE(FILTER({processed},"
-            f'{processed}<>"")),1,FALSE),1,1),"")'
+            f'REGEXMATCH({processed}&"","{ISO_DATE_PATTERN}"))),1,FALSE),1,1),"")'
         ],
     ]
 

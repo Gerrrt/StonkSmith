@@ -586,6 +586,48 @@ class ReadTransactionsTests(unittest.TestCase):
         # hide the one row worth looking at.
         self.assertEqual(self._one(processed_on="whenever").processed_on, "whenever")
 
+    def test_an_unreadable_date_does_not_become_the_newest_movement(self) -> None:
+        # The cost of keeping that text, if the sort is naive about it: every
+        # letter compares above every digit, so one "whenever" sits at the top
+        # of the tab and the dashboard reports it as the latest thing that
+        # happened. It keeps its row; it does not get to lead.
+        _, _, transactions = read_broker(
+            broker="schwab529plan",
+            db=_FakeDb(
+                accounts=[account_tuple()],
+                transactions=[
+                    transaction_tuple(processed_on="whenever"),
+                    transaction_tuple(processed_on="2026-08-01"),
+                    transaction_tuple(processed_on="12/30/2025"),
+                ],
+            ),
+        )
+
+        self.assertEqual(
+            [row.processed_on for row in transactions],
+            ["2026-08-01", "2025-12-30", "whenever"],
+        )
+
+    def test_a_movement_with_no_date_at_all_sorts_beside_an_unreadable_one(
+        self,
+    ) -> None:
+        # Both mean "this cannot be placed in time", so both go to the far end
+        # rather than one of them jumping the queue.
+        _, _, transactions = read_broker(
+            broker="snaptrade",
+            db=_FakeDb(
+                accounts=[account_tuple()],
+                transactions=[
+                    transaction_tuple(processed_on=""),
+                    transaction_tuple(processed_on="2026-08-01"),
+                ],
+            ),
+        )
+
+        self.assertEqual(
+            [row.processed_on for row in transactions], ["2026-08-01", None]
+        )
+
     def test_the_newest_movement_comes_first(self) -> None:
         _, _, transactions = read_broker(
             broker="schwab529plan",

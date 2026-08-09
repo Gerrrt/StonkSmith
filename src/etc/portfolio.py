@@ -47,6 +47,7 @@ them. Nothing here can dedupe across brokers, which is why the `[SNAPTRADE]
 exclude_accounts` setting is still the thing that decides who owns an account.
 """
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -157,6 +158,14 @@ def _cell(value: Any) -> Any:
     return "" if value is None else value
 
 
+#: What a date this view has normalized looks like. _iso() below produces either
+#: exactly this or the source's own text handed back untouched, so matching it is
+#: how anything downstream tells a date that was read from one that was not.
+ISO_DATE_PATTERN: str = r"^\d{4}-\d{2}-\d{2}$"
+
+_ISO_DATE: re.Pattern[str] = re.compile(pattern=ISO_DATE_PATTERN)
+
+
 def _iso(date: str | None) -> str | None:
     """
     Render a stored transaction date as YYYY-MM-DD.
@@ -184,6 +193,28 @@ def _iso(date: str | None) -> str | None:
         return None
 
     return to_iso_date(text=date) or date
+
+
+def _sortable(date: str | None) -> str:
+    """
+    The key a movement's date sorts on, which is not always the date itself.
+
+    _iso keeps text it could not parse, because an unreadable date is still
+    evidence and blanking it would hide the one row worth looking at. Sorting on
+    that text is a different question, and the obvious answer is wrong: anything
+    beginning with a letter compares above every digit, so a single "whenever"
+    would sit at the top of the tab and be reported as the newest movement --
+    turning a preserved oddity into a confident false statement.
+
+    So a date that did not parse sorts as though it had none, which puts it at
+    the far end rather than the near one. It keeps its cell; it just stops
+    claiming to be the newest thing that happened.
+    :param date: The date as this view renders it
+    :return: The date when it is one, otherwise ""
+    :rtype: str
+    """
+
+    return date if date and _ISO_DATE.match(string=date) else ""
 
 
 def _reason(error: Exception) -> str:
@@ -592,7 +623,7 @@ def read_broker(
     # been over it -- see the note there. Two stable sorts rather than one key:
     # the dates go newest-first, then the accounts group without disturbing
     # them, and the reader's own tie-break survives underneath both.
-    transactions.sort(key=lambda row: row.processed_on or "", reverse=True)
+    transactions.sort(key=lambda row: _sortable(date=row.processed_on), reverse=True)
     transactions.sort(key=lambda row: (row.source, row.account))
 
     return accounts, holdings, transactions

@@ -13,7 +13,13 @@ import unittest
 from typing import Any
 from unittest.mock import MagicMock
 
-from etc.portfolio import ACCOUNT_COLUMNS, HOLDING_COLUMNS, AccountRow, Portfolio
+from etc.portfolio import (
+    ACCOUNT_COLUMNS,
+    HOLDING_COLUMNS,
+    ISO_DATE_PATTERN,
+    AccountRow,
+    Portfolio,
+)
 from etc.portfolio_sheet import (
     BANNER,
     BANNER_CELL,
@@ -131,6 +137,20 @@ class FormulaTests(unittest.TestCase):
         self.assertIn("SORT(", newest)
         self.assertNotIn("MAX(", newest)
         self.assertIn(",1,FALSE)", newest)
+
+    def test_the_newest_movement_only_considers_things_shaped_like_dates(
+        self,
+    ) -> None:
+        # The one summary cell that cannot filter on <>"". Processed On keeps a
+        # date it could not parse, on purpose, and sorted as text a single
+        # "whenever" outranks every real date and is reported as the latest
+        # movement. The two scrape cells above are exempt: StonkSmith writes
+        # those itself and they are always timestamps.
+        newest: str = self.by_range["B14"][0][0]
+
+        self.assertIn("REGEXMATCH(", newest)
+        self.assertIn(ISO_DATE_PATTERN, newest)
+        self.assertNotIn('Transactions!$L$3:$L<>""', newest)
 
     def test_scrape_times_are_sorted_as_text_not_maxed(self) -> None:
         # Scraped At is text under RAW, and MAX over text returns 0. The stored
