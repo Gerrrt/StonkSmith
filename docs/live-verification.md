@@ -198,6 +198,15 @@ What *is* proven, every one of those nine runs: the sign-in flow, the holdings p
 the account rail, the bank/brokerage split and the database write. The scrape works.
 It is only the unattended part that does not.
 
+**What the recorder is being read for is written down elsewhere.** Ally's open questions
+are about endpoints nobody has seen -- whether an activity feed exists, whether it is
+per-account, whether it takes a date window -- and the decision those answers feed is
+recorded in `docs/ally-transactions.md`, along with the two other conditions that would
+reopen it. A run that turns up an activity route belongs in *that* file. This one records
+which claims *StonkSmith* makes have been settled by a live run; what Ally's site offers is
+a fact about Ally, and filing it here as a claim would mean counting a question in the tally
+above.
+
 
 ### 3. The masked number reconciles against a real account
 
