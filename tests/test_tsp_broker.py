@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+from bs4 import BeautifulSoup
 from requests.exceptions import RequestException
 
 BROKER_FILE = (
@@ -489,6 +490,76 @@ class TspPayTableTests(unittest.TestCase):
 
         self.assertFalse((Path(self.cache.name) / "absent").exists())
         self.assertEqual(self.broker.pay_table["E-7"]["Over 10"], 5300.40)
+
+    def _served_with_a_trailing_column(self) -> None:
+        """The served page, grown one column after the last band."""
+
+        soup = BeautifulSoup(
+            markup=PAY_TABLE.read_text(encoding="utf-8"), features="html.parser"
+        )
+
+        for element in soup.find_all(name="table"):
+            for row in element.find_all(name="tr"):
+                cell = soup.new_tag(name="td")
+                cell.string = "Note 6"
+                row.append(cell)
+
+        self.broker.pay_table_get.return_value = _response(text=str(object=soup))
+
+    def test_a_page_read_one_column_out_drops_the_accrual(self) -> None:
+        # The one failure here that is refused rather than reported, and the
+        # reason is that it does not look like a failure. Every other way this
+        # can go wrong leaves a rate unavailable and says so; this one leaves
+        # $5,591.70 available for a member who is paid $5,300.40, which prices
+        # an accrual and is stored as a mark with nothing to show for it.
+        self._served_with_a_trailing_column()
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        logged = self._logged()
+        self.assertIn("does not line up", logged)
+        self.assertIn("wrong years of service", logged)
+        self.assertIsNone(self.broker.pay_table)
+
+    def test_half_a_page_is_reported_and_still_priced(self) -> None:
+        # Short, not wrong: the difference between this and a misalignment, and
+        # why one warns and the other refuses.
+        soup = BeautifulSoup(
+            markup=PAY_TABLE.read_text(encoding="utf-8"), features="html.parser"
+        )
+        soup.find_all(name="table")[-1].decompose()
+        self.broker.pay_table_get.return_value = _response(text=str(object=soup))
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        self.assertIn("Over 18", self._logged())
+        self.assertEqual(self.broker.pay_table["E-7"]["Over 10"], 5300.40)
+
+    def test_show_pay_table_prints_the_whole_grid(self) -> None:
+        # What a single printed rate cannot show. E-7 was correct throughout
+        # while E-9 and E-1 were missing entirely, so the run that would have
+        # caught that is the one that prints every grade and every blank.
+        self.broker.args = Namespace(
+            prices=str(PRICES), pay_table="", no_accrual=False, show_pay_table=True
+        )
+        self._serve()
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        logged = self._logged()
+        self.assertIn("9 grade(s)", logged)
+        self.assertIn("E-9", logged)
+        self.assertIn("6,910.20", logged)
+        # Both halves of the page, so the columns past twenty years are visibly
+        # there rather than assumed.
+        self.assertIn("Over 40", logged)
+
+    def test_the_grid_is_not_printed_unless_it_is_asked_for(self) -> None:
+        self._serve()
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        self.assertNotIn("as parsed", self._logged())
 
     def test_a_grade_with_no_rate_today_drops_the_estimate_and_says_so(self) -> None:
         # verify_access() is where a bad grade turns into one actionable line,

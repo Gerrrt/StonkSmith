@@ -94,6 +94,17 @@ def broker_args(
     )
 
     group.add_argument(
+        "--show-pay-table",
+        action="store_true",
+        help=(
+            "Print the whole parsed pay grid, grades down and years of service "
+            "across, in the two halves DFAS splits it into. For checking the "
+            "parser against the published page rather than against the one rate "
+            "a run happens to need."
+        ),
+    )
+
+    group.add_argument(
         "--no-accrual",
         action="store_true",
         help=(

@@ -693,7 +693,14 @@ that must be exact arithmetic with no estimate in it.
 Anything that stops an estimate being made costs the estimate and not the run:
 a half-filled config, a rank that is not a pay grade, an unreadable service
 date, a grade DFAS publishes no rate for, or a refused download all report
-themselves and leave the anchored mark exactly as it was. The pay table is
+themselves and leave the anchored mark exactly as it was. So does a page whose
+columns stop lining up with its own headings — rates are matched from the right,
+so a column grown after the last one would shift every figure by one band and
+hand back a real published rate for the wrong seniority. That is the one failure
+here that would otherwise look like an answer, so the accrual is dropped rather
+than priced on it. `--show-pay-table` prints the whole parsed grid, grades down
+and years of service across, for checking the parser against the published page
+rather than against the single rate a run happens to need. The pay table is
 cached under `~/.stonksmith` for the rest of the year, since DFAS changes it
 every January. `--pay-table` reads a page saved by hand, the way `--prices`
 does, and remains the fallback: dfas.mil fingerprints its callers, so a download
