@@ -33,8 +33,8 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*13 of 20 claims have been settled by a live run — 12 confirmed, 1 disproved. The
-remaining 7 rest on unit tests or on fixtures.*
+*17 of 20 claims have been settled by a live run — 16 confirmed, 1 disproved. The
+remaining 3 rest on unit tests or on fixtures.*
 
 `tests/test_live_verification_tally.py` derives those five numbers from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
@@ -55,11 +55,11 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — statement parser | Real statements, read as issued through `-o STATEMENT=` | Yes, against real files |
 | TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files |
 | TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
-| TSP — share price download | A real request on 2026-08-07; response written up in #48 | Yes |
-| TSP — DFAS pay table parse | `tests/dfas_basic_pay_em.html`, a **reconstruction** of the live page | No |
-| TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused two unrelated hosted environments, 2026-08-07 and 2026-08-09, and tsp.gov answered from both | No |
-| TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
-| TSP — database write | Unit tests with a mocked DB | No |
+| TSP — share price download | A real request on 2026-08-07 written up in #48, and again unattended on 2026-08-10 (#116): 200 and 555,142 bytes, fetched by the run itself rather than by hand | Yes |
+| TSP — DFAS pay table parse | The live page, parsed on 2026-08-10 (#116) into all nine enlisted grades; `tests/dfas_basic_pay_em.html` is now that page rather than a reconstruction, and the reconstruction read **zero** grades off it | Yes |
+| TSP — DFAS pay table download | A real request on 2026-08-10 (#116): 200 and 116,257 bytes, unattended, through `fetch_pay_table`. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes |
+| TSP — the contribution accrual | A live run on 2026-08-10 (#116) over the published price file and the DFAS page, both fetched by the run; all six months recomputed independently and matched on every field | Yes |
+| TSP — database write | Five runs on 2026-08-10 (#116) into a real `tsp.db`, four dates on one snapshot and the holdings summing to its value exactly; plus a genuine pre-migration database, migrated on open | Yes |
 | The sheet — four machine-owned tabs | All four checks, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes |
 | The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes |
@@ -376,7 +376,7 @@ rather than one.
 
 ## TSP
 
-Five steps. No credential is involved at any point.
+Six steps. No credential is involved at any point.
 
 ### 1. A statement gives up its units
 
@@ -390,11 +390,12 @@ Both PDF and text are accepted. Expect:
 [+] Statement: <n> units of <fund> as of <period end>
 ```
 
-**Check that the fund named on that line is the fund named on the next one.** The
-statement's fund is read and logged, but the mark is priced with the `fund` from your
-`[TSP]` config — so a statement for one fund with another configured produces a
-confident, wrong number, and the two log lines are the only signal. See *Known traps*
-below.
+**Check that a fund is named on that line at all.** A statement whose fund disagrees
+with `[TSP] fund` is now refused outright rather than priced with the configured one,
+so the case that used to produce a confident, wrong number fails loudly instead. The
+guard cannot fire when the statement's fund did not parse, though — then `<fund>` is
+missing from that line and the mark is priced with whatever is configured. See
+*Known traps* below.
 
 If your statement covers more than one fund, only the first is read. Confirm which
 one that was before trusting the mark.
@@ -457,16 +458,113 @@ reason this broker exists. Confirming the *tab* agrees with the shell belongs to
 *The sheet* below, which is the one procedure on this page needing a Google credential
 and therefore not one of these five steps.
 
-With the contribution keys filled in (step 5) there are **two** holding rows, not one:
+With the contribution keys filled in (step 6) there are **two** holding rows, not one:
 the anchored count, dated to the statement, and the estimate, dated to the last
 contribution it could price. They must sum to the snapshot's `value` — check that
 they do, because a total that does not add up is the one way this could be wrong
 while every individual number looks right.
 
+**Run on 2026-08-10, and it holds.** Five runs, each at least a second apart, into a
+real `~/.stonksmith/workspaces/default/tsp.db`. The unit count, grade and service date
+below were chosen rather than taken from anyone's statement — no TSP account is
+involved, and none is needed, because the claim is about what the writer stores and
+not about whose number it stores. Everything the run *fetched* was live: the price
+file from tsp.gov and the pay table from dfas.mil, in the same run, with no `--prices`
+and no `--pay-table`.
+
+```
+$ uv run stonksmith tsp -M tsp
+[+] L 2060 at $24.8659 as of 2026-08-07
+[+] E-7 at Over 12: $5,591.70 basic pay per month
+[+] L 2060: 315.789 anchored + 142.173804 estimated = 457.962804 units
+    x $24.8659 (2026-08-07) = $11,387.66
+```
+
+`show snapshots`, after five runs:
+
+```
+| ID | Account    | As Of      | Scraped             | Value      |
+| 5  | TSP L 2060 | 2026-08-07 | 2026-08-10 03:51:54 | $12,599.33 |
+| 4  | TSP L 2060 | 2026-08-07 | 2026-08-10 03:50:37 | $11,387.66 |
+| 3  | TSP L 2060 | 2026-08-07 | 2026-08-10 03:50:34 | $7,852.38  |
+| 2  | TSP L 2060 | 2026-08-07 | 2026-08-10 03:50:30 | $11,387.66 |
+| 1  | TSP L 2060 | 2026-08-07 | 2026-08-10 03:50:03 | $11,387.66 |
+```
+
+Five snapshots, one `accounts` row, five distinct `scraped_at` values. `As Of` is
+Friday's price and `Scraped` is Monday's run, on every row — the divergence, without
+needing a Sunday: 2026-08-10 was a Monday and the newest published price was still
+Friday the 7th.
+
+**Four dates, not three.** The snapshot carries two and each holding carries its own:
+
+```
+| Name                                              | Units      | Units As Of |
+| L 2060                                            | 315.789    | 2026-01-31  |
+| L 2060 (estimated contributions since 2026-01-31) | 142.173804 | 2026-07-31  |
+```
+
+The anchored row is dated to the statement, the estimate to the last contribution it
+could price — 2026-07-31, which is neither the run date nor the price date. A mark
+that stated only one of these four could not be audited later, which is the whole
+reason this broker stores them separately.
+
+**And they sum.** This is the check worth doing carefully, so here is the number
+rather than the word:
+
+```
+holdings:        7853.4402  +  3534.2171  =  11387.657286813865
+snapshot.value:                              11387.657286813865
+residual:                                    0.0
+```
+
+Exactly zero, on all five snapshots. Worth saying that this is not true by
+construction: the snapshot computes `(units + accrued) * price` while the two holdings
+store `units * price` and `accrued * price` separately, so these are different
+floating-point expressions that happen to agree to the bit. A residual around 1e-12
+would have been just as much a pass; anything at the cent scale would have meant the
+two disagree about what `value` means.
+
+The `--no-accrual` run is snapshot 3, and it is what makes the sum check mean
+something: **one** holding row, `$7,852.38`, no estimate. If the writer were producing
+the two rows by splitting a total rather than by pricing two separate counts, the sum
+would agree no matter what and this control would not differ.
+
 One check only a real database can make: open an existing `tsp.db` — one written before
 `holdings.units_as_of` existed — and confirm that marks stored back then show a `Units
 As Of` too. Those dates were migrated out of `holdings.raw_value`, and no test can
 prove that against your file.
+
+**Done on 2026-08-10, against a database that really was written before the column
+existed.** Not a hand-built one — the point of the check is the file, so the file was
+produced by checking out `88a5ef4^` (the commit before *Give a holding's unit count a
+date of its own*) into a worktree and running it under its own `HOME`. That is
+worth the trouble: a database assembled by hand is a guess about what the old code
+wrote, and a guess is what the migration is already making.
+
+What that run left behind, read straight out of SQLite:
+
+```
+holdings columns: ... currency, raw_value          <- no units_as_of
+holding:          name='C Fund' units=100 raw_value='2026-01-31'
+```
+
+The date is sitting in `raw_value`, which for every other broker means "the value
+exactly as the source wrote it". Then the same file, opened once by current code —
+opening is all it takes, since `BrokerDatabase.__init__` runs the migration:
+
+```
+[+] Moved 1 unit date(s) for tsp out of raw_value into units_as_of.
+    The original text is kept.
+
+| Account    | Name   | Units | Price   | Value      | Units As Of |
+| TSP C Fund | C Fund | 100   | $124.93 | $12,493.14 | 2026-01-31  |
+```
+
+A `Units As Of` on a row written before there was a column to put it in. Three things
+were checked past that headline: `raw_value` still reads `2026-01-31`, so nothing was
+destroyed to make the move; the column exists afterwards; and a **second** open prints
+no migration line at all, so it is idempotent rather than merely working once.
 
 ### 4. The staleness warning fires, and stays quiet
 
@@ -498,73 +596,146 @@ helps if it is said before the number is read.
 
 ### 5. The DFAS pay table downloads at all
 
-**This is the one step here that could not be attempted.** dfas.mil sits behind Akamai
-and answered every request from the development environment with a 403 and an "Access
-Denied" page — every User-Agent tried, including the one tsp.gov accepts, and
-`web.archive.org` was refused too. So the parser is written against
-`tests/dfas_basic_pay_em.html`, which is a *reconstruction* of the live page's
-structure and not a saved response. Everything downstream of the parse is verified;
-the parse itself is verified against a shape that was read off the real page by eye.
+**Settled on 2026-08-10, and the premise this step carried for three days was wrong.**
+It read: "This is the one step here that could not be attempted", dfas.mil "answered
+every request with a 403 — every User-Agent tried", and **re-running this from a third
+hosted environment will not help.** The refusals were real and the control that came
+with them was sound. The conclusion drawn from them was not.
 
-**Retried on 2026-08-09 from an unrelated hosted environment, with a control, and
-refused again:**
+It was never about the User-Agent. Three things are needed together, and none of them
+is sufficient alone:
 
 ```text
-GET https://www.dfas.mil/Military-Members/payentitlements/Pay-Tables/Basic-Pay/EM/
--> 403, 455 bytes, text/html, Akamai "Access Denied"
-   Reference #18.8c623017.1786311998.2342bc08
-
-GET https://www.tsp.gov/data/fund-price-history.csv?startdate=...&enddate=...
--> 200, 555,142 bytes            (same egress, same User-Agent, same minute)
+requests, browser UA + navigation headers          -> 403
+requests, session defaults cleared, stock TLS ctx  -> 403
+curl --http1.1, browser UA + navigation headers    -> 403
+curl --http2,   browser UA + navigation headers    -> 200
+httpx, honest stonksmith UA, headers or not        -> 403
+httpx, no User-Agent at all                        -> 403
+httpx, browser UA, no navigation headers           -> 403
+httpx, browser UA + navigation headers             -> 200, 116,257 bytes
 ```
 
-The control is the part worth keeping. Without it, a 403 is equally well explained by a
-local proxy, and the first write-up — "refused every request from the development
-environment" — reads as a fact about one box. Another `.gov` host answering from the same
-place in the same minute rules that out: the refusal is DFAS's, it tracks the network
-rather than the request, and **re-running this from a third hosted environment will not
-help.** That is worth one line here because it is the cheap thing to try next and it is
-already known not to work.
+The client's TLS/ALPN fingerprint, a browser's User-Agent and a browser's `Sec-Fetch-*`
+navigation headers. Every earlier attempt varied the second of those while holding the
+first fixed, and requests cannot change the first at all: urllib3 pins its own cipher
+list, and no header, cleared default or stock `ssl` context moves it. So the pay table —
+and only the pay table — now goes out through httpx. tsp.gov and every other broker keep
+the requests session and keep being told truthfully who is calling.
 
-**What this does not say.** Two blocked cloud networks are not evidence about a home
-connection, so the README's TSP setup claim is left exactly as it stands. Only a run from
-a machine that is not in a data centre can qualify it, and that run is still the first
-half of this step.
+**The lesson worth keeping is not the header list.** It is that "a third environment
+will not help" was an inference presented as a finding, in a document whose whole
+purpose is to keep those apart. Two blocked networks and a control ruled out *a local
+proxy*. They never ruled out the request shape, because the request shape had only been
+varied along one axis.
 
-Two things to establish, in order.
+The base URL was stale too: DFAS moved the tables to `MilitaryMembers` and answers the
+old `Military-Members` path with a 301.
 
-First, that the page can be fetched from a machine that DFAS will talk to:
-
-```bash
-uv run stonksmith tsp -M tsp
-```
+Unattended, through `fetch_pay_table`, no flag:
 
 ```
-[+] E-7 at Over 10: $5,300.40 basic pay per month
+[+] E-7 at Over 12: $5,591.70 basic pay per month
 ```
 
-If instead it prints `The enlisted members pay table returned HTTP 403. dfas.mil
-refused the request...`, then this download is not unattended, and the README claim
-that four config keys are the whole setup needs the same qualification `--prices`
-carries. Say so there rather than leaving it standing.
+#### And the parser did not read it
 
-Second — and worth doing **either way** — that the parser reads the real markup:
+This is the part the reconstruction was hiding, and it is why the second half of this
+step said to do it **either way**.
 
-1. Open <https://www.dfas.mil/Military-Members/payentitlements/Pay-Tables/Basic-Pay/EM/>
-   in a browser and save the page as HTML.
-2. Run against it: `uv run stonksmith tsp -M tsp --pay-table ~/Downloads/EM.html`
-3. Check the printed basic pay against the figure in that grade's row and time-in-service
-   column on the page itself.
+`tests/dfas_basic_pay_em.html` was a reconstruction: right about every rate — all 44
+cells it carried match the real page exactly — and wrong about the markup in two ways.
+Against the page DFAS actually serves, the parser returned **zero grades**, while
+passing every test.
 
-If step 3 disagrees, the reconstruction differs from DFAS's markup in a way the tests
-cannot see. **Replace `tests/dfas_basic_pay_em.html` with the saved page** — trimmed of
-anything but the tables — and the fixture stops being a reconstruction. That is the
-single highest-value thing anyone with access to dfas.mil can do for this feature.
+* The band headings are stacked over a line break, `<b>Over</b><br/>10`, which reads
+  back as `Over10` and matched no label. No header row meant no table, and
+  `basic_pay_table` skips a table whose header it cannot find — so a page of perfectly
+  good rates parsed to `{}`.
+* `E-9(Notes 2 & 3)` and `E-1(Notes 4 & 5)` carry footnote markers in the Pay Grade
+  column, and `normalize_grade` refused both. That one does not fail; it drops exactly
+  those two grades and says nothing, which reads as "DFAS publishes no rate for your
+  grade". A senior enlisted member accrues nothing and the run still prints as though
+  it worked.
 
-A number that is merely *plausible* is the failure mode to watch for here. The columns
+Both are fixed, and the fixture is now the served page trimmed to its two tables and
+otherwise byte-for-byte — **do not reflow it, the whitespace is the fixture.** It parses
+to all nine enlisted grades, with E-9's low bands still absent rather than zero.
+
+A number that is merely *plausible* remains the failure mode to watch for. The columns
 are matched from the right, so a table with an unexpected trailing column would shift
 every rate by one band — which reads as a member being paid at the wrong seniority, not
 as a parse error, and looks entirely like an answer.
+
+**What this does not settle.** It was run from a hosted environment, so it says nothing
+about a home connection beyond the obvious — a network that was refused before is
+answering now, given the right client. And DFAS is fingerprinting; what works today is
+not a guarantee. If this starts returning 403 again, `--pay-table` with a page saved
+from a browser is still the fallback, and the failure message still says so.
+
+### 6. The contribution accrual is arithmetic, not a guess
+
+The accrual is the broker's one estimate, so it is the one number that has to be shown
+its working. Settled on 2026-08-10 by the same run as step 3 — prices and pay table
+both fetched live, nothing replayed:
+
+```
+[*]   2026-02-28: E-7 Over 10 $5,300.40 x 10% = $530.04 at $22.4956 (2026-02-27) = 23.561941 units
+[*]   2026-03-31: E-7 Over 10 $5,300.40 x 10% = $530.04 at $21.0565 (2026-03-31) = 25.172275 units
+[*]   2026-04-30: E-7 Over 12 $5,591.70 x 10% = $559.17 at $23.1290 (2026-04-30) = 24.176143 units
+[*]   2026-05-31: E-7 Over 12 $5,591.70 x 10% = $559.17 at $24.2845 (2026-05-29) = 23.025798 units
+[*]   2026-06-30: E-7 Over 12 $5,591.70 x 10% = $559.17 at $24.2990 (2026-06-30) = 23.012058 units
+[*]   2026-07-31: E-7 Over 12 $5,591.70 x 10% = $559.17 at $24.0756 (2026-07-31) = 23.225589 units
+[+] Contributions since 2026-01-31: 6 month(s), $3,296.76 at 5% member + 5% agency
+    = 142.173804 estimated units
+```
+
+Every one of those six months was then recomputed **outside the run's code path** —
+posting dates re-derived, pay looked up, dollars multiplied, units divided — and
+compared field by field: posting date, band, basic pay, dollars, price, price date and
+units. All six matched on all seven. Checking only the unit total would have accepted
+two errors that cancel.
+
+Four things in that transcript are the reason it was set up the way it was, and each
+would pass vacuously under a lazier choice of inputs:
+
+1. **Nothing is counted twice.** The anchor is `2026-01-31`, itself a month-end and so
+   itself a posting-date-shaped date. It does not appear in the six. `posting_dates` is
+   `start < when <= end`, strictly after, because the contribution that produced the
+   anchored count is already *in* the anchored count. An anchor mid-month would never
+   have tested this.
+2. **The band is recomputed every month, not once.** The service date is 2014-04-20, so
+   the twelve-year anniversary falls on 2026-04-20 — inside the window. February and
+   March price at `Over 10` and `$5,300.40`; April onward at `Over 12` and `$5,591.70`.
+   A window that sat inside one band would agree with a single lookup done once.
+3. **The weekend fallback fires inside the accrual.** 2026-02-28 was a Saturday and
+   2026-05-31 a Sunday; both priced at the preceding Friday and, crucially, *dated* as
+   that Friday — `(2026-02-27)` and `(2026-05-29)`. The other four price on the day.
+   Contributions post to a calendar day and the market does not, so this is not an edge
+   case, it is two months in six.
+4. **The estimate is dated to what it covers.** `units_as_of` on the estimate row is
+   `2026-07-31` — the last contribution that could be priced — not the run date and not
+   the price date. A month that cannot be priced is left out and said, rather than
+   silently valued at zero.
+
+The rates' own effective date is read rather than assumed, and an accrual reaching back
+past it says so:
+
+```
+$ uv run stonksmith tsp -M tsp --units 315.789 --units-as-of 2025-11-30
+[!] 1 of 8 contribution(s) posted before the pay table took effect on 2026-01-01,
+    so they are priced at rates that came in after them.
+```
+
+(Both flags: `--units-as-of` is only read alongside `--units`.)
+
+**What this does not settle.** The unit count, grade, service date and percentages were
+chosen, not read off anyone's LES — so this says the arithmetic is right, not that it
+matches any particular member's account. It models neither the IRS deferral limit nor a
+mid-year change of grade or contribution rate; a member who hits the cap in November
+will be over-estimated for the rest of the year. And the whole estimate rests on
+contributions posting monthly, which is the assumption the 40-day staleness warning in
+step 5 exists to keep honest.
 
 ---
 
@@ -1007,13 +1178,19 @@ to hit this — it has no login and, once the price file is fetched, very little
 Leave a second between runs. If two snapshots do not appear despite that, the finding
 is real.
 
-**A TSP statement's fund is read, logged, and then discarded.** `-o STATEMENT=` yields
-a unit count and the statement's own fund name, but only the count is carried forward;
-the mark is priced and labelled with the `fund` configured in `[TSP]`. Point an
-`L 2060` statement at a config saying `C Fund` and it will value `L 2060` units at
-`C Fund`'s share price, with no warning beyond two adjacent log lines naming different
-funds. This matters here because the statement step can be ticked while the resulting
-mark is wrong. Check the two lines agree.
+**A TSP statement whose fund cannot be read is priced with the configured one.** This
+trap used to be much larger, and the larger version is fixed: `units_for` now compares
+the statement's own fund against `[TSP] fund` and **refuses the run outright** when
+both are present and different, rather than valuing `L 2060` units at `C Fund`'s price
+on the strength of two adjacent log lines.
+
+What is left is the narrow case. `same_fund` treats an *unnamed* side as matching
+anything, deliberately — a statement whose fund did not parse has already lost that
+information, and refusing a perfectly good unit count over a detail the file never
+carried would cost more than it saves. So a statement StonkSmith cannot name is still
+priced with whatever `[TSP] fund` says, silently. The line to check is the one that
+reports what the statement gave up: if it names no fund, the guard did not run, and
+only you can say whether the configured fund is the right one.
 
 ---
 

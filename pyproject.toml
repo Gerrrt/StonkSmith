@@ -2,6 +2,10 @@
 dependencies = [
     "beautifulsoup4>=4.12",
     "google-auth>=2.0",
+    # Only the DFAS pay table needs this, and only because requests cannot
+    # fetch it: dfas.mil refuses urllib3's TLS handshake whatever headers ride
+    # on top of it. See brokers/tsp/broker.py for what was measured.
+    "httpx>=0.28",
     "gspread>=6.1",
     "keyring>=25.0",
     "parsel>=1.9",
