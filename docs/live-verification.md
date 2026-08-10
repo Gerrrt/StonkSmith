@@ -33,8 +33,8 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*17 of 20 claims have been settled by a live run — 16 confirmed, 1 disproved. The
-remaining 3 rest on unit tests or on fixtures.*
+*18 of 20 claims have been settled by a live run — 17 confirmed, 1 disproved. The
+remaining 2 rest on unit tests or on fixtures.*
 
 `tests/test_live_verification_tally.py` derives those five numbers from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
@@ -48,8 +48,8 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | Ally — masked sidebar number matches the full one | The same nine runs; `masked_matches("...0111", "1AB20111")` in unit tests | Yes |
 | Ally — Ally Bank deposit accounts skipped, not filed as brokerage | The same nine runs | Yes |
 | Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one. The `units_as_of` stamp on each holding postdates those runs and has not been written to a real one | Yes |
-| Ally — one row per account across runs | `uq_accounts_broker_key`; the row count was never checked across those runs | No |
-| Ally — valuing from published prices without a login | Unit tests over a fake DB and a canned payload, `tests/test_ally_from_prices.py`. The path's *refusal* has met a real empty database, 2026-08-10, written up under step 6 — but nothing has been valued, which is the claim | No |
+| Ally — one row per account across runs | Two signed-in runs on 2026-08-10, 21:57:58 and 22:03:26, written up below: `show accounts` held at one row while `show snapshots` went 26 → 27 → 28 | Yes |
+| Ally — valuing from published prices without a login | A real run on 2026-08-10 valued a real account with no sign-in, written up under step 6: the price date reached `as_of` and the units carried through with step 1's stamp. What is left is the stamp *holding still* — one price run cannot show that, and on this day the stamp and the newest snapshot were the same timestamp, so the two possible sources are indistinguishable. Needs one run on a later day | No |
 | Ally — the published price feed answers | A real request on 2026-08-09, written up below: 200 and 3,612 bytes of JSON for one symbol, read by `daily_closes()` into 23 dated closes | Yes |
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
 | TSP — statement parser | Real statements, read as issued through `-o STATEMENT=` | Yes, against real files |
@@ -285,7 +285,10 @@ Four things to establish, and they do not cost the same. **Two of them cost noth
 that the run refuses a database with no units on record, and that it opens no browser
 doing it — and both have been run; they are written up first for that reason. The two
 that remain are about what happens when there *are* units, so they need step 1 to have
-run first, and a later day than step 1 for the price to be a different one.
+run first. Three of the four have now been run. The fourth is not expensive either, but
+it cannot be bought with effort: it needs a **second price run on a later day**, and no
+amount of running today substitutes for it. Why that is so is the last part of this
+step.
 
 #### The half that needs nothing, run 2026-08-10
 
@@ -344,48 +347,102 @@ returned before either. A price run that opened a window would have to explain t
 things back, so the strings quoted above stay true to the source rather than to the day
 they were copied.
 
-#### The half that still needs step 1
+#### The half that needed step 1, run 2026-08-10
 
-On any day later than step 1:
+Step 1 ran twice that evening — the two runs written up under *Both brokers* below —
+leaving the account's units on record at `2026-08-10 22:03:26`. The price run followed
+a minute later:
 
 ```bash
 uv run stonksmith ally -M ally --from-prices
 ```
 
-```
-[+] Valuing from published prices; no sign-in needed.
-[+] <label>: <units> <symbol> x <price> (<price date>) = <value>
-[*] <label>: priced at <price date>; units as recorded <stamp>. Re-run with --manual-login after a deposit.
+```text
+Broker:  Ally    [+] Valuing from published prices; no sign-in needed.
+Module:  Ally    [!] Starting Ally sync for: published prices
+Module:  Ally    [+] Individual (...0847): 123.519 SWPPX x $20.00 (2026-08-07) = $2,470.38
+Module:  Ally         [*] Individual (...0847): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26. Re-run with --manual-login after a deposit.
+Module:  Ally    [+] Ally valued from published prices.
 ```
 
-Three things to check in `stonksmithdb` afterwards. `show snapshots` should have one
-more row, and its `as_of` should carry the **price** date rather than being empty — this
-is the only Ally path that fills that column, so an empty `as_of` here means the value
-was dated by the run. `show holdings` should show the same unit count step 1 recorded,
-unchanged: this run reprices units, it does not rediscover them. And its `Units As Of`
-should carry **step 1's** date, not this run's — that is the scrape stamping the moment
-its units were read, and the price run carrying the stamp through rather than
-replacing it.
+`show snapshots` gained one row, and it is the **only row in the table with an `as_of`
+at all** — the twenty-eight scraped snapshots preceding it leave that column empty:
 
-Then run it a **second** time, and check `Units As Of` again. It must not have moved.
-A date that advances to the previous price run is the failure this step exists to
-catch: these runs write snapshots, so an age inferred from the newest snapshot reports
-the units a day old however old they are — drifting younger while the units drift
-older, and reading as fact the whole way. An unchanged date is the units' age still
-being the last sign-in's.
+```text
+| 29 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
+| 28 | Individual (...0847) |            | 2026-08-10 22:03:26 | $2,470.38 | USD |
+| 27 | Individual (...0847) |            | 2026-08-10 21:57:58 | $2,470.38 | USD |
+```
+
+That is the check: the value is dated by the source it came from, 2026-08-07, and not
+by the run that wrote it, 2026-08-10 22:04:27. An `as_of` echoing the run date would
+have meant the price date never reached the column.
+
+`show holdings 29` carries step 1's unit count and step 1's stamp:
+
+```text
+| Individual (...0847) | SWPPX | Schwab S&P 500 Index | 123.519 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
+```
+
+The 123.519 is step 1's count by construction rather than by comparison — the price
+path reads units from the database and has no way to fetch them — so what this row
+shows is that repricing carried them through without disturbing them. `Units As Of`
+reads `22:03:26`, the sign-in's stamp, not the price run's `22:04:27`. Three dates, all
+different and each meaning what it says: the price is Friday's, the units were read at
+22:03:26, the row was written at 22:04:27.
+
+**The value is corroborated, which was not something this step asked for.** 123.519 ×
+$20.00 = $2,470.38, and the two signed-in runs minutes earlier had independently
+recorded $2,470.38 from Ally's own page. The published-price arithmetic and the
+broker's own number agree to the cent, on the same units, by two paths that share no
+code. Worth recording because a valuing path can be perfectly self-consistent and still
+be wrong about the world.
+
+#### The one thing a second run is needed for
+
+Run it again on a **later day** and check `Units As Of`. It must still read
+`2026-08-10 22:03:26`.
+
+A date that advances to the previous price run is the failure this exists to catch:
+these runs write snapshots, so an age inferred from the newest snapshot reports the
+units a day old however old they are — drifting younger while the units drift older,
+and reading as fact the whole way.
+
+**The 2026-08-10 run could not settle this, and it is worth being precise about why.**
+`value_from_prices` takes the stamp from the holdings it read, falling back to the
+account's last-seen time only when no row carries one. On that evening those two were
+the same timestamp: the newest snapshot was 28, scraped `22:03:26`, and the holdings'
+stamp was also `22:03:26`. A run reading the stamp and a run inferring it from the
+newest snapshot would have printed the identical line. The check did not fail — it was
+not yet askable.
+
+The next run can ask it, because the two have since diverged: the newest snapshot is
+now 29, scraped `22:04:27`, while the holdings' stamp is still `22:03:26`. A later run
+printing `22:04:27` is reading the snapshot, which is the bug; printing `22:03:26` is
+reading the units, which is the claim. Capture `show accounts` alongside it — the price
+run may have moved `Last Seen` too, which is the other place the fallback could come
+from.
 
 Worth knowing before ticking this: the sheet is **not** synced by a price run, so an
 unchanged `Holdings` tab is expected rather than a failure. Run `sheet` in
 `stonksmithdb` to refresh it — see *The sheet* below.
 
-**What this settles, and what it does not.** The run above settles that the path
-refuses units it has no record of, and that it reaches that refusal without starting a
-browser. It does not settle the row *Ally — valuing from published prices without a
-login*, which stays `No`: nothing was valued. An empty database exercises the branch
-that declines to multiply, and the claim is about the branch that multiplies — the
-price date reaching `as_of`, the units surviving unchanged, and the stamp on them
-holding still across two runs. Those need units in the database, and units need a
-sign-in.
+**What this settles, and what it does not.** The runs above settle three of the four:
+the path refuses units it has no record of, it reaches that refusal without starting a
+browser, and — given units — it values them, dating the value by the price and carrying
+the units' own stamp through untouched.
+
+The row *Ally — valuing from published prices without a login* still stays `No`, and
+the reason has narrowed rather than gone. It is no longer "nothing was valued";
+something was, correctly. What is left is the third component of the same claim, that
+the stamp **holds still**, and one run cannot show that however carefully it is read.
+The row moves on the next price run on any later day — thirty seconds, no sign-in, no
+account state to arrange.
+
+Holding a row at `No` over one unaskable check is the conservative reading, and it is
+the one this file takes: a verdict is what a run observed, and no run has yet observed
+this. A reader who wants the row's other three components can find them settled in the
+`Rests on` column, which is what that column is for.
 
 ### 7. Re-running does not duplicate accounts
 
@@ -425,12 +482,16 @@ dated closes, 2026-07-08 to 2026-08-07, and two specific things held:
   returned *dated as Friday* rather than presented as Sunday's.
 
 **What this settles, and what it does not.** It settles the row *Ally — the published
-price feed answers*, whose gap was that no real request had ever been recorded. It does
-not settle *Ally — valuing from published prices without a login*, which is step 6, needs
-a real `ally.db` behind it, and stays `No`. One symbol was asked for, and an ETF rather
-than anything an account here holds; a feed that answers for `SPY` and not for some
-particular fund would still fail step 6, which is the reason the two are separate rows
-rather than one.
+price feed answers*, whose gap was that no real request had ever been recorded. It did
+not settle *Ally — valuing from published prices without a login*, which is step 6 and
+needs a real `ally.db` behind it. One symbol was asked for here, and an ETF rather than
+anything an account holds; a feed that answered for `SPY` and not for some particular
+fund would still have failed step 6, which is why the two are separate rows rather than
+one.
+
+That particular worry has since been answered from the other side: step 6's run on
+2026-08-10 priced `SWPPX`, a mutual fund actually held, and the feed returned a dated
+close for it. The row still stays `No`, but no longer for this reason — see step 6.
 
 ---
 
@@ -1222,6 +1283,34 @@ row rather than adding one. Snapshots are keyed on `(account_id, scraped_at)`, s
 each run adds one.
 
 The second-apart instruction is not incidental — see below.
+
+### Run against Ally, 2026-08-10
+
+Two signed-in runs, 21:57:58 and 22:03:26 — five and a half minutes apart, which is
+clear of the same-second trap by a margin that leaves nothing to argue about.
+
+`show accounts` after both: one row, the same row.
+
+```text
+| 1 | | Individual (...0847) | | INVESTMENT | 2026-08-10 22:03:26 |
+```
+
+Its `Last Seen` moved 21:57:58 → 22:03:26, which is the upsert being visible rather
+than merely assumed: the row was written twice and there is still one of it. A second
+row would have meant `(broker, account_key)` was not holding.
+
+`show snapshots` went from 26 rows to 27 to 28, one per run, ids 27 and 28 carrying the
+two timestamps. So the two keys behave differently on the same pair of runs — accounts
+updated in place, snapshots appended — which is the whole of the claim.
+
+Both runs read one investment account and skipped the same Ally Bank savings account,
+and both wrote $2,470.38.
+
+**This does not make anything plural true.** One account, one holding, one deposit
+account skipped — the same single state the nine earlier runs saw. That the row count
+held at one is evidence about the key, not about the account list, and a second
+brokerage account remains the only thing that would settle the plural reading. It is
+recorded here so the next reader does not take a passing row-count check for one.
 
 ---
 

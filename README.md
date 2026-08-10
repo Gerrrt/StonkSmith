@@ -86,11 +86,12 @@ sign-in hand-off, holdings parse, masked-number reconciliation, bank/brokerage
 split and database write were all exercised across nine live runs, and its
 session was found not to survive between runs at all, so it needs
 `--manual-login` every time it scrapes — `--from-prices` values it between
-scrapes without one; the published price feed behind that flag has been
-contacted, and the flag has been seen to refuse a database holding no units and
-to open no browser doing it, but its valuing path has not been run. Those runs
-saw one account state, though, so anything plural about an Ally account is still
-inference. TSP has too: its statement and share-price parsers, the mark's
+scrapes without one, and that flag has now valued a real account with no
+sign-in: it refuses a database holding no units, opens no browser doing it, and
+dates the value by the price rather than by the run. What has not been shown is
+that the units' own date holds still across two price runs, which needs a second
+run on a later day. Those runs saw one account state, though, so anything plural
+about an Ally account is still inference. TSP has too: its statement and share-price parsers, the mark's
 arithmetic, its price download, its database write, its contribution accrual and
 both halves of the DFAS pay table are verified against real data. The sheet it
 feeds is verified as well: its four tabs were read back against the real
