@@ -210,12 +210,23 @@ the two out of step at the first change.
 
 What that file already says, and what it means here:
 
-- **`Ally — valuing from published prices without a login` stands at `No`.** The path a
-  schedule would use nightly rests on unit tests over a fake database and a canned payload.
-  The price feed behind it *has* been contacted live and answered, which is the row above
-  it, but the flag's own path has not been run end to end. **The one scheduled thing this
-  file recommends for Ally is the one thing not yet verified**, and the procedure for
-  settling it is step 6 of that file's Ally section.
+- **`Ally — valuing from published prices without a login` stands at `Yes`.** It read
+  `No` when this file was written, and the sharpest thing this section used to say —
+  that the one scheduled path recommended for Ally was the one path not verified — is no
+  longer true. It was run end to end on 2026-08-10, three times, against a real account
+  with nobody signed in. Two of those findings are what a crontab actually rests on. It
+  opens no browser, and the filesystem says so rather than the log: the same command
+  with the flag removed left session state behind, and these runs left the directory
+  empty. And against a database with no units on record it refuses and exits `1` instead
+  of valuing nothing — so a fresh machine, or a lost `ally.db`, mails you rather than
+  quietly reporting a smaller portfolio. **`Ally — one row per account across runs`
+  settled `Yes` alongside it**, which is the other thing a nightly entry leans on:
+  repeated runs added snapshots without adding accounts.
+  None of that makes the units any fresher, and the same runs are what pin the opposite.
+  The units' stamp held at the last sign-in's time across all three while the newest
+  snapshot's own time moved under it. The staleness this file leads with is therefore
+  real, does not drift younger as the snapshots accumulate, and is reported by nothing
+  except the line the run prints on every account it values.
 - **TSP's whole unattended path is confirmed live.** The share price download, the DFAS
   pay table's download *and* its parse, the contribution accrual and the database write
   were all run without a human on 2026-08-10, and every one of those rows now reads `Yes`.
