@@ -200,7 +200,29 @@ def open_worksheet(worksheet_name: str, spreadsheet: str = SPREADSHEET_NAME) -> 
     :raises SheetsUnavailable: if authorization or lookup fails
     """
 
-    book: Any = open_spreadsheet(spreadsheet=spreadsheet)
+    return require_worksheet(
+        book=open_spreadsheet(spreadsheet=spreadsheet),
+        worksheet_name=worksheet_name,
+        spreadsheet=spreadsheet,
+    )
+
+
+def require_worksheet(book: Any, worksheet_name: str, spreadsheet: str) -> Any:
+    """
+    The tab, or an actionable refusal -- never a created one.
+
+    Split out of open_worksheet so that a caller holding an open book can insist
+    on several tabs without re-authorizing per tab, and without reaching for
+    ensure_worksheet. The difference matters: ensure_worksheet creates what is
+    missing, which is right for a sync and wrong for anything checking what a
+    sync wrote, where a created tab would manufacture the thing being checked.
+    :param book: An open spreadsheet
+    :param worksheet_name: The tab that has to be there
+    :param spreadsheet: The spreadsheet's name, for the message
+    :return: The worksheet
+    :rtype: Any
+    :raises SheetsUnavailable: if the tab is missing or the lookup fails
+    """
 
     try:
         return _find_worksheet(
@@ -261,6 +283,67 @@ def ensure_worksheet(
             f"'{spreadsheet}' ({e}). Add it by hand, or check that the "
             "authorized account may edit the spreadsheet."
         ) from e
+
+
+def tab_exists(book: Any, worksheet_name: str, spreadsheet: str) -> bool:
+    """
+    Whether a tab of that name is already in the book.
+
+    A question rather than a lookup, for the one caller that needs to know a name
+    is free before taking it: absence is the answer it wants and not a failure.
+    Routed through _find_worksheet rather than asking gspread directly so that an
+    APIError or an expired token still arrives as one actionable line -- a caller
+    reading "is this tab there?" as False because the request was rejected would
+    go on to create a tab beside one that already exists.
+    :param book: An open spreadsheet
+    :param worksheet_name: The tab to look for
+    :param spreadsheet: The spreadsheet's name, for the message
+    :return: True if the tab is there
+    :rtype: bool
+    :raises SheetsUnavailable: if the lookup itself fails
+    """
+
+    try:
+        _find_worksheet(
+            book=book, worksheet_name=worksheet_name, spreadsheet=spreadsheet
+        )
+
+    except gspread.exceptions.WorksheetNotFound:
+        return False
+
+    return True
+
+
+def remove_tab(book: Any, worksheet: Any, worksheet_name: str) -> str:
+    """
+    Delete a tab, reporting rather than raising.
+
+    The only deletion in StonkSmith, and it exists for one caller: the throwaway
+    tab an ownership check makes for itself. It reports instead of raising
+    because it runs in a teardown, where an exception would replace whatever the
+    check had found with the news that a scratch tab is still there -- true, and
+    less useful than the result it threw away.
+
+    Callers pass the worksheet object they created, not a name to look up. A
+    deletion that resolved its own target could be pointed at a tab somebody
+    wanted; this one can only remove a handle the caller already had.
+    :param book: The open spreadsheet
+    :param worksheet: The worksheet to delete, as returned when it was created
+    :param worksheet_name: Its name, for the message
+    :return: An empty string on success, or why it could not be removed
+    :rtype: str
+    """
+
+    try:
+        book.del_worksheet(worksheet)
+
+    except (gspread.exceptions.APIError, GoogleAuthError) as e:
+        return (
+            f"The tab '{worksheet_name}' could not be removed ({e}). It is a "
+            "scratch tab and nothing reads it, so deleting it by hand is safe."
+        )
+
+    return ""
 
 
 def fit(worksheet: Any, rows: int, cols: int) -> None:

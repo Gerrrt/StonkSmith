@@ -941,6 +941,30 @@ not updated" line: the sheet is a view of the databases, so it can be rebuilt
 from them alone, and re-scraping Ally or Fidelity to fix a spreadsheet means
 sitting at a sign-in page for no reason.
 
+`verify`, beside it, checks what a successful sync cannot show. Two halves, and
+either can be run alone:
+
+`verify tabs` reads the four tabs back. A write that returned says the request was
+accepted, not that the values arrived as the kind of thing they were meant to be —
+so this checks the banner on all four, row 2 against the column contract on the
+three that have one, the movement count against the databases, that every
+`Processed On` is `YYYY-MM-DD` and sorted newest-first within its account, that
+money came back as a number rather than as text, and that the dashboard's two
+totals agree. The last two are marked in the output as resting on an assumption
+about what a rendered cell returns, so a failure there is ambiguous between a
+wrong sheet and a wrong check until it has run once.
+
+`verify guard` creates one scratch tab and asks the ownership check whether a
+defaced first cell is refused, whether text below a blank one is refused, and
+whether a wholly empty tab is adopted, then deletes the tab again. No tab the sync
+writes is opened, and a tab of that name which already exists stops the run rather
+than being adopted.
+
+Two things neither half covers: that a refusal aborts the *whole* sync, and that an
+absent value arrived as an empty cell rather than an empty string — read back, those
+two are the same value, so only a formula's behaviour tells them apart.
+`docs/live-verification.md` has both steps.
+
 ### What a tab may promise
 
 Those five tabs each grew their own layout, and nothing shared a column:

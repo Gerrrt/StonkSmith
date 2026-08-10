@@ -632,9 +632,47 @@ fails, the sheet is left as it was rather than emptied and the run says so inste
 printing a count — clearing the tabs there would replace a correct sheet with a blank
 one and report success for doing it.
 
-Seven things to confirm on the tabs themselves, none of which a unit test can see:
+Seven things to confirm on the tabs themselves, none of which a unit test can see.
+**`verify tabs` now does most of it**, by reading the tabs back:
 
-1. **The first cell of every tab carries the machine-owned banner** — all five,
+```
+stonksmithdb (default) > verify tabs
+[*] Reading the tabs back from 'Investment Account Scrapes'.
+[+] All 5 tabs carry the banner in A1
+[+] Accounts row 2 is the column contract, ending at J
+[+] Holdings row 2 is the column contract, ending at P
+[+] Transactions row 2 is the column contract, ending at O
+[+] Net Worth row 2 is the column contract, ending at K
+[+] Transactions holds all 2 movements the databases have
+[+] Every Processed On is YYYY-MM-DD
+[+] Processed On runs newest-first within each account
+[+] Accounts Value is a number, not text (assertion unconfirmed against real Sheets)
+[+] The dashboard's two totals agree (assertion unconfirmed against real Sheets)
+[*] All 10 checks behaved, against real Sheets rather than a stub. Two things they cannot cover are still in docs/live-verification.md: a refusal aborting the whole sync, and an absent value arriving as an empty cell.
+```
+
+Same caveat as the `verify` transcript above: that is the real function over the fake
+spreadsheet the tests use, not a session, and the movement count is the fake's two rather
+than a workspace's. **Nothing here has met real Sheets.**
+
+Two of those lines say `assertion unconfirmed`, and the marking is the point. Eight of the
+ten compare strings — a banner, four column contracts, a count against the databases, a
+date format, an ordering — and cannot be wrong about the API. The other two ask what a
+rendered cell comes back *as*, which is an assumption about gspread that no test here can
+settle. So on the first real run a `[-]` on one of those two is ambiguous between a wrong
+sheet and a wrong check, and the report says so rather than reporting a defect it cannot
+distinguish. They fail in the safe direction: a render option behaving differently produces
+a complaint, not a silent pass.
+
+**Check 4 is not in that list and cannot be.** Read back, an empty cell and an empty string
+are the same value — Sheets returns `""` or a short row for either — so the only witness to
+the difference is a formula's behaviour over the cell. That one stays an eyeball check, and
+it is the reason this section still asks you to look.
+
+The seven checks, and which of them `verify tabs` settles:
+
+1. **The first cell of every tab carries the machine-owned banner** — *`verify tabs`
+   settles this one, including the column contract.* All five,
    `Dashboard` included, since a banner cannot be read back off a tab that was never
    created. On the four that carry columns, row 2 is the column contract exactly as
    `src/etc/portfolio.py` spells it; the dashboard has no such row, and its labels run
@@ -644,28 +682,50 @@ Seven things to confirm on the tabs themselves, none of which a unit test can se
    the broker where the price date and the unit date visibly differ. `Net Worth` is
    eleven, ending at `K`, and its absence altogether is that same signal one change
    later.
-2. **Money is a number, not text.** A currency cell should right-align on its own and
-   accept a number format. If it left-aligns, something is writing strings again.
-3. **The dashboard's `Total (USD)` equals its `Total as read`.** Those are the same
+2. **Money is a number, not text.** *`verify tabs` asks this directly, and its answer is
+   one of the two marked unconfirmed.* By eye: a currency cell should right-align on its
+   own and accept a number format. If it left-aligns, something is writing strings again.
+3. **The dashboard's `Total (USD)` equals its `Total as read`.** *`verify tabs` compares
+   them, found by label rather than by row, so a reordered summary fails here instead of
+   comparing the wrong two cells. The other marked-unconfirmed one.* Those are the same
    number computed by Sheets and by Python; a disagreement means the write was
    truncated, and it is the only signal that would say so.
-4. **Empty cells are genuinely empty.** `Accounts` minus the count of `As Of` values
+4. **Empty cells are genuinely empty.** *The one check no command can make — see above.*
+   `Accounts` minus the count of `As Of` values
    is how the dashboard counts accounts whose source never gave a date, and it relies
    on an absent value arriving as an empty cell rather than as an empty string that
    `COUNTA` still counts. If that figure reads 0 where the tab visibly has blank
    `As Of` cells, the formula needs `COUNTIF(...,"<>")` instead.
-5. **`Transactions` holds every movement, not the newest five hundred.** Compare the
-   count on the line above against `show transactions` inside a broker shell, and do
-   it against a broker with a long history rather than a fresh one — five hundred is
-   the number the shell reader stops at, and a tab that silently agreed with it would
-   look entirely correct. Past 2,000 movements it is also the only thing that puts a
+5. **`Transactions` holds every movement, not the newest five hundred.** Two questions
+   that used to be run together, and only one of them needs a big workspace.
+
+   *Did every row land* is answerable at any size, but **not against
+   `show transactions`** — that is `get_transactions`, and `broker_db.py` says of its
+   `limit=500` that it "would report the newest five hundred movements as though they
+   were all of them," which is why it "cannot back a sheet." Comparing an uncapped
+   write against a capped read is how this check passes for the wrong reason. Count the
+   rows in the database instead, which is what the sheet is built from:
+
+   ```bash
+   sqlite3 ~/.stonksmith/workspaces/default/<broker>.db \
+     'SELECT COUNT(*) FROM transactions;'
+   ```
+
+   *Is there a window at five hundred* is the question that needs the rows, and no
+   workspace under that number can put it — a tab that had silently windowed would
+   agree with everything. Past 2,000 movements is also the only thing that puts a
    second write in front of real Sheets, since `write_rows()` sends `CHUNK_ROWS` rows
-   at a time. Check the dates too: the 529 scraper stores `12/30/2025` and SnapTrade
+   at a time.
+
+   Check the dates too: the 529 scraper stores `12/30/2025` and SnapTrade
    stores ISO, so the tab is where they must both read `YYYY-MM-DD`, sorted
    newest-first within each account. A `12/30/2025` reaching a cell means the
    normalization was skipped, and the tab's order is then wrong wherever a December
    row sits above a January one.
-6. **`Net Worth` totals the same set of accounts on every date.** Pivot `Value` by
+6. **`Net Worth` totals the same set of accounts on every date.** *`verify tabs` reads
+   this tab's column contract back with the other three and settles nothing else about
+   it — the carry-forward is arithmetic across dates, and no read of one tab can check
+   it.* Pivot `Value` by
    `Date` on the tab, or read the dashboard's net worth band, and walk the account
    count down the dates. It may only ever grow — an account joins the series at its
    first reading and leaves it only after thirty days of silence — so a count that
@@ -674,7 +734,10 @@ Seven things to confirm on the tabs themselves, none of which a unit test can se
    workspace whose brokers genuinely did not all run on the same day, which is the
    ordinary state of a real one and not of a freshly built one: run `sheet` against a
    workspace where Ally last went a week ago and TSP ran this morning.
-7. **Carried rows are visibly carried, and no row is a back-filled zero.** Every row
+7. **Carried rows are visibly carried, and no row is a back-filled zero.** *The other
+   check no command makes, and for a different reason than check 4: a row that is
+   absent cannot be read back, so the thing being checked is what is not there.* Every
+   row
    reads `observed` or `carried` in `Basis` and never blank; a `carried` row's
    `Observed On` is older than its `Date`, and an `observed` row's is equal to it.
    Then look at the earliest dates: an account whose first reading came later must
@@ -682,8 +745,42 @@ Seven things to confirm on the tabs themselves, none of which a unit test can se
    total correctly and be a lie about an account that did not exist yet.
 
 **Then the refusal, which is the point of the whole thing — and it goes last.** A
-refused tab means nothing is synced at all, so doing this first would leave the five
+refused tab means nothing is synced at all, so doing this first would leave the seven
 checks above reading a sheet the run never wrote.
+
+Most of it no longer needs a deface. `verify guard` asks `claim()` all three of its
+questions on a tab it creates and removes, so the guard meets real Sheets without a real tab
+being touched:
+
+```
+stonksmithdb (default) > verify guard
+[*] Making the tab 'StonkSmith ownership check' in 'Investment Account Scrapes', asking the guard about it, and deleting it again. No other tab is opened.
+[+] A defaced first cell is refused
+[+] Text below a blank first cell is refused
+[+] A wholly empty tab is adopted
+[+] The throwaway tab was removed
+[*] All 4 checks behaved, against real Sheets rather than a stub. Two things they cannot cover are still in docs/live-verification.md: a refusal aborting the whole sync, and an absent value arriving as an empty cell.
+```
+
+Bare `verify` runs this half *and* the tab read-back above it, tabs first.
+
+**That is not a session.** It is what the real function prints when driven over the fake
+spreadsheet the tests use, which is the closest thing obtainable without a Google account —
+so its last line, boasting about real Sheets, came from a fake one. **`verify` has never met
+Sheets.** Running it is a step nobody has taken, and the first person to take it is testing
+the command as much as the guard.
+
+That works because `claim()` decides on what a tab *holds*, not on what it is called —
+`MACHINE_OWNED_TABS` only picks which tabs a sync claims. The third case is the one
+neither 2026-08-10 run reached: both had the banner in `A1`, so `claim()` answered on its
+first read and never took the branch that decides whether an empty tab can be handed over.
+A `[-]` line is the finding, and an adoption where a refusal was due is the expensive one.
+
+**It does not retire the manual step.** What `verify` cannot show is that a refusal stops
+the *whole* sync rather than leaving one tab freshly written beside a stale one — that is
+`refresh()` claiming every tab before clearing any, and the scratch tab is not one of the
+four. So this row does not reach `Yes` on `verify` alone, and the deface below is still
+what settles it.
 
 By this point `Holdings` exists and carries the banner, and Sheets will not let a second
 tab take a name already in use — so the move is to make the tab that is there look
@@ -722,9 +819,11 @@ the write but never the *creation* this section opens by asserting — delete th
 point at a fresh spreadsheet, to see that half too.
 
 *The sheet — the whole transaction history reaching a tab* is check 5 alone, and it has a
-wrong way to pass. Against a broker holding fewer than five hundred movements, agreement
-with `show transactions` confirms nothing at all, because that is where the shell reader
-itself stops. The date half of the check belongs to this row too.
+wrong way to pass: agreement with `show transactions` confirms nothing, at any size,
+because that reader stops where the question starts. Counting the database settles whether
+every row landed; only a workspace past five hundred settles whether there is a window,
+and only one past 2,000 puts a second chunked write in front of Sheets. The date half of
+the check belongs to this row too, and needs no volume at all.
 
 *The sheet — the account series carried across brokers that scraped on different days*
 is checks 6 and 7, and it is the one row here that no amount of care with a fresh
@@ -735,7 +834,8 @@ that passes both checks by having nothing to carry.
 *The sheet — refusing a tab it does not own* is the refusal, and it is the only one of
 the four that can be settled the other way. A sync that went ahead and ate your text is
 not a failed check; it is that row observed as **Run, and it cannot** be relied on. Write
-it up that way, and say which tab.
+it up that way, and say which tab. `verify` covers `claim()`'s three answers and not the
+abort, so a clean `verify` and no deface leaves this row where it is.
 
 Then *Recording a result* below, which is where the asymmetry it warns about actually
 bites: one `sheet` run touches all four of these rows, and the refusal is the only one
