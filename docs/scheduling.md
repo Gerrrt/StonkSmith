@@ -216,8 +216,15 @@ What that file already says, and what it means here:
   it, but the flag's own path has not been run end to end. **The one scheduled thing this
   file recommends for Ally is the one thing not yet verified**, and the procedure for
   settling it is step 6 of that file's Ally section.
-- **TSP's share price download is confirmed live.** The daily path is real. The DFAS pay
-  table download is not, and is a separate concern from the mark itself.
+- **TSP's whole unattended path is confirmed live.** The share price download, the DFAS
+  pay table's download *and* its parse, the contribution accrual and the database write
+  were all run without a human on 2026-08-10, and every one of those rows now reads `Yes`.
+  This is the row a crontab can lean on hardest. One thing to carry into it anyway: DFAS
+  fingerprints its callers, and that file says plainly that what works today is not a
+  guarantee. A refused pay table reports itself and leaves the anchored mark exactly as it
+  was — it stalls the accrual rather than corrupting the number — but the way back is
+  `--pay-table` with a page saved from a browser, which is a human. A schedule that starts
+  mailing about the pay table is asking for that, not for a retry.
 - **`snaptrade` and `schwab529plan` have no rows at all.** Neither has been run against a
   real account through StonkSmith. Their place in the table above rests on how they are
   built — an API key, a form post, no session to lose — rather than on an observed run.
