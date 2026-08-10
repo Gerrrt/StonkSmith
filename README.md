@@ -89,14 +89,15 @@ session was found not to survive between runs at all, so it needs
 scrapes without one; the published price feed behind that flag has been
 contacted, but the flag's own path has not been run. Those runs saw one account
 state, though, so anything plural about an Ally account is still inference. TSP
-has in most part: its statement and share-price parsers, the mark's arithmetic,
-its price download, its database write, its contribution accrual and both halves
-of the DFAS pay table are verified against real data. The sheet it feeds is the
-one part left, and even it sits between the two — its tabs and its refusal to
-overwrite a tab it does not own have met the real spreadsheet, and one check on
-how values render has not. Green tests say the code does what it was written to do, which
-is not the same as saying the site still looks the way it did when the parser
-was written.
+has too: its statement and share-price parsers, the mark's arithmetic, its price
+download, its database write, its contribution accrual and both halves of the
+DFAS pay table are verified against real data. The sheet it feeds is verified as
+well: its four tabs were read back against the real spreadsheet and it was made
+to refuse a tab it did not own. What is unverified there is one claim about
+volume — that a tab holds every movement rather than the newest five hundred —
+which needs a broker with the history to ask it.
+Green tests say the code does what it was written to do, which is not the same
+as saying the site still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
 gives the procedure for the rest — it is the record, and this paragraph
 summarises it rather than being maintained beside it.
@@ -710,10 +711,12 @@ The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
 reports. The database write has been run, against a real `tsp.db` and against
 one written before the `units_as_of` column existed. The sheet has been run too: on
-2026-08-10 it was built from real databases, read back tab by tab, and made to
-refuse a tab it did not own. What is left there is one check a read cannot make —
-whether an absent value arrived as an empty cell or as an empty string — and the
-tabs' creation, since they already existed. `docs/live-verification.md` has the
+2026-08-10 it was built from real databases, read back tab by tab, checked by eye
+where a read could not reach, made to refuse a tab it did not own, and rebuilt
+from nothing after its four tabs were deleted. What is left there is the one claim
+nine movements cannot put — that a tab holds every movement rather than the newest
+five hundred — which is tracked on its own as #141.
+`docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
 statement naming a different fund from your config is refused, but one whose
 fund cannot be read at all is still priced with the configured fund.
