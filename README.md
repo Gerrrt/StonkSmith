@@ -87,13 +87,16 @@ split and database write were all exercised across nine live runs, and its
 session was found not to survive between runs at all, so it needs
 `--manual-login` every time it scrapes — `--from-prices` values it between
 scrapes without one; the published price feed behind that flag has been
-contacted, and the flag has been seen to refuse a database holding no units
-and to open no browser doing it, but its valuing path has not been run. Those
-runs saw one account state, though, so anything plural about an Ally account
-is still inference. TSP has in part: its statement and share-price parsers,
-the mark's arithmetic and its price download are verified against real data,
-but its database write, the sheet it feeds, the contribution accrual and
-everything touching the DFAS pay table are not. Green tests say the code does what it was written to do, which
+contacted, and the flag has been seen to refuse a database holding no units and
+to open no browser doing it, but its valuing path has not been run. Those runs
+saw one account state, though, so anything plural about an Ally account is still
+inference. TSP has in part: its statement and share-price parsers, the mark's
+arithmetic and its price download are verified against real data, but its
+database write, the contribution accrual and everything touching the DFAS pay
+table are not. The sheet it feeds sits between the two — its tabs and its
+refusal to overwrite a tab it does not own have met the real spreadsheet, and
+one check on how values render has not. Green tests say the code does what it
+was written to do, which
 is not the same as saying the site still looks the way it did when the parser
 was written.
 `docs/live-verification.md` records which claims stand on an observed run and
@@ -706,10 +709,14 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write and the sheet have not been run;
-`docs/live-verification.md` has the procedure and one trap worth knowing about
-first — a statement's fund is read and logged but not carried into the mark,
-so a statement for one fund with another configured values the wrong one.
+reports. The database write has not been run. The sheet has: on 2026-08-10 it was built
+from real databases, read back tab by tab, and made to refuse a tab it did not
+own. What is left there is one check a read cannot make — whether an absent
+value arrived as an empty cell or as an empty string — and the tabs' creation,
+since they already existed. `docs/live-verification.md` has the
+procedure, those runs written up, and one trap worth knowing about first — a
+statement's fund is read and logged but not carried into the mark, so a
+statement for one fund with another configured values the wrong one.
 
 Manage stored credentials and scraped balances:
 
@@ -936,6 +943,30 @@ anywhere. This is what to reach for after a refused tab or a "the dashboard was
 not updated" line: the sheet is a view of the databases, so it can be rebuilt
 from them alone, and re-scraping Ally or Fidelity to fix a spreadsheet means
 sitting at a sign-in page for no reason.
+
+`verify`, beside it, checks what a successful sync cannot show. Two halves, and
+either can be run alone:
+
+`verify tabs` reads the four tabs back. A write that returned says the request was
+accepted, not that the values arrived as the kind of thing they were meant to be —
+so this checks the banner on all four, row 2 against the column contract on the
+three that have one, the movement count against the databases, that every
+`Processed On` is `YYYY-MM-DD` and sorted newest-first within its account, that
+money came back as a number rather than as text, and that the dashboard's two
+totals agree. The last two used to be marked as resting on an assumption about
+what a rendered cell returns; the 2026-08-10 run settled that, since a wrong
+assumption would have failed rather than passed quietly.
+
+`verify guard` creates one scratch tab and asks the ownership check whether a
+defaced first cell is refused, whether text below a blank one is refused, and
+whether a wholly empty tab is adopted, then deletes the tab again. No tab the sync
+writes is opened, and a tab of that name which already exists stops the run rather
+than being adopted.
+
+Two things neither half covers: that a refusal aborts the *whole* sync, and that an
+absent value arrived as an empty cell rather than an empty string — read back, those
+two are the same value, so only a formula's behaviour tells them apart.
+`docs/live-verification.md` has both steps.
 
 ### What a tab may promise
 
