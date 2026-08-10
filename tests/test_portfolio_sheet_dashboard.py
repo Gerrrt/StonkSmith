@@ -18,20 +18,30 @@ from etc.portfolio import (
     HOLDING_COLUMNS,
     ISO_DATE_PATTERN,
     AccountRow,
+    HoldingRow,
     Portfolio,
 )
 from etc.portfolio_sheet import (
+    ALLOCATION_WIDTH,
     BANNER,
     BANNER_CELL,
     BY_BROKER_COL,
+    BY_KIND_COL,
+    BY_POSITION_COL,
     BY_SOURCE_COL,
     DASHBOARD_MIN_ROWS,
+    FIRST_DATA_ROW,
+    HEADER_ROW,
     STALE_DAYS,
     STALENESS_COL,
     SUMMARY_COL,
+    SUMMARY_LABELS,
     UNREADABLE_COL,
+    column_index,
+    column_letter,
     column_of,
     dashboard_cells,
+    summary_cell,
     write_dashboard,
 )
 from helpers.sheets import SheetNotOwned
@@ -349,6 +359,459 @@ class WriteDashboardTests(unittest.TestCase):
 
         tab.clear.assert_not_called()
         tab.batch_update.assert_not_called()
+
+    def test_the_grid_is_wide_enough_for_the_allocation_blocks(self) -> None:
+        # The blocks are written ranges, not spilled arrays, so a grid too
+        # narrow does not refuse them -- it drops the columns off the end and
+        # leaves a breakdown with no numbers beside its names.
+        tab = self._tab()
+
+        # As wide as the dashboard needed before the blocks existed, so the
+        # growth this asserts is exactly the room they take.
+        tab.col_count = column_index(letter=UNREADABLE_COL) + 1
+
+        write_dashboard(worksheet=tab, portfolio=allocating(), today=TODAY)
+
+        tab.add_cols.assert_called_once_with(
+            column_index(letter=BY_POSITION_COL) + ALLOCATION_WIDTH - 1 - tab.col_count
+        )
+
+    def test_a_long_position_list_makes_the_grid_taller(self) -> None:
+        # One row per distinct symbol, plus cash, plus the check row. Counted
+        # for the same reason the accounts are: a breakdown truncated to fit
+        # still looks like a breakdown, which is worse than one that refuses.
+        many = tuple(
+            HoldingRow(
+                broker="tsp",
+                source="tsp",
+                account="C Fund",
+                account_key="c",
+                symbol=f"S{n}",
+                value=1.0,
+            )
+            for n in range(60)
+        )
+        tab = self._tab()
+        tab.row_count = 40
+
+        write_dashboard(
+            worksheet=tab,
+            portfolio=portfolio(
+                accounts=(
+                    AccountRow(
+                        broker="tsp",
+                        source="tsp",
+                        account="C Fund",
+                        account_key="c",
+                        value=100.0,
+                    ),
+                ),
+                holdings=many,
+            ),
+            today=TODAY,
+        )
+
+        # 60 symbols + cash + "Slices sum to", below the header row.
+        tab.add_rows.assert_called_once_with(HEADER_ROW + 62 - 40)
+
+
+def allocating(**overrides: Any) -> Portfolio:
+    """
+    A portfolio holding cash: 1600 in balances, 1100 of it in positions.
+    :param overrides: Fields to replace
+    :return: The portfolio
+    :rtype: Portfolio
+    """
+
+    base: dict[str, Any] = {
+        "accounts": (
+            AccountRow(
+                broker="tsp",
+                source="tsp",
+                account="C Fund",
+                account_key="c",
+                kind="INVESTMENT",
+                value=1000.0,
+            ),
+            AccountRow(
+                broker="schwab529plan",
+                source="Schwab",
+                account="Plan",
+                account_key="p",
+                kind="529",
+                value=500.0,
+            ),
+            AccountRow(
+                broker="snaptrade",
+                source="Ally",
+                account="Loose",
+                account_key="l",
+                value=100.0,
+            ),
+        ),
+        "holdings": (
+            HoldingRow(
+                broker="tsp",
+                source="tsp",
+                account="C Fund",
+                account_key="c",
+                symbol="C",
+                value=700.0,
+            ),
+            HoldingRow(
+                broker="schwab529plan",
+                source="Schwab",
+                account="Plan",
+                account_key="p",
+                symbol="",
+                value=400.0,
+            ),
+        ),
+        "brokers_read": ("schwab529plan", "snaptrade", "tsp"),
+    }
+    base.update(overrides)
+
+    return Portfolio(**base)
+
+
+class AllocationTests(unittest.TestCase):
+    """
+    The breakdown, and the cash it has to account for.
+
+    Holdings do not sum to the portfolio: uninvested money sits in a balance and
+    in no position. A share computed over the holdings subtotal therefore leaves
+    the cash out silently, overstates every slice, and still adds to 100% -- the
+    failure this project keeps finding, where the run reported success because
+    from its side nothing went wrong. These tests pin the base the shares divide
+    by, the slice that names the cash, and what happens when the gap goes the
+    way it cannot.
+    """
+
+    def setUp(self) -> None:
+        formulas, literals = dashboard_cells(portfolio=allocating(), today=TODAY)
+        self.formulas = cells(updates=formulas)
+        self.literals = cells(updates=literals)
+
+    def _column(self, block: str, offset: int) -> str:
+        """
+        A block's nth column letter.
+        :param block: The block's start column
+        :param offset: 0 for names, 1 for values, 2 for shares
+        :return: The column letter
+        :rtype: str
+        """
+
+        return column_letter(index=column_index(letter=block) + offset)
+
+    def _cells(self, block: str, offset: int) -> list[Any]:
+        """
+        Every cell in one of a block's columns, header excluded.
+        :param block: The block's start column
+        :param offset: 0 for names, 1 for values, 2 for shares
+        :return: The column's cells, top to bottom
+        :rtype: list[Any]
+        """
+
+        letter: str = self._column(block=block, offset=offset)
+        written: dict[str, Any] = {**self.formulas, **self.literals}
+
+        for name, values in written.items():
+            if name.startswith(f"{letter}{FIRST_DATA_ROW}:"):
+                return [row[0] for row in values]
+
+        raise AssertionError(f"nothing written down column {letter}")
+
+    def test_shares_divide_by_the_portfolio_not_by_the_holdings_subtotal(
+        self,
+    ) -> None:
+        # The whole point. Holdings total is 1100 of a 1600 portfolio; dividing
+        # by it would render a 31%-cash portfolio as fully invested, with every
+        # slice overstated and the numbers still adding to 100%.
+        labels = [row[0] for row in self.literals["A3:A14"]]
+        total: str = f"B{labels.index('Total (USD)') + FIRST_DATA_ROW}"
+        held: str = f"B{labels.index('Holdings total (USD)') + FIRST_DATA_ROW}"
+
+        # Every slice, but not the check row below them, which sums the column.
+        for share in self._cells(block=BY_POSITION_COL, offset=2)[:-1]:
+            self.assertIn(total, share)
+            self.assertNotIn(held, share)
+
+    def test_the_base_the_shares_are_of_is_written_in_the_header(self) -> None:
+        # Stated, not inferred. A percentage whose base is unnamed is the thing
+        # that made the untrustworthy version look correct.
+        for block in (BY_KIND_COL, BY_POSITION_COL):
+            right: str = self._column(block=block, offset=ALLOCATION_WIDTH - 1)
+            header = self.literals[f"{block}{HEADER_ROW}:{right}{HEADER_ROW}"][0]
+
+            self.assertEqual(header[1:], ["Value (USD)", "Share of total (USD)"])
+
+    def test_cash_is_a_named_slice_of_the_position_breakdown(self) -> None:
+        names = self._cells(block=BY_POSITION_COL, offset=0)
+
+        self.assertIn("Cash and uninvested", names)
+
+    def test_the_cash_slice_is_the_gap_the_summary_already_publishes(self) -> None:
+        # Pointed at, not recomputed. A second subtraction could drift from the
+        # first, and two cells on one tab disagreeing about how much cash there
+        # is would be worse than not drawing the slice.
+        labels = [row[0] for row in self.literals["A3:A14"]]
+        gap: int = labels.index("In accounts, not in positions") + FIRST_DATA_ROW
+        names = self._cells(block=BY_POSITION_COL, offset=0)
+        values = self._cells(block=BY_POSITION_COL, offset=1)
+
+        self.assertEqual(values[names.index("Cash and uninvested")], f"=B{gap}")
+
+    def test_that_reference_follows_the_label_rather_than_a_typed_row(self) -> None:
+        # summary_cell derives it from SUMMARY_LABELS, so a reordered summary
+        # moves the reference instead of leaving it pointing at a stale row and
+        # still producing a number.
+        gap: int = list(SUMMARY_LABELS).index("In accounts, not in positions")
+
+        self.assertEqual(
+            summary_cell(label="In accounts, not in positions"),
+            f"B{gap + FIRST_DATA_ROW}",
+        )
+
+    def test_no_allocation_formula_types_a_column_letter(self) -> None:
+        # The module's standing rule. A formula addressing a column by position
+        # is repointed at its neighbour by any insertion, so every letter here
+        # has to come from the contract tuples.
+        kind: str = column_of(columns=ACCOUNT_COLUMNS, name="Kind")
+        value: str = column_of(columns=ACCOUNT_COLUMNS, name="Value")
+        currency: str = column_of(columns=ACCOUNT_COLUMNS, name="Currency")
+
+        self.assertEqual(
+            self._cells(block=BY_KIND_COL, offset=1)[0],
+            f"=SUMIFS(Accounts!${value}$3:${value},Accounts!${kind}$3:${kind},"
+            f'"INVESTMENT",Accounts!${currency}$3:${currency},"USD")',
+        )
+
+        symbol: str = column_of(columns=HOLDING_COLUMNS, name="Symbol")
+        held: str = column_of(columns=HOLDING_COLUMNS, name="Value")
+        held_currency: str = column_of(columns=HOLDING_COLUMNS, name="Currency")
+
+        self.assertEqual(
+            self._cells(block=BY_POSITION_COL, offset=1)[0],
+            f"=SUMIFS(Holdings!${held}$3:${held},Holdings!${symbol}$3:${symbol},"
+            f'"C",Holdings!${held_currency}$3:${held_currency},"USD")',
+        )
+
+    def test_account_kinds_add_up_to_the_whole_portfolio(self) -> None:
+        # Balances include the cash, so this block has no gap to name. That is
+        # what makes account kind the honest breakdown to build first: it needs
+        # no data this project does not already have.
+        names = self._cells(block=BY_KIND_COL, offset=0)
+
+        self.assertEqual(names, ["INVESTMENT", "529", "(no kind)", "Slices sum to"])
+
+    def test_a_slice_the_source_did_not_name_is_stated_not_dropped(self) -> None:
+        # A position with no ticker is still money. Omitting it is how a set of
+        # shares stops adding up while every row on screen still looks right.
+        self.assertIn("(no kind)", self._cells(block=BY_KIND_COL, offset=0))
+        self.assertIn("(no symbol)", self._cells(block=BY_POSITION_COL, offset=0))
+
+    def test_the_unnamed_slice_matches_the_empty_cell_it_was_written_as(
+        self,
+    ) -> None:
+        # The label is for the reader; the criterion has to be what _cell wrote,
+        # which for a missing symbol is the empty string.
+        names = self._cells(block=BY_POSITION_COL, offset=0)
+        values = self._cells(block=BY_POSITION_COL, offset=1)
+
+        self.assertIn('""', values[names.index("(no symbol)")])
+        self.assertNotIn("(no symbol)", values[names.index("(no symbol)")])
+
+    def test_each_block_closes_with_what_its_slices_actually_add_to(self) -> None:
+        # The sheet's own arithmetic over the cells it wrote, beside Python's
+        # over the databases. A share sum that is not 1 is a wrong base, and
+        # this is where it says so without anybody adding a column up by hand.
+        for block in (BY_KIND_COL, BY_POSITION_COL):
+            names = self._cells(block=block, offset=0)
+            shares = self._cells(block=block, offset=2)
+            last: int = FIRST_DATA_ROW + len(names) - 2
+            letter: str = self._column(block=block, offset=2)
+
+            self.assertEqual(names[-1], "Slices sum to")
+            self.assertEqual(
+                shares[-1], f"=SUM({letter}{FIRST_DATA_ROW}:{letter}{last})"
+            )
+
+    def test_a_negative_gap_refuses_to_draw_rather_than_rendering(self) -> None:
+        # A negative gap means a position is counted twice, and the slice it
+        # implies cannot exist -- a negative wedge, with every other share
+        # overstated to make room for it.
+        doubled = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="C",
+                    value=2000.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(portfolio=doubled, today=TODAY)
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        self.assertEqual(
+            self._cells(block=BY_POSITION_COL, offset=0), ["Allocation not drawn"]
+        )
+        self.assertIn("400.00", self._cells(block=BY_POSITION_COL, offset=1)[0])
+
+    def test_the_refusal_is_stated_rather_than_left_blank(self) -> None:
+        # An empty region is indistinguishable from a write that failed, which
+        # is the same reason the unreadable panel says "everything read".
+        doubled = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="C",
+                    value=2000.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(portfolio=doubled, today=TODAY)
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+        said: str = self._cells(block=BY_POSITION_COL, offset=1)[0]
+
+        self.assertIn("counted twice", said)
+        self.assertFalse(said.startswith("="))
+
+        # And the kind block, which cannot have the problem, still draws.
+        self.assertIn("INVESTMENT", self._cells(block=BY_KIND_COL, offset=0))
+
+    def test_float_noise_is_not_mistaken_for_double_counting(self) -> None:
+        # 0.1 + 0.2 - 0.3 is -5.5e-17. Refusing on that would replace a correct
+        # breakdown with an accusation.
+        noisy = allocating(
+            accounts=(
+                AccountRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    value=0.1 + 0.2,
+                ),
+            ),
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="C",
+                    value=0.3,
+                ),
+            ),
+        )
+        formulas, literals = dashboard_cells(portfolio=noisy, today=TODAY)
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        self.assertIn(
+            "Cash and uninvested", self._cells(block=BY_POSITION_COL, offset=0)
+        )
+
+    def test_a_slice_named_with_a_quote_cannot_break_out_of_its_criterion(
+        self,
+    ) -> None:
+        # Slice names come from brokers, not from this module.
+        quoted = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol='A"B',
+                    value=100.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(portfolio=quoted, today=TODAY)
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        self.assertIn('"A""B"', self._cells(block=BY_POSITION_COL, offset=1)[0])
+
+    def test_another_currency_is_left_out_rather_than_added_at_no_rate(
+        self,
+    ) -> None:
+        # Portfolio.total refuses to add a dollar to a euro, and the summary's
+        # "Other currencies present" is what names the omission. A breakdown
+        # that folded them in would be doing quietly what the code declines to
+        # do loudly.
+        mixed = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="EUR",
+                    value=900.0,
+                    currency="EUR",
+                ),
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="C",
+                    value=100.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(portfolio=mixed, today=TODAY)
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+        names = self._cells(block=BY_POSITION_COL, offset=0)
+
+        self.assertNotIn("EUR", names)
+        self.assertIn("C", names)
+
+    def test_slices_are_ordered_largest_first(self) -> None:
+        names = self._cells(block=BY_KIND_COL, offset=0)
+
+        self.assertEqual(names.index("INVESTMENT"), 0)
+        self.assertLess(names.index("529"), names.index("(no kind)"))
+
+    def test_the_blocks_do_not_land_on_top_of_the_bands(self) -> None:
+        # A QUERY that would spill into an occupied cell returns #REF! and shows
+        # nothing at all, so nothing may be written into a band's path.
+        starts = [
+            SUMMARY_COL,
+            BY_BROKER_COL,
+            BY_SOURCE_COL,
+            STALENESS_COL,
+            UNREADABLE_COL,
+            BY_KIND_COL,
+            BY_POSITION_COL,
+        ]
+        self.assertEqual(len(set(starts)), len(starts))
+        self.assertGreater(
+            column_index(letter=BY_KIND_COL), column_index(letter=UNREADABLE_COL) + 1
+        )
+        self.assertGreaterEqual(
+            column_index(letter=BY_POSITION_COL),
+            column_index(letter=BY_KIND_COL) + ALLOCATION_WIDTH,
+        )
+
+    def test_the_names_go_up_raw_and_the_numbers_as_formulas(self) -> None:
+        # A fund whose name begins with "=" stays a name instead of becoming a
+        # formula the spreadsheet runs; a SUMIFS that went up raw would land as
+        # the literal text of itself.
+        block: str = BY_POSITION_COL
+
+        # Two positions, cash, and the check row.
+        bottom: int = FIRST_DATA_ROW + 3
+        names: str = self._column(block=block, offset=0)
+        values: str = self._column(block=block, offset=1)
+
+        self.assertIn(f"{names}{FIRST_DATA_ROW}:{names}{bottom}", self.literals)
+        self.assertIn(f"{values}{FIRST_DATA_ROW}:{values}{bottom}", self.formulas)
 
 
 if __name__ == "__main__":

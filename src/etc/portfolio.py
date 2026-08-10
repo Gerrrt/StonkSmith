@@ -480,6 +480,33 @@ class Portfolio:
             0.0,
         )
 
+    def invested(self, currency: str = "USD") -> float:
+        """
+        What the positions in one currency add up to.
+
+        The other half of the pair, and never a substitute for it. ``total`` is
+        what the accounts say the money is; this is what the positions account
+        for, and the two differ by whatever is sitting uninvested in a balance
+        and in no holding. Anything drawing a breakdown of the portfolio needs
+        both, because a share computed over this number alone silently leaves
+        the cash out and still adds to 100%.
+
+        Same currency rule as ``total``, for the same reason, and the same 0.0
+        start so an empty portfolio returns the type a full one does.
+        :param currency: The currency to total
+        :return: The sum of the matching holdings' values
+        :rtype: float
+        """
+
+        return sum(
+            (
+                row.value
+                for row in self.holdings
+                if row.value is not None and row.currency == currency
+            ),
+            0.0,
+        )
+
 
 def read_broker(
     broker: str, db: PortfolioDbProtocol

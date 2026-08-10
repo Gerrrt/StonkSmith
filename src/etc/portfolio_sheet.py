@@ -127,6 +127,62 @@ BY_BROKER_COL: str = "D"
 BY_SOURCE_COL: str = "G"
 STALENESS_COL: str = "J"
 UNREADABLE_COL: str = "O"
+BY_KIND_COL: str = "R"
+BY_POSITION_COL: str = "V"
+
+#: Columns an allocation block occupies: what the slice is, what it is worth,
+#: and what share of the portfolio that is.
+ALLOCATION_WIDTH: int = 3
+
+#: The one currency the dashboard totals in, and therefore the only one a share
+#: can be a share of. Named rather than spelled out at each use so the summary
+#: block and the allocation blocks cannot come to disagree about it.
+USD: str = "USD"
+
+#: How far below zero the cash gap may fall before the position block refuses to
+#: draw. Money is carried to the cent, and a gap of -0.000001 is float noise
+#: rather than a position counted twice -- refusing on that would replace a
+#: correct breakdown with an accusation.
+ALLOCATION_TOLERANCE: float = 0.005
+
+#: The summary block's rows, in the order they are written.
+#:
+#: Module level rather than local to _summary, because the allocation blocks
+#: point at two of these cells and have to derive the references the same way
+#: the summary derives its own -- a typed B3 and B8 would keep producing numbers
+#: after somebody reordered this list.
+#:
+#: Append rather than insert, on the same principle the column contracts follow.
+#: summary_cell() derives every reference from this tuple, so an insertion would
+#: not break a formula -- but a person reading last sync's dashboard beside this
+#: one would find the rows they knew had moved, and that is worth more than
+#: tidiness.
+SUMMARY_LABELS: tuple[str, ...] = (
+    "Total (USD)",
+    "Total as read",
+    "Accounts",
+    "Holdings",
+    "Holdings total (USD)",
+    "In accounts, not in positions",
+    "Other currencies present",
+    "Newest scrape",
+    "Oldest scrape",
+    "Brokers read",
+    "Movements",
+    "Newest movement",
+)
+
+#: What the label column says in place of a slice whose name the source left
+#: blank. Stated rather than dropped: a position with no ticker is still money,
+#: and a breakdown that silently omits it is one whose shares no longer add up.
+UNNAMED_KIND: str = "(no kind)"
+UNNAMED_SYMBOL: str = "(no symbol)"
+
+#: The row closing each allocation block. Its two values are what the slices
+#: above it actually add to -- the sheet's own arithmetic over the cells it
+#: wrote, not Python's over the databases. A share sum that is not 1 is a wrong
+#: base, visible without anybody having to add the column up by hand.
+ALLOCATION_CHECK: str = "Slices sum to"
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +290,29 @@ def column_of(columns: Sequence[str], name: str) -> str:
 
     except ValueError as e:
         raise KeyError(f"no column named {name!r} in {list(columns)}") from e
+
+
+def summary_cell(label: str) -> str:
+    """
+    The cell one summary row's value sits in.
+
+    Derived rather than typed, for the same reason the column letters are: the
+    formulas that refer to the summary block's own rows would otherwise keep
+    pointing at rows 3 and 8 after somebody reordered SUMMARY_LABELS, and they
+    would keep producing numbers while doing it.
+    :param label: The row's label, exactly as SUMMARY_LABELS spells it
+    :return: A cell reference such as "B3"
+    :rtype: str
+    :raises KeyError: if the summary has no such row
+    """
+
+    try:
+        offset: int = list(SUMMARY_LABELS).index(label)
+
+    except ValueError as e:
+        raise KeyError(f"no summary row named {label!r}") from e
+
+    return f"B{FIRST_DATA_ROW + offset}"
 
 
 def claim(worksheet: Any, tab: str) -> None:
@@ -370,6 +449,24 @@ def write_rows(
     return len(rows)
 
 
+def down(tab: str, columns: Sequence[str], name: str) -> str:
+    """
+    One whole data column, absolutely addressed and open-ended.
+
+    Shared by the summary and the allocation blocks so that both address a
+    column the one way this module allows -- through column_of, never typed.
+    :param tab: The tab the column is on
+    :param columns: The column contract that tab carries
+    :param name: The column's name in that contract
+    :return: A range such as "Accounts!$G$3:$G"
+    :rtype: str
+    :raises KeyError: if the contract has no such column
+    """
+
+    letter: str = column_of(columns=columns, name=name)
+    return f"{tab}!${letter}${FIRST_DATA_ROW}:${letter}"
+
+
 def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
     """
     The dashboard's summary block, split into labels and values.
@@ -378,19 +475,6 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
     :return: (label column, value column) as single-column grids
     :rtype: tuple[list[list[Any]], list[list[Any]]]
     """
-
-    def down(tab: str, columns: Sequence[str], name: str) -> str:
-        """
-        One whole data column, absolutely addressed and open-ended.
-        :param tab: The tab the column is on
-        :param columns: The column contract that tab carries
-        :param name: The column's name in that contract
-        :return: A range such as "Accounts!$G$3:$G"
-        :rtype: str
-        """
-
-        letter: str = column_of(columns=columns, name=name)
-        return f"{tab}!${letter}${FIRST_DATA_ROW}:${letter}"
 
     value: str = down(tab=ACCOUNTS_TAB, columns=ACCOUNT_COLUMNS, name="Value")
     currency: str = down(tab=ACCOUNTS_TAB, columns=ACCOUNT_COLUMNS, name="Currency")
@@ -408,40 +492,8 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         tab=TRANSACTIONS_TAB, columns=TRANSACTION_COLUMNS, name="Processed On"
     )
 
-    labels: list[list[Any]] = [
-        ["Total (USD)"],
-        ["Total as read"],
-        ["Accounts"],
-        ["Holdings"],
-        ["Holdings total (USD)"],
-        ["In accounts, not in positions"],
-        ["Other currencies present"],
-        ["Newest scrape"],
-        ["Oldest scrape"],
-        ["Brokers read"],
-        # Appended rather than slotted in beside the account and holding counts,
-        # on the same principle the columns follow. at() derives every row
-        # reference from this list, so an insertion would not break a formula --
-        # but a person reading last sync's dashboard beside this one would find
-        # the rows they knew had moved, and that is worth more than tidiness.
-        ["Movements"],
-        ["Newest movement"],
-    ]
-
-    def at(label: str) -> str:
-        """
-        The cell one summary row's value sits in.
-
-        Derived rather than typed, for the same reason the column letters are:
-        the one formula here that refers to its own neighbours would otherwise
-        keep pointing at rows 3 and 7 after somebody reordered the list above,
-        and it would keep producing a number while doing it.
-        :param label: The row's label, exactly as spelled above
-        :return: A cell reference such as "B3"
-        :rtype: str
-        """
-
-        return f"B{FIRST_DATA_ROW + [row[0] for row in labels].index(label)}"
+    labels: list[list[Any]] = [[label] for label in SUMMARY_LABELS]
+    at = summary_cell
 
     values: list[list[Any]] = [
         # SUMIF on Currency rather than SUM on Value, because Portfolio.total
@@ -563,6 +615,268 @@ def _bands(today: dt.date) -> dict[str, str]:
     }
 
 
+def _quoted(text: str) -> str:
+    """
+    A string safe to drop inside a formula's double quotes.
+
+    A slice's name comes from a broker, not from this module: an account kind or
+    a fund code carrying a double quote would otherwise close the criterion
+    early and leave the rest of it as syntax, which is a broken formula at best
+    and a silently different criterion at worst.
+    :param text: The name to embed
+    :return: The name with its quotes doubled, as Sheets escapes them
+    :rtype: str
+    """
+
+    return text.replace('"', '""')
+
+
+def _slices(rows: Sequence[Any], name: str, currency: str) -> list[tuple[str, float]]:
+    """
+    One (name, value) pair per distinct slice, largest first.
+
+    Only rows in the asked-for currency, because that is the only total the
+    shares can be a share of -- Portfolio.total refuses to add a dollar to a
+    euro, and a breakdown must not do quietly what the code declines to do
+    loudly. Whatever is therefore left out is named by the summary block's
+    "Other currencies present" rather than folded in at a rate nothing here
+    knows.
+    :param rows: AccountRow or HoldingRow values to group
+    :param name: The attribute to group on, "kind" or "symbol"
+    :param currency: The currency to keep
+    :return: (slice name, value) sorted by value descending then name
+    :rtype: list[tuple[str, float]]
+    """
+
+    totals: dict[str, float] = {}
+
+    for row in rows:
+        if row.value is None or row.currency != currency:
+            continue
+
+        # Kept under the empty string, which is what _cell wrote to the sheet
+        # and therefore what the criterion has to match. The label the reader
+        # sees is chosen at the call site; the criterion stays "".
+        key: str = str(object=getattr(row, name) or "").strip()
+        totals[key] = totals.get(key, 0.0) + row.value
+
+    return sorted(totals.items(), key=lambda pair: (-pair[1], pair[0]))
+
+
+def _block(
+    start: str,
+    heading: str,
+    slices: Sequence[tuple[str, float]],
+    criterion_range: str,
+    value_range: str,
+    currency_range: str,
+    unnamed: str,
+    currency: str,
+    extra: Sequence[tuple[str, str]] = (),
+) -> list[list[Any]]:
+    """
+    One allocation block: a header row, a row per slice, and a check row.
+
+    The slice names come from Python and the numbers come from formulas over the
+    data tabs, which is the split the summary block already uses. Nothing here
+    is a QUERY: QUERY cannot divide a group's sum by a scalar, so the share
+    column would need an open-ended ARRAYFORMULA that spills down the whole grid
+    and cannot be pinned by a test. A SUMIFS per row is longer and exact.
+    :param start: The block's first column letter
+    :param heading: What the name column is called
+    :param slices: (name, value) pairs, already ordered
+    :param criterion_range: The column SUMIFS matches names against
+    :param value_range: The column SUMIFS adds up
+    :param currency_range: The column SUMIFS filters on currency
+    :param unnamed: The label for a slice whose name the source left blank
+    :param currency: The currency being totalled
+    :param extra: (label, value formula) rows appended after the slices
+    :return: The grid, header row first
+    :rtype: list[list[Any]]
+    """
+
+    # The names go in `start` itself; these two are the columns beside it.
+    values: str = column_letter(index=column_index(letter=start) + 1)
+    shares: str = column_letter(index=column_index(letter=start) + 2)
+    total: str = summary_cell(label="Total (USD)")
+
+    # Stated in the header rather than left to be inferred. A share whose base
+    # is unnamed is the failure this block exists to avoid: percentages over the
+    # holdings subtotal leave the cash out and still add to 100%.
+    grid: list[list[Any]] = [
+        [heading, f"Value ({currency})", f"Share of total ({currency})"]
+    ]
+
+    for offset, (name, _) in enumerate(slices):
+        row: int = FIRST_DATA_ROW + offset
+        grid.append(
+            [
+                name or unnamed,
+                f"=SUMIFS({value_range},{criterion_range},"
+                f'"{_quoted(text=name)}",{currency_range},"{currency}")',
+                f'=IFERROR({values}{row}/{total},"")',
+            ]
+        )
+
+    for label, formula in extra:
+        row = FIRST_DATA_ROW + len(grid) - 1
+        grid.append([label, formula, f'=IFERROR({values}{row}/{total},"")'])
+
+    last: int = FIRST_DATA_ROW + len(grid) - 2
+    grid.append(
+        [
+            ALLOCATION_CHECK,
+            f"=SUM({values}{FIRST_DATA_ROW}:{values}{last})",
+            f"=SUM({shares}{FIRST_DATA_ROW}:{shares}{last})",
+        ]
+    )
+
+    return grid
+
+
+def _allocation(portfolio: Portfolio) -> dict[str, list[list[Any]]]:
+    """
+    The dashboard's two allocation blocks, keyed by the column they start in.
+
+    Two, because neither one alone is honest. Account kind is free -- it is
+    already on AccountRow, needs no data this project does not have, and its
+    slices are account balances, so they add up to the portfolio exactly with no
+    cash left over. Position is the breakdown somebody actually wants, and it is
+    the one with the problem: holdings do not sum to the portfolio, because
+    uninvested cash sits in a balance and in no position. So cash is a named
+    slice here, taken from the very cell the summary block already publishes it
+    in, and every share divides by the portfolio total rather than by the
+    holdings subtotal.
+
+    Neither block is asset class, sector or region. No source here supplies any
+    of them: SnapTrade gives a ticker, a scraped 529 gives a fund code, TSP
+    gives a fund. Deriving one would take a mapping table kept by hand or a new
+    external lookup, and a guess buried in a formula is worse than a dimension
+    the tab does not claim to have.
+    :param portfolio: What the workspace holds
+    :return: Start column to grid, header row first
+    :rtype: dict[str, list[list[Any]]]
+    """
+
+    kinds: list[tuple[str, float]] = _slices(
+        rows=portfolio.accounts, name="kind", currency=USD
+    )
+    positions: list[tuple[str, float]] = _slices(
+        rows=portfolio.holdings, name="symbol", currency=USD
+    )
+
+    blocks: dict[str, list[list[Any]]] = {
+        BY_KIND_COL: _block(
+            start=BY_KIND_COL,
+            heading="Account kind",
+            slices=kinds,
+            criterion_range=down(
+                tab=ACCOUNTS_TAB, columns=ACCOUNT_COLUMNS, name="Kind"
+            ),
+            value_range=down(tab=ACCOUNTS_TAB, columns=ACCOUNT_COLUMNS, name="Value"),
+            currency_range=down(
+                tab=ACCOUNTS_TAB, columns=ACCOUNT_COLUMNS, name="Currency"
+            ),
+            unnamed=UNNAMED_KIND,
+            currency=USD,
+        )
+    }
+
+    # The same subtraction the summary block already does, pointed at rather
+    # than repeated. A second copy of it could drift from the first, and two
+    # cells on one tab disagreeing about how much cash there is would be worse
+    # than not drawing the slice at all.
+    cash: float = portfolio.total(currency=USD) - portfolio.invested(currency=USD)
+
+    if cash < -ALLOCATION_TOLERANCE:
+        # Refused rather than drawn. A negative gap means some position is
+        # counted twice, and the slice it implies cannot exist: it would be a
+        # negative wedge in a pie, with every other share overstated to make
+        # room for it. Stated in place of the block, not left blank -- an empty
+        # region is indistinguishable from a write that failed, which is the
+        # same reason the unreadable panel says "everything read".
+        blocks[BY_POSITION_COL] = [
+            ["Position", f"Value ({USD})", f"Share of total ({USD})"],
+            [
+                "Allocation not drawn",
+                f"positions exceed account balances by {-cash:,.2f} {USD}, "
+                "so something is counted twice",
+                "",
+            ],
+        ]
+
+        return blocks
+
+    blocks[BY_POSITION_COL] = _block(
+        start=BY_POSITION_COL,
+        heading="Position",
+        slices=positions,
+        criterion_range=down(tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Symbol"),
+        value_range=down(tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Value"),
+        currency_range=down(tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Currency"),
+        unnamed=UNNAMED_SYMBOL,
+        currency=USD,
+        extra=(
+            (
+                "Cash and uninvested",
+                f"={summary_cell(label='In accounts, not in positions')}",
+            ),
+        ),
+    )
+
+    return blocks
+
+
+def _block_updates(
+    start: str, grid: Sequence[Sequence[Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    One allocation block's cells, split the way the two batches need them.
+
+    Written a column at a time rather than a cell at a time: a workspace with
+    three hundred positions would otherwise put nine hundred ranges into one
+    request. Every column of a block is all formula or all literal -- the names
+    are Python's, the numbers are the sheet's -- so the split is asked per
+    column and never has to cut one in half.
+    :param start: The block's first column letter
+    :param grid: The block, header row first
+    :return: (formula updates, literal updates)
+    :rtype: tuple[list[dict[str, Any]], list[dict[str, Any]]]
+    """
+
+    formulas: list[dict[str, Any]] = []
+    literals: list[dict[str, Any]] = [
+        {
+            "range": f"{start}{HEADER_ROW}:"
+            f"{column_letter(index=column_index(letter=start) + len(grid[0]) - 1)}"
+            f"{HEADER_ROW}",
+            "values": [list(grid[0])],
+        }
+    ]
+
+    body: list[Sequence[Any]] = list(grid[1:])
+
+    if not body:
+        return formulas, literals
+
+    for offset in range(len(grid[0])):
+        letter: str = column_letter(index=column_index(letter=start) + offset)
+        column: list[list[Any]] = [[row[offset]] for row in body]
+        update: dict[str, Any] = {
+            "range": f"{letter}{FIRST_DATA_ROW}:"
+            f"{letter}{FIRST_DATA_ROW + len(body) - 1}",
+            "values": column,
+        }
+
+        if all(_is_formula(cell=cell[0]) for cell in column):
+            formulas.append(update)
+
+        else:
+            literals.append(update)
+
+    return formulas, literals
+
+
 def dashboard_cells(
     portfolio: Portfolio, today: dt.date | None = None
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -627,6 +941,11 @@ def dashboard_cells(
         }
     )
 
+    for start, grid in _allocation(portfolio=portfolio).items():
+        block_formulas, block_literals = _block_updates(start=start, grid=grid)
+        formulas += block_formulas
+        literals += block_literals
+
     return formulas, literals
 
 
@@ -648,17 +967,27 @@ def write_dashboard(
 
     # Every band starts on HEADER_ROW and spills downward -- the staleness query
     # by a row per account, the unreadable block by a row per broker that would
-    # not open. A grid too short for that does not truncate the band: Sheets
-    # refuses the whole array with #REF!, so the panel whose job is to say what
-    # is stale would be the first thing to vanish from a portfolio big enough to
-    # need it. The floor is only for the empty case, where the summary block is
-    # the tallest thing on the tab.
-    spill: int = max(len(portfolio.accounts), len(portfolio.unreadable))
+    # not open, the position allocation by a row per distinct symbol plus cash.
+    # A grid too short for that does not truncate the band: Sheets refuses the
+    # whole array with #REF!, so the panel whose job is to say what is stale
+    # would be the first thing to vanish from a portfolio big enough to need it.
+    # The allocation blocks are written cell ranges rather than spilled arrays
+    # and so would truncate instead, which is worse -- a breakdown missing its
+    # smallest slices still looks like a breakdown. The floor is only for the
+    # empty case, where the summary block is the tallest thing on the tab.
+    #
+    # Measured off the same grids that get written, not recounted from the
+    # portfolio: a height derived a second way is a height that can be wrong.
+    spill: int = max(
+        len(portfolio.accounts),
+        len(portfolio.unreadable),
+        *(len(grid) - 1 for grid in _allocation(portfolio=portfolio).values()),
+    )
 
     fit(
         worksheet=worksheet,
         rows=max(DASHBOARD_MIN_ROWS, HEADER_ROW + spill),
-        cols=column_index(letter=UNREADABLE_COL) + 1,
+        cols=column_index(letter=BY_POSITION_COL) + ALLOCATION_WIDTH - 1,
     )
     worksheet.clear()
 

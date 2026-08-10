@@ -37,7 +37,7 @@ all the accounts you own.
 - [x] Account history: numeric balances, holdings and transactions over time
 - [ ] More brokers. Vanguard needs no code at all; link it through SnapTrade.
 - [ ] Net worth tracking over time
-- [ ] Asset allocation breakdown
+- [x] Asset allocation breakdown
 - [ ] Scheduling (cron / background jobs)
 
 ---
@@ -1092,6 +1092,28 @@ derived from the tuples above, so the letters cannot drift away from the contrac
   the way out of the database; see above for why they are not normalized on the
   way in.
 - Subtotals **by broker** and **by source**.
+- An allocation **by account kind** — `529`, `INVESTMENT`, `LOC`, whatever the
+  source calls it. It is the one breakdown that costs nothing: `Kind` is already
+  on every account row, and because the slices are account balances they include
+  the uninvested cash and add up to **Total (USD)** exactly. Asset class, sector
+  and region are the dimensions somebody actually wants and none of them is here
+  — a ticker, a fund code and a TSP fund is all any source supplies, and deriving
+  a class from those needs a mapping table kept by hand or an external lookup.
+  The tab does not claim a dimension it would have to guess.
+- An allocation **by position**, which is the one with the honesty problem.
+  Holdings do not sum to the portfolio, so a share of the holdings subtotal
+  renders a portfolio that is 30% cash as fully invested — every slice
+  overstated, and the numbers still adding to 100%. So **Cash and uninvested** is
+  a named slice, pointing at the very cell **In accounts, not in positions**
+  already publishes rather than subtracting a second time, and every share
+  divides by **Total (USD)**. Both blocks say so in their header instead of
+  leaving the base to be inferred, and both close with **Slices sum to** — the
+  sheet's own arithmetic over the cells it wrote, where a wrong base shows up as
+  a share column that does not come to 1.
+- When that gap goes negative — a position counted twice — the position block
+  refuses to draw and says by how much, instead of rendering a negative wedge
+  with every other share inflated to make room for it. The account-kind block
+  cannot have the problem and still draws.
 - **Not read** — one row per database that would not open, with the reason. A
   total short by a whole broker looks perfectly reasonable, so it is stated on the
   same tab as the total rather than only in the run's output.
