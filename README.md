@@ -706,12 +706,14 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write has been run, against a real
-`tsp.db` and against one written before the `units_as_of` column existed; the
-sheet has not. `docs/live-verification.md` has the procedure and one trap worth
-knowing about first — a statement naming a different fund from your config is
-refused, but one whose fund cannot be read at all is still priced with the
-configured fund.
+reports. The database write has been run, against a real `tsp.db` and against
+one written before the `units_as_of` column existed. The sheet has been run once, from
+real databases on 2026-08-10 — which is not the same as verified. What a
+successful write cannot tell you is how the values render, and the refusal has
+still never been tried against a real tab. `docs/live-verification.md` has the
+procedure, that run written up, and one trap worth knowing about first — a
+statement naming a different fund from your config is refused, but one whose
+fund cannot be read at all is still priced with the configured fund.
 
 Manage stored credentials and scraped balances:
 
