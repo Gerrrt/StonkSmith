@@ -60,7 +60,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused two unrelated hosted environments, 2026-08-07 and 2026-08-09, and tsp.gov answered from both | No |
 | TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
 | TSP — database write | Unit tests with a mocked DB | No |
-| The sheet — four machine-owned tabs | All four checks, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. One residual: the four tabs already existed, so their *creation* has never been observed. `verify guard` did watch a tab be created and adopted against real Sheets, but through `add_worksheet` rather than through `ensure_worksheet` for these four names — deleting the four and running `sheet` would close it | Yes |
+| The sheet — four machine-owned tabs | All four checks, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes |
 | The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes |
 
@@ -673,8 +673,8 @@ See check 4 below.
 The five checks, and which of them `verify tabs` settles:
 
 1. **The first cell of every tab carries the machine-owned banner** — *settled, 2026-08-10,
-   by `verify tabs` — except the creation half: the four tabs already existed, so delete them
-   and re-run `sheet` to see that too.* All four,
+   by `verify tabs`, and the creation half separately: the four tabs were deleted and `sheet`
+   run again, which made them and adopted them empty before writing.* All four,
    `Dashboard` included, since a banner cannot be read back off a tab that was never
    created. On the three that carry columns, row 2 is the column contract exactly as
    `src/etc/portfolio.py` spells it; the dashboard has no such row, and its labels run
@@ -831,9 +831,11 @@ the third way out the message offers.
 the column contract on the three that have one, money arriving as a number, the
 dashboard's two totals agreeing, and an account with no date being surfaced rather than
 counted at face value. Those are four ways for a tab StonkSmith owns to be written wrongly
-while looking written. One caveat: a spreadsheet whose four tabs already exist observes
-the write but never the *creation* this section opens by asserting — delete the four, or
-point at a fresh spreadsheet, to see that half too.
+while looking written. There is a fifth thing this section opens by asserting — that
+StonkSmith *makes* the four tabs — which a spreadsheet already holding them cannot show;
+that was settled on its own, by deleting the four and running `sheet` again. Anyone
+re-running against an established spreadsheet is back to observing the write and not the
+creation, so delete the four, or point at a fresh spreadsheet, to see that half.
 
 *The sheet — the whole transaction history reaching a tab* is check 5 alone, and it has a
 wrong way to pass: agreement with `show transactions` confirms nothing, at any size,
@@ -947,27 +949,29 @@ read both". Neither happened, so the sheet is right *and* those two checks are �
 marker came off in the same pass. It is worth being clear that this is what a marked
 assertion is for: it made a pass mean something specific rather than merely reassuring.
 
-**What is still open, and why each one is not laziness.**
+**The four things this run left over, and where each ended up.** Two were closed the same
+day; the other two are not laziness.
 
 - *Check 4.* **Done later the same day, and it passed 7 of 7** — see the check itself, which
   had to be rewritten first, because it described a formula that has never existed. Of 16
   accounts, 7 had a blank `As Of` and every one of them appeared in the staleness panel.
-- *The tabs' creation.* All four already existed, so 2026-08-10 observed the write and never
-  the creation this section opens by asserting. Delete the four and run `sheet`; it costs one
-  run. Still open, and the only thing left on *four machine-owned tabs* now that check 4 has
-  gone through — which is why that row reads `Yes` with this recorded against it rather than
-  waiting: `verify guard` watched a tab be created and adopted against real Sheets, so what is
-  unobserved is `ensure_worksheet`'s create path for these four names, not creation as such.
+- *The tabs' creation.* **Also done, and it worked.** The four were deleted and `sheet` run
+  again, so `ensure_worksheet` took its `WorksheetNotFound` branch four times, `claim()`
+  adopted four empty tabs, and the sync wrote into them. It is the one item here reported as
+  working rather than transcribed, so nothing is quoted for it — the failure it rules out is
+  loud, a `Could not create a tab named ...` line and no sync at all.
 - *The whole-sync abort.* Covered above — a workspace whose data has not moved cannot tell a
   rewritten `Accounts` from an untouched one, so it rests on the claim loop preceding every
   write and on `test_nothing_is_written_when_a_tab_is_refused`.
 - *The window at five hundred.* 9 movements. Unchanged, and unchangeable from here.
 
-That look was taken, so *four machine-owned tabs* is settled too, and **the sheet has one row
-left**: *the whole transaction history reaching a tab*, waiting on a broker rather than on
-anybody's afternoon. Nine movements cannot put a question about five hundred, and no amount of
-care here changes that — it needs a workspace with the rows, ideally past 2,000 so a second
-chunked write meets Sheets at all.
+The look was taken and the four tabs were deleted and remade, so *four machine-owned tabs* is
+settled too, and **the sheet has one row left**: *the whole transaction history reaching a tab*,
+waiting on a broker rather than on anybody's afternoon. Nine movements cannot put a question
+about five hundred, and no amount of care here changes that — it needs a workspace with the
+rows, ideally past 2,000 so a second chunked write meets Sheets at all. It has an issue of its
+own, #141, because a row blocked on data volume should not hold a finished investigation open;
+#115 closed on everything above.
 
 ---
 
