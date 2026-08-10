@@ -307,16 +307,6 @@ def _refusal(tab: str) -> str:
     )
 
 
-#: Marks a case whose assertion has itself never met real Sheets. The structural
-#: cases compare strings and cannot be wrong about the API; the two that carry
-#: this rest on what a render option gives back, so a failure is ambiguous between
-#: "the tab is wrong" and "this check is". Kept visible rather than buried, because
-#: reporting an unconfirmed assumption as a confirmed defect is its own kind of
-#: wrong. Count it from the constant, not from memory: an earlier draft said three,
-#: having been written before the empty-cell check turned out to be impossible.
-UNCONFIRMED: str = " (assertion unconfirmed against real Sheets)"
-
-
 def check_tabs(
     workspace: str | None = None,
     root: Path | None = None,
@@ -335,9 +325,17 @@ def check_tabs(
     Seven of the nine compare strings and are certain: the banner, three column
     contracts, the movement count against the databases, the date format, and the
     ordering. Two read cell *values* -- money as a number and the dashboard's two
-    totals agreeing -- and those depend on what gspread hands back for a rendered
-    cell. Those two are marked, because until this has run once they test the
-    assertion as much as the sheet.
+    totals agreeing -- and those rested on what gspread hands back for a rendered
+    cell, which no test here could settle. They carried a marker saying so, on the
+    grounds that reporting an unconfirmed assumption as a confirmed defect is its
+    own kind of wrong.
+
+    The marker is gone because the run happened: 2026-08-10, against the real
+    spreadsheet, all nine passing. A pass settles both directions at once -- had
+    the unformatted read returned display text, every money cell would have been
+    rejected as text, and a formula arriving as its own source would have failed
+    float() into "could not read both". Restoring the marker would mean a new
+    assumption, not a rediscovered one.
 
     A third value check was intended and cannot exist: an absent date arriving as
     an empty cell rather than as an empty string is invisible to a read, since
@@ -602,7 +600,7 @@ def _money_case(worksheet: Any) -> GuardCase:
     text: list[Any] = [value for value in values if not isinstance(value, (int, float))]
 
     return GuardCase(
-        name=f"Accounts Value is a number, not text{UNCONFIRMED}",
+        name="Accounts Value is a number, not text",
         expected="numeric",
         passed=not text,
         detail="" if not text else f"{len(text)} of {len(values)} came back as text",
@@ -623,7 +621,7 @@ def _totals_case(worksheet: Any) -> GuardCase:
     """
 
     labels: list[Any] = _column_at(worksheet=worksheet, letter=SUMMARY_COL)
-    name: str = f"The dashboard's two totals agree{UNCONFIRMED}"
+    name: str = "The dashboard's two totals agree"
 
     try:
         computed = _summary_value(
