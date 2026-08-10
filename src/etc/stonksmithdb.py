@@ -311,11 +311,23 @@ class StonkSmithDBMenu(cmd.Cmd):
             self.failed = True
             return
 
+        # Named per half that actually ran. A guard-only run listing the
+        # empty-cell gap points at a tab check nobody asked for, and a reader who
+        # sees a caveat that does not apply learns to skim the ones that do.
+        gaps: list[str] = []
+
+        if which in ("", "tabs"):
+            gaps.append("an absent value arriving as an empty cell")
+
+        if which in ("", "guard"):
+            gaps.append("a refusal aborting the whole sync")
+
         print(
             f"[*] All {len(cases)} checks behaved, against real Sheets rather "
-            "than a stub. Two things they cannot cover are still in "
-            "docs/live-verification.md: a refusal aborting the whole sync, and "
-            "an absent value arriving as an empty cell."
+            f"than a stub. {'One thing' if len(gaps) == 1 else 'Two things'} "
+            f"{'it' if len(gaps) == 1 else 'they'} cannot cover "
+            f"{'is' if len(gaps) == 1 else 'are'} still in "
+            f"docs/live-verification.md: {', and '.join(gaps)}."
         )
 
     def _checked(self, run: Any, what: str) -> Any:
