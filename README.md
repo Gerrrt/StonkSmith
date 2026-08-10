@@ -89,10 +89,10 @@ session was found not to survive between runs at all, so it needs
 scrapes without one; the published price feed behind that flag has been
 contacted, but the flag's own path has not been run. Those runs saw one account
 state, though, so anything plural about an Ally account is still inference. TSP
-has in part: its statement and share-price parsers, the mark's arithmetic and
-its price download are verified against real data, but its database write, the
-sheet it feeds, the contribution accrual and everything touching the DFAS pay
-table are not. Green tests say the code does what it was written to do, which
+has in most part: its statement and share-price parsers, the mark's arithmetic,
+its price download, its database write, its contribution accrual and both halves
+of the DFAS pay table are verified against real data; only the sheet it feeds is
+not. Green tests say the code does what it was written to do, which
 is not the same as saying the site still looks the way it did when the parser
 was written.
 `docs/live-verification.md` records which claims stand on an observed run and
@@ -693,8 +693,9 @@ date, a grade DFAS publishes no rate for, or a refused download all report
 themselves and leave the anchored mark exactly as it was. The pay table is
 cached under `~/.stonksmith` for the rest of the year, since DFAS changes it
 every January. `--pay-table` reads a page saved by hand, the way `--prices`
-does. Unlike the share price download, **this one has not been run against
-dfas.mil for real** — see `docs/live-verification.md`.
+does, and remains the fallback: dfas.mil fingerprints its callers, so a download
+that works today can stop. **It has been run against dfas.mil for real** — see
+`docs/live-verification.md`.
 
 Sheets needs no tab prepared: StonkSmith creates `Accounts`, `Holdings`,
 `Transactions` and `Dashboard` itself on the first sync. If the sheet cannot be written at all — no
@@ -705,10 +706,12 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write and the sheet have not been run;
-`docs/live-verification.md` has the procedure and one trap worth knowing about
-first — a statement's fund is read and logged but not carried into the mark,
-so a statement for one fund with another configured values the wrong one.
+reports. The database write has been run, against a real
+`tsp.db` and against one written before the `units_as_of` column existed; the
+sheet has not. `docs/live-verification.md` has the procedure and one trap worth
+knowing about first — a statement naming a different fund from your config is
+refused, but one whose fund cannot be read at all is still priced with the
+configured fund.
 
 Manage stored credentials and scraped balances:
 
