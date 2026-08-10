@@ -20,11 +20,16 @@ import datetime as dt
 import unittest
 from pathlib import Path
 
+from bs4 import BeautifulSoup
+
 from helpers.dfas import (
     BANDS,
+    alignment_faults,
     band_on,
     basic_pay_table,
     effective_date,
+    grade_order,
+    missing_upper_table,
     monthly_basic_pay,
     normalize_grade,
     table_for,
@@ -216,6 +221,133 @@ class PayTableTests(unittest.TestCase):
         self.assertEqual(prior["O-3E"]["Over 4"], 7100.00)
         self.assertEqual(prior["O-3E"]["Over 40"], 7900.00)
         self.assertNotIn("2 or less", prior["O-3E"])
+
+
+class GradeOrderTests(unittest.TestCase):
+    def test_double_digit_grades_sort_after_single_digit_ones(self) -> None:
+        # "O-10" between "O-1" and "O-2" is what sorting the strings gives, and
+        # the officer tables go that high. A grid printed to be read against the
+        # published page has to be in the published page's order.
+        grades = ["O-10", "O-1", "O-2", "O-9", "E-9", "W-5", "O-3E"]
+
+        self.assertEqual(
+            sorted(grades, key=grade_order),
+            ["E-9", "O-1", "O-2", "O-3E", "O-9", "O-10", "W-5"],
+        )
+
+    def test_the_prior_service_rates_follow_the_plain_ones(self) -> None:
+        self.assertEqual(sorted(["O-3E", "O-3"], key=grade_order), ["O-3", "O-3E"])
+
+
+class AlignmentTests(unittest.TestCase):
+    """
+    The one way this parser can be wrong and still look right.
+
+    Rates are matched from the right, so a column the page grows after the last
+    band moves every figure one place. What comes back is a real published rate
+    for the wrong time in service -- not missing, not zero, not out of range --
+    and it goes on to price an accrual and be stored as a mark.
+
+    Every page here is the served page with one thing changed, because that is
+    the only honest way to ask the question: the fault is in the shape of the
+    markup, so a hand-written table would be testing the shape the test author
+    imagined rather than the one DFAS publishes.
+    """
+
+    def setUp(self) -> None:
+        self.html = ENLISTED.read_text(encoding="utf-8")
+
+    def grown(self, text: str, trailing: bool) -> str:
+        """The served page with one cell added to every row of every table."""
+
+        soup = BeautifulSoup(markup=self.html, features="html.parser")
+
+        for element in soup.find_all(name="table"):
+            for row in element.find_all(name="tr"):
+                cell = soup.new_tag(name="td")
+                cell.string = text
+
+                if trailing:
+                    row.append(cell)
+
+                else:
+                    row.insert(0, cell)
+
+        return str(object=soup)
+
+    def test_the_page_as_served_lines_up_with_its_headings(self) -> None:
+        self.assertEqual(alignment_faults(html=self.html), [])
+
+    def test_a_trailing_column_is_caught(self) -> None:
+        # Silent without this. E-7 at "Over 10" comes back as $5,591.70, which
+        # is E-7 at "Over 12" -- a rate a real member is really paid, six years
+        # further into a career than the one asking.
+        shifted: str = self.grown(text="Note 6", trailing=True)
+
+        self.assertEqual(basic_pay_table(html=shifted)["E-7"]["Over 10"], 5591.70)
+
+        faults: list[str] = alignment_faults(html=shifted)
+
+        self.assertTrue(faults)
+        self.assertIn("outside the 11 columns matched", faults[0])
+
+    def test_a_leading_column_is_left_to_the_caller(self) -> None:
+        # Not a fault, and not a shift: the rates still end where they ended.
+        # The row simply stops naming a grade in its first cell, so the parse
+        # produces nothing at all -- which the caller already reports as a page
+        # that is not the pay table. Firing here as well would file a loud
+        # failure under the name of the silent one.
+        widened: str = self.grown(text="", trailing=False)
+
+        self.assertEqual(basic_pay_table(html=widened), {})
+        self.assertEqual(alignment_faults(html=widened), [])
+
+    def test_a_header_that_skips_a_band_is_refused_once(self) -> None:
+        # The published columns run in order and unbroken. A header missing one
+        # was assembled out of something other than a single header row, so the
+        # columns beneath it are not the ones it names -- said once for the
+        # table rather than once for each row under it.
+        page = """
+        <table>
+          <tr><th>Pay Grade</th><th>Over 2</th><th>Over 4</th></tr>
+          <tr><td>E-5</td><td>$1.00</td><td>$2.00</td></tr>
+          <tr><td>E-6</td><td>$3.00</td><td>$4.00</td></tr>
+        </table>
+        """
+
+        faults: list[str] = alignment_faults(html=page)
+
+        self.assertEqual(len(faults), 1)
+        self.assertIn("skips or repeats", faults[0])
+
+    def test_a_page_with_no_pay_table_in_it_has_no_faults(self) -> None:
+        # Nothing was matched, so nothing was matched wrongly.
+        self.assertEqual(alignment_faults(html="<p>Access Denied</p>"), [])
+
+
+class SplitTableTests(unittest.TestCase):
+    """Whether both halves of the page arrived, which is short rather than wrong."""
+
+    def setUp(self) -> None:
+        self.html = ENLISTED.read_text(encoding="utf-8")
+
+    def test_the_page_as_served_carries_both_halves(self) -> None:
+        self.assertFalse(missing_upper_table(table=basic_pay_table(html=self.html)))
+
+    def test_one_table_of_the_two_is_reported(self) -> None:
+        soup = BeautifulSoup(markup=self.html, features="html.parser")
+        soup.find_all(name="table")[-1].decompose()
+        half: dict[str, dict[str, float]] = basic_pay_table(html=str(object=soup))
+
+        # Right as far as it goes, and eighteen years is where it stops.
+        self.assertEqual(half["E-7"]["Over 10"], 5300.40)
+        self.assertNotIn("Over 20", half["E-7"])
+        self.assertTrue(missing_upper_table(table=half))
+
+    def test_an_empty_page_is_not_reported_as_a_half_read_one(self) -> None:
+        # A different failure, and one that already has its own message. Saying
+        # both would point at the split when the page is not a pay table at all.
+        self.assertFalse(missing_upper_table(table={}))
 
 
 class MonthlyPayTests(unittest.TestCase):
