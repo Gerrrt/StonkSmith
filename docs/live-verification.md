@@ -590,7 +590,7 @@ already in it, and for check 5 specifically, a broker with a long transaction hi
 rather than a fresh one.
 
 **What it costs.** `sheet` clears and rewrites all four machine-owned tabs, and the
-refusal at the end has you rename a spare tab to `Holdings` and rename it back
+refusal at the end has you deface the `Holdings` tab on purpose and hand it back
 afterwards. So this runs against a spreadsheet you are willing to have rewritten, which
 in practice means the real one. That is the whole reason these three rows are still `No`
 while others are settled: nothing in the procedure is difficult, but it needs a Google
@@ -647,8 +647,12 @@ Five things to confirm on the tabs themselves, none of which a unit test can see
 
 **Then the refusal, which is the point of the whole thing — and it goes last.** A
 refused tab means nothing is synced at all, so doing this first would leave the five
-checks above reading a sheet the run never wrote. Type something into a spare tab,
-rename it `Holdings`, and run `sheet` again:
+checks above reading a sheet the run never wrote.
+
+By this point `Holdings` exists and carries the banner, and Sheets will not let a second
+tab take a name already in use — so the move is to make the tab that is there look
+hand-written rather than to bring in a new one. Type something of your own over `A1`,
+replacing the banner, and run `sheet` again:
 
 ```
 [-] Tab 'Holdings' holds something StonkSmith did not write, so it was left
@@ -658,10 +662,18 @@ rename it `Holdings`, and run `sheet` again:
     recreate it.
 ```
 
-Confirm your text is still there, and that `Accounts` was **not** rewritten either —
-every tab is claimed before any of them is cleared, so a refusal costs nothing
+Then the subtler path, which is the one actually worth exercising: clear `A1` and leave
+your text somewhere below it instead. A blank first cell is exactly the shape a leftover
+layout has, and exactly the shape a tab someone started on row 3 has, so `claim()` reads
+the whole tab before deciding rather than adopting it on the strength of an empty corner.
+The same refusal should come back. An adoption here — a sync that went ahead — is the
+finding, and it is the expensive one, because that is the shape a person's own tab has.
+
+Either way, confirm your text is still there, and that `Accounts` was **not** rewritten
+either — every tab is claimed before any of them is cleared, so a refusal costs nothing
 rather than leaving one tab fresh beside a stale one. To get the sheet back afterwards,
-empty that tab or delete it and run `sheet` once more.
+empty that tab or delete it and run `sheet` once more; an empty tab is adopted, which is
+the third way out the message offers.
 
 **What this settles.** Three rows, and each check belongs to exactly one of them.
 
