@@ -42,13 +42,16 @@ def observation(
     as_of: str | None = "2026-01-01",
     scraped_at: str = "2026-01-01 12:00:00",
     currency: str = "USD",
+    account: str | None = None,
 ) -> AccountRow:
     """One snapshot, as read_history hands it over."""
 
     return AccountRow(
         broker=broker,
         source=broker,
-        account=key,
+        # Defaults to the key, which is the ordinary case. Passed separately
+        # only where a test needs the display name to differ from identity.
+        account=key if account is None else account,
         account_key=key,
         value=value,
         currency=currency,
@@ -418,6 +421,60 @@ class OrderTests(unittest.TestCase):
                 ("A", "2026-01-05"),
                 ("T", "2026-01-05"),
             ],
+        )
+
+    def test_an_account_renamed_mid_history_stays_one_block(self) -> None:
+        # Every row carries the display name of the reading it carries, and a
+        # display name is explicitly not identity -- it changes. Ordering the
+        # finished rows on it puts a renamed account in two blocks of the tab,
+        # each internally in order and neither one the account, with its series
+        # apparently starting twice. So the order is decided once per account,
+        # on the name it goes by now.
+        series = net_worth_history(
+            observations=[
+                observation(broker="ally", key="A", account="Zed", as_of="2026-01-01"),
+                observation(
+                    broker="ally", key="A", account="Aardvark", as_of="2026-01-05"
+                ),
+                observation(broker="tsp", key="M", account="Middle"),
+            ]
+        )
+
+        self.assertEqual(
+            [(row.account_key, row.date) for row in series],
+            [
+                ("A", "2026-01-01"),
+                ("A", "2026-01-05"),
+                ("M", "2026-01-01"),
+                ("M", "2026-01-05"),
+            ],
+        )
+
+        # And the block sorts by the name it goes by now, not the one it had:
+        # "Aardvark" is where a reader looks for it today.
+        self.assertEqual([row.account for row in series][:2], ["Zed", "Aardvark"])
+
+    def test_two_accounts_displaying_the_same_still_order_deterministically(
+        self,
+    ) -> None:
+        # Identity breaks the tie, so the tab does not depend on which broker
+        # happened to be read first.
+        one = net_worth_history(
+            observations=[
+                observation(broker="ally", key="B", account="Invest"),
+                observation(broker="fidelity", key="A", account="Invest"),
+            ]
+        )
+        other = net_worth_history(
+            observations=[
+                observation(broker="fidelity", key="A", account="Invest"),
+                observation(broker="ally", key="B", account="Invest"),
+            ]
+        )
+
+        self.assertEqual(
+            [(row.broker, row.account_key) for row in one],
+            [(row.broker, row.account_key) for row in other],
         )
 
 

@@ -962,7 +962,37 @@ def net_worth_history(
     horizon: dt.timedelta = dt.timedelta(days=horizon_days)
     series: list[NetWorthRow] = []
 
-    for dates in readings.values():
+    def label(key: tuple[str, str]) -> tuple[str, str, str, str]:
+        """
+        Where one account's block of the series sorts.
+
+        Read off the account's *newest* reading, not off each row. Every row
+        carries the source and display name of whichever reading it carries,
+        and a display name is explicitly not identity -- it is free to change,
+        and does. Sorting the rows on it would put an account renamed halfway
+        through its history in two separate blocks of the tab, each internally
+        in order and neither one the account. So the ordering is decided once
+        per account, on the name it goes by now, and the rows underneath keep
+        the order they were built in.
+        :param key: The (broker, account_key) this account is grouped under
+        :return: Its sort position
+        :rtype: tuple[str, str, str, str]
+        """
+
+        newest: AccountRow = readings[key][max(readings[key])]
+
+        # Broker and key break the tie, so two accounts that display the same
+        # still order deterministically rather than by dictionary order.
+        return (newest.source, newest.account, *key)
+
+    # Ordered here rather than by sorting the finished rows, which is also why
+    # nothing sorts them afterwards: each account's block is emitted in axis
+    # order, which is ascending, and the blocks are emitted in this one.
+    #
+    # Forward in time within each, not newest-first like Transactions. That one
+    # is a log, where the last thing that happened is the thing you came to
+    # read; this is a series, which is read in the direction it was lived.
+    for dates in [readings[key] for key in sorted(readings, key=label)]:
         # Walked in step with the axis rather than searched per date: both are
         # sorted, so one pass over each is enough and a workspace with years of
         # runs does not turn into a quadratic scan.
@@ -1003,12 +1033,6 @@ def net_worth_history(
                     scraped_at=carried.scraped_at,
                 )
             )
-
-    # Grouped by account, then forward in time within each. Not newest-first
-    # like Transactions: that one is a log, where the last thing that happened
-    # is the thing you came to read, and this is a series, which is read in the
-    # direction it was lived.
-    series.sort(key=lambda row: (row.source, row.account, row.account_key, row.date))
 
     return series
 
