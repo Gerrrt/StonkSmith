@@ -26,6 +26,7 @@ def shell() -> StonkSmithDBMenu:
 
     menu = StonkSmithDBMenu.__new__(StonkSmithDBMenu)
     menu.workspace = "default"
+    menu.failed = False
 
     return menu
 
@@ -114,6 +115,51 @@ class SheetCommandTests(unittest.TestCase):
 
     def test_the_command_is_advertised_at_the_top_level(self) -> None:
         self.assertIn("sheet", StonkSmithDBMenu.intro)
+
+    def test_a_refresh_that_worked_reports_no_failure(self) -> None:
+        menu = shell()
+
+        with patch("etc.portfolio_sheet.refresh") as refresh:
+            refresh.return_value = SheetSync(accounts=4, brokers_read=("tsp",))
+            run(menu=menu)
+
+        self.assertFalse(menu.failed)
+
+    def test_an_unavailable_sheet_is_a_failure_a_scheduler_can_see(self) -> None:
+        # Printing it is enough for a human watching the shell. It is not enough
+        # for cron, which reads one number and nothing else.
+        menu = shell()
+
+        with patch("etc.portfolio_sheet.refresh") as refresh:
+            refresh.side_effect = SheetNotOwned("Tab 'Holdings' holds something")
+            run(menu=menu)
+
+        self.assertTrue(menu.failed)
+
+    def test_an_unexpected_failure_is_one_too(self) -> None:
+        menu = shell()
+
+        with patch("etc.portfolio_sheet.refresh") as refresh:
+            refresh.side_effect = RuntimeError("boom")
+            run(menu=menu)
+
+        self.assertTrue(menu.failed)
+
+    def test_a_broker_that_would_not_read_is_a_failure(self) -> None:
+        # The refresh itself worked. What it produced is a total missing a whole
+        # broker's money, which is a wrong number rather than a stale one -- the
+        # one outcome a schedule must not treat as a good night.
+        menu = shell()
+
+        with patch("etc.portfolio_sheet.refresh") as refresh:
+            refresh.return_value = SheetSync(
+                accounts=1,
+                brokers_read=("tsp",),
+                unreadable=(("ally", "OSError: no such file"),),
+            )
+            run(menu=menu)
+
+        self.assertTrue(menu.failed)
 
     def test_the_writer_is_imported_inside_the_command_not_at_module_scope(
         self,

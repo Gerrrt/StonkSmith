@@ -204,6 +204,16 @@ What *is* proven, every one of those nine runs: the sign-in flow, the holdings p
 the account rail, the bank/brokerage split and the database write. The scrape works.
 It is only the unattended part that does not.
 
+**A schedule is built on that distinction, and it adds no row here.**
+`docs/scheduling.md` records which of the five brokers a cron entry can run with nobody
+watching — a different question from whether a parser still matches a live site, and one
+this file does not answer. It makes no new claim about a live run either. Everything it
+leans on is already in the table above: the `--from-prices` path at `No`, the price feed
+behind it at `Yes`, TSP's rows, and the absence of any row at all for `snaptrade` and
+`schwab529plan`. Copying those into a second file would be maintaining them twice and
+disagreeing at the first change, so that file cites them and this table stays the count.
+Step 6 below settles the one a schedule leans on hardest.
+
 **What the recorder is being read for is written down elsewhere.** Ally's open questions
 are about endpoints nobody has seen -- whether an activity feed exists, whether it is
 per-account, whether it takes a date window -- and the decision those answers feed is
