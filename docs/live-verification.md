@@ -414,7 +414,8 @@ would have printed the identical line. That check did not fail — it was not ye
 askable.
 
 Writing snapshot 29 is what made it askable, by putting a timestamp on the newest
-snapshot that the units never had. Two more price runs followed:
+snapshot that the units never had. Two more price runs followed, **30 and 31** — 29 is
+shown with them because it is what they each read, not because it is one of the two:
 
 ```text
 | 31 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:29:44 | $2,470.38 | USD |
@@ -422,8 +423,8 @@ snapshot that the units never had. Two more price runs followed:
 | 29 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
 ```
 
-Each ran with a newest snapshot whose `scraped_at` was **not** `22:03:26` — 22:04:27,
-then 22:27:17 — and each printed:
+Each of the two ran with a newest snapshot whose `scraped_at` was **not** `22:03:26` —
+29's `22:04:27` for the first, 30's `22:27:17` for the second — and each printed:
 
 ```text
 [*] Individual (...0847): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26.

@@ -93,10 +93,11 @@ date still across three price runs. Those runs saw one account state, though,
 so anything plural about an Ally account is still inference. TSP has too: its
 statement and share-price parsers, the mark's arithmetic, its price download,
 its database write, its contribution accrual and both halves of the DFAS pay
-table are verified against real data. The sheet it feeds is verified as well: its four tabs were read back against the real
-spreadsheet and it was made to refuse a tab it did not own. What is unverified
-there is one claim about volume — that a tab holds every movement rather than
-the newest five hundred — which needs a broker with the history to ask it.
+table are verified against real data. The sheet it feeds is verified as well:
+its four tabs were read back against the real spreadsheet and it was made to
+refuse a tab it did not own. What is unverified there is one claim about volume
+— that a tab holds every movement rather than the newest five hundred — which
+needs a broker with the history to ask it.
 Green tests say the code does what it was written to do, which is not the same
 as saying the site still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
