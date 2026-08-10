@@ -134,11 +134,11 @@ class VerifyCommandTests(unittest.TestCase):
     would otherwise look like a clean run with one odd line in it.
     """
 
-    def _run(self) -> str:
+    def _run(self, line: str = "guard") -> str:
         out = io.StringIO()
 
         with redirect_stdout(out):
-            shell().do_verify(line="")
+            shell().do_verify(line=line)
 
         return out.getvalue()
 
@@ -164,16 +164,90 @@ class VerifyCommandTests(unittest.TestCase):
         self.assertIn("deleting it again", printed)
 
     def test_a_clean_run_still_says_what_it_did_not_cover(self) -> None:
-        # The half that needs the manual deface: a refusal aborting the whole
-        # sync. A clean report that implied otherwise would retire a step that
-        # has not been done.
+        # The two halves that stay manual: a refusal aborting the whole sync, and
+        # an absent value arriving as an empty cell. A clean report that implied
+        # otherwise would retire steps nobody has done.
         with patch("etc.portfolio_sheet.check_ownership_guard") as check:
             check.return_value = self._cases(True, True, True)
             printed = self._run()
 
         self.assertIn("[*]", printed)
         self.assertIn("live-verification", printed)
+        self.assertIn("empty cell", printed)
         self.assertNotIn("[-]", printed)
+
+    def test_each_half_can_be_run_on_its_own(self) -> None:
+        with (
+            patch("etc.portfolio_sheet.check_ownership_guard") as guard,
+            patch("etc.portfolio_sheet.check_tabs") as tabs,
+        ):
+            guard.return_value = self._cases(True)
+            tabs.return_value = self._cases(True)
+
+            self._run(line="guard")
+            guard.assert_called_once()
+            tabs.assert_not_called()
+
+            guard.reset_mock()
+            self._run(line="tabs")
+            tabs.assert_called_once()
+            guard.assert_not_called()
+
+    def test_bare_verify_runs_both_halves_tabs_first(self) -> None:
+        # Tabs first deliberately: the guard half makes and deletes a tab, and
+        # reading the four back is the part that says whether the last sync
+        # landed. A reader wants that before a scratch tab appears.
+        with (
+            patch("etc.portfolio_sheet.check_ownership_guard") as guard,
+            patch("etc.portfolio_sheet.check_tabs") as tabs,
+        ):
+            guard.return_value = self._cases(True)
+            tabs.return_value = self._cases(True)
+            printed = self._run(line="")
+
+        guard.assert_called_once()
+        tabs.assert_called_once()
+        self.assertLess(
+            printed.index("Reading the four tabs back"), printed.index("Making the tab")
+        )
+
+    def test_the_tab_half_reads_the_workspace_the_shell_is_in(self) -> None:
+        with patch("etc.portfolio_sheet.check_tabs") as tabs:
+            tabs.return_value = self._cases(True)
+            menu = shell()
+            menu.workspace = "other"
+
+            with redirect_stdout(io.StringIO()):
+                menu.do_verify(line="tabs")
+
+        tabs.assert_called_once_with(workspace="other")
+
+    def test_an_unknown_argument_is_refused_rather_than_ignored(self) -> None:
+        # Silently running both would be worse than saying no: someone who typed
+        # "verify tab" wants to know they did.
+        with patch("etc.portfolio_sheet.check_ownership_guard") as guard:
+            printed = self._run(line="tab")
+
+        guard.assert_not_called()
+        self.assertIn("Unknown check", printed)
+
+    def test_a_passing_cases_detail_is_not_printed(self) -> None:
+        # A refusal that behaved carries the refusal message as its detail.
+        # Printing that under a [+] is several lines saying the expected thing
+        # happened, which buries the one line that would not have.
+        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+            check.return_value = (
+                GuardCase(
+                    name="refused it",
+                    expected="refused",
+                    passed=True,
+                    detail="Tab 'x' holds something StonkSmith did not write",
+                ),
+            )
+            printed = self._run()
+
+        self.assertIn("refused it", printed)
+        self.assertNotIn("did not write", printed)
 
     def test_a_guard_that_did_not_behave_is_loud_and_says_what_to_do(self) -> None:
         with patch("etc.portfolio_sheet.check_ownership_guard") as check:

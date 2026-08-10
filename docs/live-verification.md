@@ -630,9 +630,46 @@ fails, the sheet is left as it was rather than emptied and the run says so inste
 printing a count — clearing the tabs there would replace a correct sheet with a blank
 one and report success for doing it.
 
-Five things to confirm on the tabs themselves, none of which a unit test can see:
+Five things to confirm on the tabs themselves, none of which a unit test can see.
+**`verify tabs` now does most of it**, by reading the four tabs back:
 
-1. **The first cell of every tab carries the machine-owned banner** — all four,
+```
+stonksmithdb (default) > verify tabs
+[*] Reading the four tabs back from 'Investment Account Scrapes'.
+[+] All 4 tabs carry the banner in A1
+[+] Accounts row 2 is the column contract, ending at J
+[+] Holdings row 2 is the column contract, ending at P
+[+] Transactions row 2 is the column contract, ending at O
+[+] Transactions holds all 2 movements the databases have
+[+] Every Processed On is YYYY-MM-DD
+[+] Processed On runs newest-first within each account
+[+] Accounts Value is a number, not text (assertion unconfirmed against real Sheets)
+[+] The dashboard's two totals agree (assertion unconfirmed against real Sheets)
+[*] All 9 checks behaved, against real Sheets rather than a stub. Two things they cannot cover are still in docs/live-verification.md: a refusal aborting the whole sync, and an absent value arriving as an empty cell.
+```
+
+Same caveat as the `verify` transcript above: that is the real function over the fake
+spreadsheet the tests use, not a session, and the movement count is the fake's two rather
+than a workspace's. **Nothing here has met real Sheets.**
+
+Two of those lines say `assertion unconfirmed`, and the marking is the point. Seven of the
+nine compare strings — a banner, three column contracts, a count against the databases, a
+date format, an ordering — and cannot be wrong about the API. The other two ask what a
+rendered cell comes back *as*, which is an assumption about gspread that no test here can
+settle. So on the first real run a `[-]` on one of those two is ambiguous between a wrong
+sheet and a wrong check, and the report says so rather than reporting a defect it cannot
+distinguish. They fail in the safe direction: a render option behaving differently produces
+a complaint, not a silent pass.
+
+**Check 4 is not in that list and cannot be.** Read back, an empty cell and an empty string
+are the same value — Sheets returns `""` or a short row for either — so the only witness to
+the difference is a formula's behaviour over the cell. That one stays an eyeball check, and
+it is the reason this section still asks you to look.
+
+The five checks, and which of them `verify tabs` settles:
+
+1. **The first cell of every tab carries the machine-owned banner** — *`verify tabs`
+   settles this one, including the column contract.* All four,
    `Dashboard` included, since a banner cannot be read back off a tab that was never
    created. On the three that carry columns, row 2 is the column contract exactly as
    `src/etc/portfolio.py` spells it; the dashboard has no such row, and its labels run
@@ -640,12 +677,16 @@ Five things to confirm on the tabs themselves, none of which a unit test can see
    columns, ending at `P`, `Units As Of` — `HOLDING_COLUMNS` in that same file. A tab
    still ending at `O` after a sync is a visible sign the sync did not run, and TSP is
    the broker where the price date and the unit date visibly differ.
-2. **Money is a number, not text.** A currency cell should right-align on its own and
-   accept a number format. If it left-aligns, something is writing strings again.
-3. **The dashboard's `Total (USD)` equals its `Total as read`.** Those are the same
+2. **Money is a number, not text.** *`verify tabs` asks this directly, and its answer is
+   one of the two marked unconfirmed.* By eye: a currency cell should right-align on its
+   own and accept a number format. If it left-aligns, something is writing strings again.
+3. **The dashboard's `Total (USD)` equals its `Total as read`.** *`verify tabs` compares
+   them, found by label rather than by row, so a reordered summary fails here instead of
+   comparing the wrong two cells. The other marked-unconfirmed one.* Those are the same
    number computed by Sheets and by Python; a disagreement means the write was
    truncated, and it is the only signal that would say so.
-4. **Empty cells are genuinely empty.** `Accounts` minus the count of `As Of` values
+4. **Empty cells are genuinely empty.** *The one check no command can make — see above.*
+   `Accounts` minus the count of `As Of` values
    is how the dashboard counts accounts whose source never gave a date, and it relies
    on an absent value arriving as an empty cell rather than as an empty string that
    `COUNTA` still counts. If that figure reads 0 where the tab visibly has blank
@@ -692,7 +733,14 @@ stonksmithdb (default) > verify
 [+] Text below a blank first cell is refused
 [+] A wholly empty tab is adopted
 [+] The throwaway tab was removed
+[*] The guard behaved on all 4 counts. That is claim() against real Sheets, not a stub -- but a refusal aborting the whole sync still needs the manual step in docs/live-verification.md.
 ```
+
+**That is not a session.** It is what the real function prints when driven over the fake
+spreadsheet the tests use, which is the closest thing obtainable without a Google account —
+so its last line, boasting about real Sheets, came from a fake one. **`verify` has never met
+Sheets.** Running it is a step nobody has taken, and the first person to take it is testing
+the command as much as the guard.
 
 That works because `claim()` decides on what a tab *holds*, not on what it is called —
 `MACHINE_OWNED_TABS` only picks which tabs a sync claims. The third case is the one

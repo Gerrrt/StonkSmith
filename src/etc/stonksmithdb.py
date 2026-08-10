@@ -7,6 +7,7 @@ import configparser
 from os import listdir
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 from sqlalchemy import Engine
 
@@ -36,7 +37,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    broker <name>     enter that broker (add/show/export live in there)\n"
         "    workspace list    list workspaces\n"
         "    sheet             rewrite the Google Sheet from these databases\n"
-        "    verify            check the sheet's ownership guard on a scratch tab\n"
+        "    verify [tabs|guard]  check what a successful sheet write cannot show\n"
         "    help              commands at this level\n"
         "    exit              quit\n"
     )
@@ -193,45 +194,63 @@ class StonkSmithDBMenu(cmd.Cmd):
 
     def do_verify(self, line: str) -> None:
         """
-        Ask the ownership guard its three questions, against real Sheets.
+        Check what a successful sync cannot show, against real Sheets.
 
-        The refusal is the one rule here whose failure cannot be undone by
-        running again, and observing it used to mean defacing a live tab and
-        handing it back -- done once, nervously, if at all. This asks claim() the
-        same three questions on a tab it makes and removes, so the check is
-        repeatable and the real tabs are never opened.
+        Two halves, and `verify` on its own runs both. ``tabs`` reads the four
+        tabs back: a write that returned says the request was accepted, not that
+        the values arrived as the kind of thing they were meant to be. ``guard``
+        asks claim() its three questions on a tab it makes and removes -- the
+        refusal is the one rule here whose failure cannot be undone by running
+        again, and observing it used to mean defacing a live tab.
 
-        What it cannot show is that a refusal stops the *whole* sync rather than
-        leaving one tab freshly written beside a stale one. That is refresh()
-        claiming every tab before clearing any, and the scratch tab is not one of
-        them.
-        :param line: Ignored
+        Neither half retires the manual steps entirely. A refusal aborting the
+        *whole* sync is refresh() claiming every tab before clearing any, and the
+        scratch tab is not one of them; and an absent value arriving as an empty
+        cell rather than an empty string cannot be seen from a read at all.
+        :param line: "tabs", "guard", or empty for both
         :return: None
         """
 
-        del line
-
         # Same reason as do_sheet: this pulls in gspread and google-auth, and the
         # shell is mostly used for things that never touch Sheets.
-        from etc.portfolio_sheet import GUARD_CHECK_TAB, check_ownership_guard
-        from helpers.sheets import SPREADSHEET_NAME, SheetsUnavailable
-
-        print(
-            f"[*] Making the tab '{GUARD_CHECK_TAB}' in '{SPREADSHEET_NAME}', "
-            "asking the guard about it, and deleting it again. No other tab is "
-            "opened."
+        from etc.portfolio_sheet import (
+            GUARD_CHECK_TAB,
+            check_ownership_guard,
+            check_tabs,
         )
+        from helpers.sheets import SPREADSHEET_NAME
 
-        try:
-            cases = check_ownership_guard()
+        which = line.strip().lower()
 
-        except SheetsUnavailable as e:
-            print(f"[-] {e}")
+        if which not in ("", "tabs", "guard"):
+            print(f"[-] Unknown check '{which}'. Use 'tabs', 'guard', or neither.")
             return
 
-        except Exception as e:
-            print(f"[-] Ownership check failed: {type(e).__name__}: {e}")
-            return
+        cases: list[Any] = []
+
+        if which in ("", "tabs"):
+            print(f"[*] Reading the four tabs back from '{SPREADSHEET_NAME}'.")
+            read = self._checked(
+                run=lambda: check_tabs(workspace=self.workspace), what="Tab check"
+            )
+
+            if read is None:
+                return
+
+            cases.extend(read)
+
+        if which in ("", "guard"):
+            print(
+                f"[*] Making the tab '{GUARD_CHECK_TAB}' in '{SPREADSHEET_NAME}', "
+                "asking the guard about it, and deleting it again. No other tab "
+                "is opened."
+            )
+            guarded = self._checked(run=check_ownership_guard, what="Ownership check")
+
+            if guarded is None:
+                return
+
+            cases.extend(guarded)
 
         for case in cases:
             print(f"{'[+]' if case.passed else '[-]'} {case.name}")
@@ -239,6 +258,9 @@ class StonkSmithDBMenu(cmd.Cmd):
             if not case.passed:
                 # The finding, not a footnote. A guard that adopted a tab it
                 # should have refused is the shape that eats somebody's work.
+                # Only on a failure: a passing refusal carries the refusal message
+                # as its detail, and printing that under a [+] is four lines
+                # saying the expected thing happened.
                 print(f"    Expected {case.expected}: {case.detail or 'it did not'}")
 
         failed = [case for case in cases if not case.passed]
@@ -252,10 +274,33 @@ class StonkSmithDBMenu(cmd.Cmd):
             return
 
         print(
-            f"[*] The guard behaved on all {len(cases)} counts. That is claim() "
-            "against real Sheets, not a stub -- but a refusal aborting the whole "
-            "sync still needs the manual step in docs/live-verification.md."
+            f"[*] All {len(cases)} checks behaved, against real Sheets rather "
+            "than a stub. Two things they cannot cover are still in "
+            "docs/live-verification.md: a refusal aborting the whole sync, and "
+            "an absent value arriving as an empty cell."
         )
+
+    def _checked(self, run: Any, what: str) -> Any:
+        """
+        Run one half, turning either failure into a line rather than a traceback.
+        :param run: The check to call
+        :param what: What to call it in an unexpected failure
+        :return: The cases, or None if it could not run
+        :rtype: Any
+        """
+
+        from helpers.sheets import SheetsUnavailable
+
+        try:
+            return run()
+
+        except SheetsUnavailable as e:
+            print(f"[-] {e}")
+
+        except Exception as e:
+            print(f"[-] {what} failed: {type(e).__name__}: {e}")
+
+        return None
 
     def write_config(self) -> None:
         """
