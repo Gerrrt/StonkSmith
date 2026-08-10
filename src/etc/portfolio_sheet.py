@@ -383,11 +383,19 @@ def check_tabs(
     cases.append(_money_case(worksheet=tabs[ACCOUNTS_TAB]))
     cases.append(_totals_case(worksheet=tabs[DASHBOARD_TAB]))
 
-    # Check 4 -- an absent date arriving as an empty cell rather than an empty
-    # string -- is deliberately absent, and cannot be added here. Read back, the
-    # two are the same value: Sheets returns "" or a short row for both. The only
-    # witness to the difference is a formula's behaviour over the cell, so that
-    # check stays an eyeball one, and docs/live-verification.md says so.
+    # Check 4 -- an account with no date being surfaced rather than counted at
+    # face value -- is deliberately absent and cannot be added here. It is a
+    # question about a formula's behaviour, not a cell's contents, and read back an
+    # empty cell and an empty string are the same value: "" or a short row for
+    # both.
+    #
+    # Its absence costs less than it looks. The distinction only matters where a
+    # formula counts one and not the other, and no dashboard formula does: As Of
+    # reaches exactly one, the staleness QUERY in _bands, whose "is null or
+    # < cutoff" catches an undated account either way -- the column holds text, not
+    # dates, because the RAW write keeps it that way. Add a COUNTA or COUNTIF over
+    # As Of and that stops holding, at which point this check has to come back.
+    # docs/live-verification.md carries the reasoning.
 
     return tuple(cases)
 

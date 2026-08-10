@@ -60,7 +60,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused two unrelated hosted environments, 2026-08-07 and 2026-08-09, and tsp.gov answered from both | No |
 | TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
 | TSP — database write | Unit tests with a mocked DB | No |
-| The sheet — four machine-owned tabs | `verify tabs` against the real spreadsheet, 2026-08-10, written up below: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number and the dashboard's two totals equal. Three of the four checks. Check 4 — an absent value arriving as an empty cell — is the one a read cannot make, and the four tabs already existed, so their creation has still never been observed | No |
+| The sheet — four machine-owned tabs | `verify tabs` against the real spreadsheet, 2026-08-10, written up below: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number and the dashboard's two totals equal. Three of the four checks. What is left is one look at the dashboard's staleness panel, which is where an account with no date has to appear — check 4 named a formula that has never existed, and is rewritten below around the mechanism that has. The four tabs also already existed, so their creation has still never been observed | No |
 | The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes |
 
@@ -664,10 +664,11 @@ would have been rejected as text, and a formula arriving as its own source would
 `float()` into "could not read both". Neither happened, so the sheet is right *and* the two
 assertions are.
 
-**Check 4 is not in that list and cannot be.** Read back, an empty cell and an empty string
-are the same value — Sheets returns `""` or a short row for either — so the only witness to
-the difference is a formula's behaviour over the cell. That one stays an eyeball check, and
-it is the reason this section still asks you to look.
+**Check 4 is not in that list, and could not have been.** It is a question about a formula's
+behaviour rather than about a cell's contents, so a read cannot answer it: an empty cell and
+an empty string come back the same, as `""` or a short row. It stays an eyeball check, and it
+is the reason this section still asks you to look — though not for the reason it used to give.
+See check 4 below.
 
 The five checks, and which of them `verify tabs` settles:
 
@@ -689,14 +690,36 @@ The five checks, and which of them `verify tabs` settles:
    here instead of comparing the wrong two cells.* Those are the same
    number computed by Sheets and by Python; a disagreement means the write was
    truncated, and it is the only signal that would say so.
-4. **Empty cells are genuinely empty.** ***Still open, and the only thing between this row
-   and `Yes`.** The one check no command can make — see above. Look at the Dashboard's
-   staleness panel: an account whose source gave no date has to be listed there.*
-   `Accounts` minus the count of `As Of` values
-   is how the dashboard counts accounts whose source never gave a date, and it relies
-   on an absent value arriving as an empty cell rather than as an empty string that
-   `COUNTA` still counts. If that figure reads 0 where the tab visibly has blank
-   `As Of` cells, the formula needs `COUNTIF(...,"<>")` instead.
+4. **An account with no date is surfaced, not silently counted at full value.**
+   **Still open — the only thing between this row and `Yes`.** *One look at the
+   Dashboard.* Find an account on `Accounts` whose `As Of` is blank — its source gave no
+   date — and confirm it appears in the **staleness panel** on the dashboard, with that
+   cell blank there too. If every account in the workspace has an `As Of`, this cannot be
+   exercised at all, and *that* is the result: say so rather than ticking it.
+
+   The panel is the whole of the mechanism. `_bands()` selects accounts
+   `where Account Key is not null and (As Of is null or As Of < '<cutoff>')`, and `As Of`
+   appears in no other dashboard formula — so an undated account being listed there is the
+   only thing standing between it and being counted at face value.
+
+   **This check used to describe something else, and that something never existed.** It
+   said the dashboard counted undated accounts by subtracting a count of `As Of` values
+   from `Accounts`, and that the fix for a wrong figure was `COUNTIF(...,"<>")`. There has
+   never been such a figure: the dashboard's three `COUNTA`s are all on `Account Key`
+   columns, and every commit that has touched `portfolio_sheet.py` was checked — including
+   `5ab8386`, which wrote this check, and which already had the staleness QUERY. So the
+   instruction pointed at a cell nobody could find and a formula nobody could edit.
+
+   **A consequence worth keeping:** the empty-cell-versus-empty-string distinction the old
+   wording turned on is currently *inert*. A truly empty cell is caught by `As Of is null`;
+   an empty string is not null, but `"" < '<cutoff>'` is true, because the column holds text
+   and not dates — which the RAW write guarantees, and which the module docstring explains
+   at length. Either way the account is listed, so no figure on the dashboard changes
+   between the two, and there is nothing to observe. That stops being true the day a
+   `COUNTA` or `COUNTIF` lands on `As Of`: such a formula would count an empty string and
+   report zero undated accounts on a tab that visibly has them. Bring the check back then.
+   (The `<` arm rests on how QUERY treats an empty string in a text column, which nothing
+   here exercises — reasoning, not an observation.)
 5. **`Transactions` holds every movement, not the newest five hundred.** Two questions
    that used to be run together, and only one of them needs a big workspace.
 
@@ -800,8 +823,8 @@ the third way out the message offers.
 
 *The sheet — four machine-owned tabs* is checks 1 through 4: the banner on all four and
 the column contract on the three that have one, money arriving as a number, the
-dashboard's two totals agreeing, and an absent value arriving as an empty cell rather
-than an empty string. Those are four ways for a tab StonkSmith owns to be written wrongly
+dashboard's two totals agreeing, and an account with no date being surfaced rather than
+counted at face value. Those are four ways for a tab StonkSmith owns to be written wrongly
 while looking written. One caveat: a spreadsheet whose four tabs already exist observes
 the write but never the *creation* this section opens by asserting — delete the four, or
 point at a fresh spreadsheet, to see that half too.
@@ -920,10 +943,12 @@ assertion is for: it made a pass mean something specific rather than merely reas
 
 **What is still open, and why each one is not laziness.**
 
-- *Check 4.* An absent `As Of` arriving as an empty cell. Not attempted, and it is the one no
-  command can make. One look at the Dashboard's staleness panel: an account whose source gave
-  no date has to appear there. If every account in the workspace has a date, the check cannot
-  be exercised at all, and that is the finding rather than a gap.
+- *Check 4.* An account with no date being surfaced rather than counted at face value. Not
+  attempted, and it is the one no command can make. One look at the Dashboard's staleness
+  panel: an account whose source gave no date has to appear there. If every account in the
+  workspace has a date, the check cannot be exercised at all, and that is the finding rather
+  than a gap. It is also worth reading check 4 itself first — it described a formula that has
+  never existed, and was rewritten afterwards around the one that has.
 - *The tabs' creation.* All four already existed, so 2026-08-10 observed the write and never
   the creation this section opens by asserting. Delete the four and run `sheet`; it costs one
   run.
