@@ -62,6 +62,8 @@ from helpers.sheets import (
     ensure_worksheet,
     fit,
     open_spreadsheet,
+    remove_tab,
+    tab_exists,
 )
 
 #: Written into the first cell of every tab this module owns, and the only thing
@@ -298,6 +300,191 @@ def _refusal(tab: str) -> str:
         "scratch every run and would have lost whatever is on it. Move your "
         "work to a tab of your own, empty this one to hand it over, or delete "
         "it and let the next sync recreate it."
+    )
+
+
+#: The tab check_ownership_guard() makes and removes. Named to read as disposable
+#: and to be nothing a person would reach for, because the one thing this must
+#: never do is delete a tab somebody wanted.
+GUARD_CHECK_TAB: str = "StonkSmith ownership check"
+
+
+@dataclass(frozen=True)
+class GuardCase:
+    """
+    One outcome claim() was asked for, and what it did.
+
+    ``passed`` is whether claim() behaved, not whether it refused: two of the
+    three cases expect a refusal and the third expects an adoption, so the
+    refusal itself is not the signal. ``detail`` carries the refusal message, or
+    what came back instead when it did not.
+    """
+
+    name: str
+    expected: str
+    passed: bool
+    detail: str = ""
+
+
+def check_ownership_guard(
+    spreadsheet: str = SPREADSHEET_NAME,
+    book: Any | None = None,
+    tab: str = GUARD_CHECK_TAB,
+) -> tuple[GuardCase, ...]:
+    """
+    Put claim() in front of real Sheets, on a tab of its own.
+
+    The refusal is the one claim in this module whose failure cannot be undone by
+    running again -- a sync that ate a hand-written tab has already eaten it --
+    and until now the only way to observe it was to deface a live tab and hand it
+    back. That is a thing done once, nervously, if at all, which is a poor way to
+    hold up a safety property.
+
+    It does not need to be that. claim() decides on what a tab *holds*, not on
+    what it is called; MACHINE_OWNED_TABS only picks which tabs refresh() claims.
+    So the same function, over the same network, can be asked all three of its
+    questions on a tab created for the purpose and removed afterwards, with the
+    real tabs never opened.
+
+    What this does not cover: that a refusal stops the *whole* sync, leaving no
+    tab freshly written beside a stale one. That is refresh() claiming every tab
+    before clearing any, this tab is not one of them, and observing it still
+    means defacing a real one.
+
+    Deleting a tab is not something anything else here does, so the guards
+    matter more than the checks. A tab of this name that already exists is
+    somebody else's and stops the run; the only tab ever removed is the one this
+    call made; and a name that has found its way into MACHINE_OWNED_TABS is
+    refused before Sheets is touched at all.
+    :param spreadsheet: The spreadsheet to work in
+    :param book: An already-open spreadsheet, to save an authorization
+    :param tab: The throwaway tab's name
+    :return: One GuardCase per outcome, in the order they were tried
+    :rtype: tuple[GuardCase, ...]
+    :raises SheetsUnavailable: if Sheets is unreachable, or the tab is taken
+    """
+
+    if tab in MACHINE_OWNED_TABS:
+        raise SheetsUnavailable(
+            f"'{tab}' is one of the tabs StonkSmith writes, so it cannot be used "
+            "as the throwaway tab for this check. Pass a different name."
+        )
+
+    opened: Any = (
+        book if book is not None else open_spreadsheet(spreadsheet=spreadsheet)
+    )
+
+    if tab_exists(book=opened, worksheet_name=tab, spreadsheet=spreadsheet):
+        # Not ours, so not ours to clear and not ours to delete. The same answer
+        # claim() gives, for the same reason.
+        raise SheetsUnavailable(
+            f"Spreadsheet '{spreadsheet}' already has a tab named '{tab}'. This "
+            "check makes that tab and deletes it again, so it will not touch one "
+            "that is already there. Rename or remove it, or pass another name."
+        )
+
+    made: Any = opened.add_worksheet(title=tab, rows=100, cols=8)
+    cases: list[GuardCase] = []
+
+    try:
+        cases.append(
+            _guard_case(
+                book=opened,
+                tab=tab,
+                name="A defaced first cell is refused",
+                text_at=(BANNER_CELL, "Mine, not StonkSmith's"),
+                refusal_expected=True,
+            )
+        )
+        cases.append(
+            _guard_case(
+                book=opened,
+                tab=tab,
+                # The subtle one, and the shape both a leftover layout and a tab
+                # somebody started on row 3 have. A1 empty is not enough to adopt.
+                name="Text below a blank first cell is refused",
+                text_at=("A3", "Mine, further down"),
+                refusal_expected=True,
+            )
+        )
+        cases.append(
+            _guard_case(
+                book=opened,
+                tab=tab,
+                name="A wholly empty tab is adopted",
+                # Neither 2026-08-10 run reached this: both had the banner in A1,
+                # so claim() answered on the first read and never took the branch
+                # that decides whether an empty tab can be handed over.
+                text_at=None,
+                refusal_expected=False,
+            )
+        )
+
+    finally:
+        # Whatever happened above, including something unexpected. remove_tab
+        # reports rather than raises, so a scratch tab that would not go cannot
+        # replace the findings with the news that it is still there.
+        failure: str = remove_tab(book=opened, worksheet=made, worksheet_name=tab)
+        cases.append(
+            GuardCase(
+                name="The throwaway tab was removed",
+                expected="removed",
+                passed=not failure,
+                detail=failure,
+            )
+        )
+
+    return tuple(cases)
+
+
+def _guard_case(
+    book: Any,
+    tab: str,
+    name: str,
+    text_at: tuple[str, str] | None,
+    refusal_expected: bool,
+) -> GuardCase:
+    """
+    Set one tab state up and ask claim() about it.
+
+    A fresh handle for the question, deliberately. claim() remembers its answer
+    on the worksheet object, and while it only remembers an adoption, re-fetching
+    keeps every case a real round trip rather than a cached one.
+    :param book: The open spreadsheet
+    :param tab: The throwaway tab's name
+    :param name: What this case is called, for the report
+    :param text_at: A cell and the text to put in it, or None to leave it empty
+    :param refusal_expected: Whether claim() ought to refuse
+    :return: What happened
+    :rtype: GuardCase
+    """
+
+    staged: Any = book.worksheet(tab)
+    staged.clear()
+
+    if text_at is not None:
+        cell, text = text_at
+        staged.update_acell(cell, text)
+
+    expected: str = "refused" if refusal_expected else "adopted"
+    fresh: Any = book.worksheet(tab)
+
+    try:
+        claim(worksheet=fresh, tab=tab)
+
+    except SheetNotOwned as e:
+        return GuardCase(
+            name=name,
+            expected=expected,
+            passed=refusal_expected,
+            detail=str(object=e),
+        )
+
+    return GuardCase(
+        name=name,
+        expected=expected,
+        passed=not refusal_expected,
+        detail="" if not refusal_expected else "the tab was adopted instead",
     )
 
 

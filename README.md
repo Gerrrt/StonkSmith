@@ -940,6 +940,14 @@ not updated" line: the sheet is a view of the databases, so it can be rebuilt
 from them alone, and re-scraping Ally or Fidelity to fix a spreadsheet means
 sitting at a sign-in page for no reason.
 
+`verify`, beside it, checks that the machine-owned rule below still holds against
+real Sheets. It creates one scratch tab, asks the ownership check whether a
+defaced first cell is refused, whether text below a blank one is refused, and
+whether a wholly empty tab is adopted, then deletes the tab again. No tab the
+sync writes is opened, and a tab of that name which already exists stops the run
+rather than being adopted. What it cannot show is that a refusal aborts the whole
+sync — `docs/live-verification.md` has that step.
+
 ### What a tab may promise
 
 Those five tabs each grew their own layout, and nothing shared a column:

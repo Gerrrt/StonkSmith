@@ -650,13 +650,28 @@ Five things to confirm on the tabs themselves, none of which a unit test can see
    on an absent value arriving as an empty cell rather than as an empty string that
    `COUNTA` still counts. If that figure reads 0 where the tab visibly has blank
    `As Of` cells, the formula needs `COUNTIF(...,"<>")` instead.
-5. **`Transactions` holds every movement, not the newest five hundred.** Compare the
-   count on the line above against `show transactions` inside a broker shell, and do
-   it against a broker with a long history rather than a fresh one — five hundred is
-   the number the shell reader stops at, and a tab that silently agreed with it would
-   look entirely correct. Past 2,000 movements it is also the only thing that puts a
+5. **`Transactions` holds every movement, not the newest five hundred.** Two questions
+   that used to be run together, and only one of them needs a big workspace.
+
+   *Did every row land* is answerable at any size, but **not against
+   `show transactions`** — that is `get_transactions`, and `broker_db.py` says of its
+   `limit=500` that it "would report the newest five hundred movements as though they
+   were all of them," which is why it "cannot back a sheet." Comparing an uncapped
+   write against a capped read is how this check passes for the wrong reason. Count the
+   rows in the database instead, which is what the sheet is built from:
+
+   ```bash
+   sqlite3 ~/.stonksmith/workspaces/default/<broker>.db \
+     'SELECT COUNT(*) FROM transactions;'
+   ```
+
+   *Is there a window at five hundred* is the question that needs the rows, and no
+   workspace under that number can put it — a tab that had silently windowed would
+   agree with everything. Past 2,000 movements is also the only thing that puts a
    second write in front of real Sheets, since `write_rows()` sends `CHUNK_ROWS` rows
-   at a time. Check the dates too: the 529 scraper stores `12/30/2025` and SnapTrade
+   at a time.
+
+   Check the dates too: the 529 scraper stores `12/30/2025` and SnapTrade
    stores ISO, so the tab is where they must both read `YYYY-MM-DD`, sorted
    newest-first within each account. A `12/30/2025` reaching a cell means the
    normalization was skipped, and the tab's order is then wrong wherever a December
@@ -665,6 +680,31 @@ Five things to confirm on the tabs themselves, none of which a unit test can see
 **Then the refusal, which is the point of the whole thing — and it goes last.** A
 refused tab means nothing is synced at all, so doing this first would leave the five
 checks above reading a sheet the run never wrote.
+
+Most of it no longer needs a deface. `verify` in the same shell asks `claim()` all three
+of its questions on a tab it creates and removes, so the guard meets real Sheets without a
+real tab being touched:
+
+```
+stonksmithdb (default) > verify
+[*] Making the tab 'StonkSmith ownership check' in 'Investment Account Scrapes', asking the guard about it, and deleting it again. No other tab is opened.
+[+] A defaced first cell is refused
+[+] Text below a blank first cell is refused
+[+] A wholly empty tab is adopted
+[+] The throwaway tab was removed
+```
+
+That works because `claim()` decides on what a tab *holds*, not on what it is called —
+`MACHINE_OWNED_TABS` only picks which tabs a sync claims. The third case is the one
+neither 2026-08-10 run reached: both had the banner in `A1`, so `claim()` answered on its
+first read and never took the branch that decides whether an empty tab can be handed over.
+A `[-]` line is the finding, and an adoption where a refusal was due is the expensive one.
+
+**It does not retire the manual step.** What `verify` cannot show is that a refusal stops
+the *whole* sync rather than leaving one tab freshly written beside a stale one — that is
+`refresh()` claiming every tab before clearing any, and the scratch tab is not one of the
+four. So this row does not reach `Yes` on `verify` alone, and the deface below is still
+what settles it.
 
 By this point `Holdings` exists and carries the banner, and Sheets will not let a second
 tab take a name already in use — so the move is to make the tab that is there look
@@ -703,14 +743,17 @@ the write but never the *creation* this section opens by asserting — delete th
 point at a fresh spreadsheet, to see that half too.
 
 *The sheet — the whole transaction history reaching a tab* is check 5 alone, and it has a
-wrong way to pass. Against a broker holding fewer than five hundred movements, agreement
-with `show transactions` confirms nothing at all, because that is where the shell reader
-itself stops. The date half of the check belongs to this row too.
+wrong way to pass: agreement with `show transactions` confirms nothing, at any size,
+because that reader stops where the question starts. Counting the database settles whether
+every row landed; only a workspace past five hundred settles whether there is a window,
+and only one past 2,000 puts a second chunked write in front of Sheets. The date half of
+the check belongs to this row too, and needs no volume at all.
 
 *The sheet — refusing a tab it does not own* is the refusal, and it is the only one of
 the three that can be settled the other way. A sync that went ahead and ate your text is
 not a failed check; it is that row observed as **Run, and it cannot** be relied on. Write
-it up that way, and say which tab.
+it up that way, and say which tab. `verify` covers `claim()`'s three answers and not the
+abort, so a clean `verify` and no deface leaves this row where it is.
 
 Then *Recording a result* below, which is where the asymmetry it warns about actually
 bites: one `sheet` run touches all three of these rows, and the refusal is the only one
