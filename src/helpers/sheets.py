@@ -200,7 +200,29 @@ def open_worksheet(worksheet_name: str, spreadsheet: str = SPREADSHEET_NAME) -> 
     :raises SheetsUnavailable: if authorization or lookup fails
     """
 
-    book: Any = open_spreadsheet(spreadsheet=spreadsheet)
+    return require_worksheet(
+        book=open_spreadsheet(spreadsheet=spreadsheet),
+        worksheet_name=worksheet_name,
+        spreadsheet=spreadsheet,
+    )
+
+
+def require_worksheet(book: Any, worksheet_name: str, spreadsheet: str) -> Any:
+    """
+    The tab, or an actionable refusal -- never a created one.
+
+    Split out of open_worksheet so that a caller holding an open book can insist
+    on several tabs without re-authorizing per tab, and without reaching for
+    ensure_worksheet. The difference matters: ensure_worksheet creates what is
+    missing, which is right for a sync and wrong for anything checking what a
+    sync wrote, where a created tab would manufacture the thing being checked.
+    :param book: An open spreadsheet
+    :param worksheet_name: The tab that has to be there
+    :param spreadsheet: The spreadsheet's name, for the message
+    :return: The worksheet
+    :rtype: Any
+    :raises SheetsUnavailable: if the tab is missing or the lookup fails
+    """
 
     try:
         return _find_worksheet(

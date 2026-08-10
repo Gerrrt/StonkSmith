@@ -40,10 +40,13 @@ exception text beginning with "=" is a formula.
 """
 
 import datetime as dt
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from gspread.utils import ValueRenderOption
 
 from etc.context import Context
 from etc.portfolio import (
@@ -63,6 +66,7 @@ from helpers.sheets import (
     fit,
     open_spreadsheet,
     remove_tab,
+    require_worksheet,
     tab_exists,
 )
 
@@ -301,6 +305,379 @@ def _refusal(tab: str) -> str:
         "work to a tab of your own, empty this one to hand it over, or delete "
         "it and let the next sync recreate it."
     )
+
+
+#: Marks a case whose assertion has itself never met real Sheets. The structural
+#: cases compare strings and cannot be wrong about the API; the two that carry
+#: this rest on what a render option gives back, so a failure is ambiguous between
+#: "the tab is wrong" and "this check is". Kept visible rather than buried, because
+#: reporting an unconfirmed assumption as a confirmed defect is its own kind of
+#: wrong. Count it from the constant, not from memory: an earlier draft said three,
+#: having been written before the empty-cell check turned out to be impossible.
+UNCONFIRMED: str = " (assertion unconfirmed against real Sheets)"
+
+
+def check_tabs(
+    workspace: str | None = None,
+    root: Path | None = None,
+    spreadsheet: str = SPREADSHEET_NAME,
+    book: Any | None = None,
+) -> tuple[GuardCase, ...]:
+    """
+    Read the four tabs back and check what a successful write cannot show.
+
+    write_rows() returning says the request was accepted, not that the values
+    arrived as the kind of thing they were meant to be. Money can land as text, a
+    column can drift, a date can reach a cell in the format its source used, and
+    a RAW upload reports success through all of it. These are the checks that used
+    to need somebody opening the spreadsheet.
+
+    Seven of the nine compare strings and are certain: the banner, three column
+    contracts, the movement count against the databases, the date format, and the
+    ordering. Two read cell *values* -- money as a number and the dashboard's two
+    totals agreeing -- and those depend on what gspread hands back for a rendered
+    cell. Those two are marked, because until this has run once they test the
+    assertion as much as the sheet.
+
+    A third value check was intended and cannot exist: an absent date arriving as
+    an empty cell rather than as an empty string is invisible to a read, since
+    Sheets returns "" or a short row for either. See the note where it would have
+    gone.
+
+    Opens with open_worksheet and not ensure_worksheet, deliberately: a missing
+    tab means the sync was never run, and creating one here would manufacture the
+    thing being checked.
+    :param workspace: The workspace whose databases the tabs are compared against
+    :param root: The directory workspaces live in, for tests
+    :param spreadsheet: The spreadsheet to read
+    :param book: An already-open spreadsheet, to save an authorization
+    :return: One GuardCase per check
+    :rtype: tuple[GuardCase, ...]
+    :raises SheetsUnavailable: if Sheets is unreachable or a tab is missing
+    """
+
+    portfolio: Portfolio = read_workspace(workspace=workspace, root=root)
+    opened: Any = (
+        book if book is not None else open_spreadsheet(spreadsheet=spreadsheet)
+    )
+    tabs: dict[str, Any] = {
+        name: require_worksheet(
+            book=opened, worksheet_name=name, spreadsheet=spreadsheet
+        )
+        for name in MACHINE_OWNED_TABS
+    }
+
+    cases: list[GuardCase] = [_banner_case(tabs=tabs)]
+
+    for tab, columns in (
+        (ACCOUNTS_TAB, ACCOUNT_COLUMNS),
+        (HOLDINGS_TAB, HOLDING_COLUMNS),
+        (TRANSACTIONS_TAB, TRANSACTION_COLUMNS),
+    ):
+        cases.append(_contract_case(worksheet=tabs[tab], tab=tab, columns=columns))
+
+    cases.append(
+        _count_case(
+            worksheet=tabs[TRANSACTIONS_TAB], expected=len(portfolio.transactions)
+        )
+    )
+    cases.extend(_date_cases(worksheet=tabs[TRANSACTIONS_TAB]))
+    cases.append(_money_case(worksheet=tabs[ACCOUNTS_TAB]))
+    cases.append(_totals_case(worksheet=tabs[DASHBOARD_TAB]))
+
+    # Check 4 -- an absent date arriving as an empty cell rather than an empty
+    # string -- is deliberately absent, and cannot be added here. Read back, the
+    # two are the same value: Sheets returns "" or a short row for both. The only
+    # witness to the difference is a formula's behaviour over the cell, so that
+    # check stays an eyeball one, and docs/live-verification.md says so.
+
+    return tuple(cases)
+
+
+def _values(worksheet: Any, cells: str, rendered: bool = False) -> list[list[Any]]:
+    """
+    A range, as text by default and as Sheets computed it when asked.
+
+    Unformatted is what turns a currency cell into a float and a formula into the
+    number it evaluated to -- which is the only way to ask whether money arrived
+    as money, and the only way to compare a SUMIF against a literal.
+    :param worksheet: The tab to read
+    :param cells: An A1 range
+    :param rendered: True to get values rather than their displayed text
+    :return: Rows of cell values
+    :rtype: list[list[Any]]
+    """
+
+    option: str = (
+        ValueRenderOption.unformatted if rendered else ValueRenderOption.formatted
+    )
+
+    return worksheet.get_values(cells, value_render_option=option) or []
+
+
+def _banner_case(tabs: dict[str, Any]) -> GuardCase:
+    """
+    The first cell of every tab, including the one with no columns.
+    :param tabs: The four tabs, by name
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    missing: list[str] = [
+        name
+        for name, worksheet in tabs.items()
+        if str(object=worksheet.acell(BANNER_CELL).value or "").strip() != BANNER
+    ]
+
+    return GuardCase(
+        name=f"All {len(tabs)} tabs carry the banner in {BANNER_CELL}",
+        expected="present",
+        passed=not missing,
+        detail="" if not missing else f"without it: {', '.join(missing)}",
+    )
+
+
+def _contract_case(worksheet: Any, tab: str, columns: Sequence[str]) -> GuardCase:
+    """
+    Row 2, against the contract as etc.portfolio spells it.
+
+    Exact and in order, not a subset: the dashboard addresses columns by
+    position, so a column that moved keeps every formula pointing somewhere
+    plausible and wrong.
+    :param worksheet: The tab to read
+    :param tab: Its name
+    :param columns: What row 2 must say
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    last: str = last_column(columns=columns)
+    found: list[list[Any]] = _values(
+        worksheet=worksheet, cells=f"A{HEADER_ROW}:{last}{HEADER_ROW}"
+    )
+    header: list[str] = [str(object=cell) for cell in (found[0] if found else [])]
+    want: list[str] = list(columns)
+
+    return GuardCase(
+        name=f"{tab} row {HEADER_ROW} is the column contract, ending at {last}",
+        expected="exact",
+        passed=header == want,
+        detail="" if header == want else f"found {header or 'nothing'}",
+    )
+
+
+def _count_case(worksheet: Any, expected: int) -> GuardCase:
+    """
+    Every movement the databases hold, against what the tab holds.
+
+    Counted against read_workspace rather than against the shell's reader, whose
+    limit of five hundred is the thing this check exists to see past.
+    :param worksheet: The Transactions tab
+    :param expected: How many movements the databases hold
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    key: str = column_of(columns=TRANSACTION_COLUMNS, name="Account Key")
+    found: int = len(
+        [value for value in _column_at(worksheet=worksheet, letter=key) if value]
+    )
+
+    return GuardCase(
+        name=f"Transactions holds all {expected} movements the databases have",
+        expected="all",
+        passed=found == expected,
+        detail="" if found == expected else f"the tab has {found}",
+    )
+
+
+def _column_at(worksheet: Any, letter: str, rendered: bool = False) -> list[Any]:
+    """
+    One column by letter, from the first data row down.
+    :param worksheet: The tab to read
+    :param letter: The column letter
+    :param rendered: True to get values rather than their displayed text
+    :return: The values
+    :rtype: list[Any]
+    """
+
+    rows: list[list[Any]] = _values(
+        worksheet=worksheet,
+        cells=f"{letter}{FIRST_DATA_ROW}:{letter}",
+        rendered=rendered,
+    )
+
+    return [row[0] if row else "" for row in rows]
+
+
+def _date_cases(worksheet: Any) -> tuple[GuardCase, GuardCase]:
+    """
+    Processed On, in one format and in one order.
+
+    The sources disagree -- the 529 scraper stores "12/30/2025" and SnapTrade
+    stores ISO -- so the tab is where they must agree, and a "12/30/2025" in a
+    cell means the normalization was skipped. The order follows from that: it
+    sorts above every January, so a tab whose dates were not normalized is also
+    a tab whose ordering is wrong.
+    :param worksheet: The Transactions tab
+    :return: The format case and the ordering case
+    :rtype: tuple[GuardCase, GuardCase]
+    """
+
+    keys: list[Any] = _column_at(
+        worksheet=worksheet,
+        letter=column_of(columns=TRANSACTION_COLUMNS, name="Account Key"),
+    )
+    dates: list[Any] = _column_at(
+        worksheet=worksheet,
+        letter=column_of(columns=TRANSACTION_COLUMNS, name="Processed On"),
+    )
+    pattern: re.Pattern[str] = re.compile(pattern=ISO_DATE_PATTERN)
+    odd: list[str] = [
+        str(object=value)
+        for value in dates
+        if str(object=value) and not pattern.match(string=str(object=value))
+    ]
+
+    unsorted: list[str] = []
+    seen: dict[str, str] = {}
+
+    # Not strict: Sheets trims trailing empties per column, so two columns off the
+    # same rows can come back different lengths. Pairing what overlaps is right --
+    # the count is checked separately, by _count_case.
+    for key, value in zip(keys, dates, strict=False):
+        account, date = str(object=key), str(object=value)
+
+        if not account or not date:
+            continue
+
+        if account in seen and date > seen[account]:
+            unsorted.append(account)
+
+        seen[account] = date
+
+    return (
+        GuardCase(
+            name="Every Processed On is YYYY-MM-DD",
+            expected="normalized",
+            passed=not odd,
+            detail="" if not odd else f"found {sorted(set(odd))[:5]}",
+        ),
+        GuardCase(
+            name="Processed On runs newest-first within each account",
+            expected="sorted",
+            passed=not unsorted,
+            detail=""
+            if not unsorted
+            else f"out of order under {sorted(set(unsorted))[:5]}",
+        ),
+    )
+
+
+def _money_case(worksheet: Any) -> GuardCase:
+    """
+    Value on Accounts, as a number rather than as text.
+
+    The failure this catches is a regression to writing strings: a currency cell
+    holding "1234.00" totals as zero in every formula that touches it, and looks
+    identical to one holding 1234.0 unless you notice which way it aligns.
+    :param worksheet: The Accounts tab
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    # Rendered, and the check does not work any other way: the formatted read
+    # returns display text for every cell, so a perfectly good 1234.5 comes back
+    # as "1,234.50" and this would report every sheet as broken. Unformatted is
+    # what distinguishes a number Sheets stored from a string it was handed.
+    values: list[Any] = [
+        value
+        for value in _column_at(
+            worksheet=worksheet,
+            letter=column_of(columns=ACCOUNT_COLUMNS, name="Value"),
+            rendered=True,
+        )
+        if value != ""
+    ]
+    text: list[Any] = [value for value in values if not isinstance(value, (int, float))]
+
+    return GuardCase(
+        name=f"Accounts Value is a number, not text{UNCONFIRMED}",
+        expected="numeric",
+        passed=not text,
+        detail="" if not text else f"{len(text)} of {len(values)} came back as text",
+    )
+
+
+def _totals_case(worksheet: Any) -> GuardCase:
+    """
+    The dashboard's two totals, which are one number computed twice.
+
+    Sheets over the cells beside Python over the databases. They disagree only if
+    the write was truncated or a row failed to land, which is otherwise
+    invisible. Located by reading the labels back rather than by row number, so
+    a reordered summary is caught here instead of comparing the wrong two cells.
+    :param worksheet: The Dashboard tab
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    labels: list[Any] = _column_at(worksheet=worksheet, letter=SUMMARY_COL)
+    name: str = f"The dashboard's two totals agree{UNCONFIRMED}"
+
+    try:
+        computed = _summary_value(
+            worksheet=worksheet, labels=labels, label="Total (USD)"
+        )
+        as_read = _summary_value(
+            worksheet=worksheet, labels=labels, label="Total as read"
+        )
+
+    except (LookupError, TypeError, ValueError) as e:
+        return GuardCase(
+            name=name,
+            expected="equal",
+            passed=False,
+            detail=f"could not read both ({e})",
+        )
+
+    # Two floats that came from the same numbers by different routes, so this is
+    # a rounding tolerance and not a fuzzy match.
+    agree: bool = abs(computed - as_read) < 0.01
+
+    return GuardCase(
+        name=name,
+        expected="equal",
+        passed=agree,
+        detail="" if agree else f"Sheets says {computed}, Python says {as_read}",
+    )
+
+
+def _summary_value(worksheet: Any, labels: list[Any], label: str) -> float:
+    """
+    One summary row's value, found by its label.
+    :param worksheet: The Dashboard tab
+    :param labels: The label column, from the first data row down
+    :param label: The row to find
+    :return: The value beside it
+    :rtype: float
+    :raises LookupError: if the label is not there
+    :raises ValueError: if the cell beside it is empty or not a number
+    """
+
+    row: int = FIRST_DATA_ROW + [str(object=cell) for cell in labels].index(label)
+    found: list[list[Any]] = _values(
+        worksheet=worksheet, cells=f"B{row}:B{row}", rendered=True
+    )
+
+    # Checked rather than indexed into. An empty cell comes back as an empty row
+    # or as no rows at all, and while the IndexError that would cause is a
+    # LookupError and so already caught by the caller, arriving there by accident
+    # of the exception hierarchy is not the same as saying what went wrong.
+    if not found or not found[0]:
+        raise ValueError(f"the cell beside '{label}' is empty")
+
+    return float(found[0][0])
 
 
 #: The tab check_ownership_guard() makes and removes. Named to read as disposable
