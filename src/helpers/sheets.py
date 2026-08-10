@@ -53,6 +53,60 @@ def a1_range(first_col: str, last_col: str, first_row: int, row_count: int) -> s
     return f"{first_col}{first_row}:{last_col}{last_row}"
 
 
+def _authorization_failure(e: BaseException, doing: str = "") -> str:
+    """
+    Say what to do about an authorization failure, by cause.
+
+    Two causes look alike in the log and have different fixes, and conflating
+    them is expensive in one direction: a stale token needs one file deleted,
+    while a deleted OAuth client needs a new client ID from the Google console.
+    Telling someone with an expired token to go and make a new client sends them
+    to the console for nothing, so ``invalid_grant`` gets the cheap fix and only
+    ``deleted_client`` gets the expensive one.
+
+    Anything else -- a transport error, a clock skew -- gets the cheap fix first
+    and the expensive one as the fallback, because that is the order worth trying
+    them in and this function cannot tell which applies.
+    :param e: The authorization error, quoted into the message
+    :param doing: What was being attempted, if it narrows the report down
+    :return: One actionable line
+    :rtype: str
+    """
+
+    detail: str = str(object=e)
+    where: str = f" while {doing}" if doing else ""
+    opening: str = f"Google authorization failed{where} ({detail})."
+
+    new_client: str = (
+        "create a new OAuth client ID (Desktop app) with the Sheets and Drive "
+        f"APIs enabled and save it as {GSPREAD_CONFIG_DIR}/credentials.json"
+    )
+    fresh_token: str = (
+        f"delete {GSPREAD_CONFIG_DIR}/authorized_user.json and re-run to reauthorize"
+    )
+
+    if "deleted_client" in detail:
+        return (
+            f"{opening} The OAuth client itself is gone, so {new_client}, then "
+            f"{fresh_token}."
+        )
+
+    if "invalid_grant" in detail:
+        # The common one, and the one whose fix is cheapest: a refresh token
+        # expires on its own -- after a week, for a client Google still lists as
+        # in testing -- without anything happening to the client behind it.
+        return (
+            f"{opening} The cached token has expired or been revoked, which is "
+            f"not the same as the client being gone: {fresh_token}. "
+            f"{GSPREAD_CONFIG_DIR}/credentials.json stays as it is."
+        )
+
+    return (
+        f"{opening} Try this first: {fresh_token}. If that does not help, "
+        f"{new_client} and try again."
+    )
+
+
 def open_spreadsheet(spreadsheet: str = SPREADSHEET_NAME) -> Any:
     """
     Authenticate once and return the whole spreadsheet.
@@ -72,14 +126,7 @@ def open_spreadsheet(spreadsheet: str = SPREADSHEET_NAME) -> Any:
         client: Any = gspread.oauth()
 
     except GoogleAuthError as e:
-        raise SheetsUnavailable(
-            f"Google authorization failed ({e}). If this says 'deleted_client' "
-            "or 'invalid_grant', the OAuth client behind the cached token no "
-            "longer exists: create a new OAuth client ID (Desktop app) with the "
-            f"Sheets and Drive APIs enabled, save it as {GSPREAD_CONFIG_DIR}/"
-            f"credentials.json, delete {GSPREAD_CONFIG_DIR}/authorized_user.json, "
-            "and re-run to reauthorize."
-        ) from e
+        raise SheetsUnavailable(_authorization_failure(e=e)) from e
 
     try:
         return client.open(spreadsheet)
@@ -91,8 +138,11 @@ def open_spreadsheet(spreadsheet: str = SPREADSHEET_NAME) -> Any:
         ) from e
 
     except GoogleAuthError as e:
-        # Credentials can also refresh lazily on the first API call.
-        raise SheetsUnavailable(f"Google authorization failed ({e}).") from e
+        # Credentials can also refresh lazily on the first API call, which is
+        # the path an expired token actually takes: gspread.oauth() above hands
+        # back a client without touching the network, and the refresh fails here.
+        # So this is the branch that has to carry the fix, not the spare one.
+        raise SheetsUnavailable(_authorization_failure(e=e)) from e
 
     except gspread.exceptions.APIError as e:
         raise SheetsUnavailable(
@@ -129,8 +179,7 @@ def _find_worksheet(book: Any, worksheet_name: str, spreadsheet: str) -> Any:
 
     except GoogleAuthError as e:
         raise SheetsUnavailable(
-            f"Google authorization failed while looking for the tab "
-            f"'{worksheet_name}' ({e})."
+            _authorization_failure(e=e, doing=f"looking for the tab '{worksheet_name}'")
         ) from e
 
     except gspread.exceptions.APIError as e:

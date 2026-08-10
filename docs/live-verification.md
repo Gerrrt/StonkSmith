@@ -589,20 +589,22 @@ and nothing reads it from config. Then a workspace with at least one broker data
 already in it, and for check 5 specifically, a broker with a long transaction history
 rather than a fresh one.
 
-**If a token is already cached, expect the first attempt to fail on authorization — and
-do not believe what it tells you to do about it.** A first run with none authorizes in a
-browser and is fine; it is the returning one that breaks, and a client left in Google's
-*Testing* publishing status expires its refresh token after seven days, so returning is
-the common case. A token that has expired or been revoked comes back as
-`invalid_grant`, and the fix is one line — delete
+**If a token is already cached, expect the first attempt to fail on authorization.** A
+first run with none authorizes in a browser and is fine; it is the returning one that
+breaks, and a client left in Google's *Testing* publishing status expires its refresh
+token after seven days, so returning is the common case. A token that has expired or been
+revoked comes back as `invalid_grant`, and the fix is one line — delete
 `~/.config/gspread/authorized_user.json` and run `sheet` again, which reauthorizes in a
-browser. `credentials.json` stays. This is worth writing down here because the program
-will not tell you: `open_spreadsheet()` has two authorization branches, and the one an
-expired token actually reaches — the lazy refresh on the first API call — raises
-`Google authorization failed (...)` and stops, carrying none of the fix. The other
-branch, which does carry a fix, says `invalid_grant` means the OAuth client no longer
-exists and sends you off to create a new client ID. That is the remedy for
-`deleted_client`; for an expired token it is wrong and costs an afternoon.
+browser. `credentials.json` stays.
+
+The program says that now. It did not when this was first run, which is why it is written
+down here: the branch an expired token actually reaches is the lazy refresh on the first
+API call, and that one reported the failure with no fix attached at all, while the branch
+that *did* carry advice blamed a deleted OAuth client and sent you to the console for a
+new client ID. Those are two different failures with two different fixes, and
+`tests/test_sheets_errors_and_labels.py` now holds them apart — `invalid_grant` gets the
+one file to delete, `deleted_client` gets the new client, and an unrecognised failure gets
+the cheap fix first and the expensive one as the fallback.
 
 **What it costs.** `sheet` clears and rewrites all four machine-owned tabs, and the
 refusal at the end has you deface the `Holdings` tab on purpose and hand it back
