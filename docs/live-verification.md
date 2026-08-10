@@ -589,8 +589,11 @@ and nothing reads it from config. Then a workspace with at least one broker data
 already in it, and for check 5 specifically, a broker with a long transaction history
 rather than a fresh one.
 
-**Expect the first attempt to fail on authorization, and do not believe what it tells
-you to do about it.** A cached token that has expired or been revoked comes back as
+**If a token is already cached, expect the first attempt to fail on authorization — and
+do not believe what it tells you to do about it.** A first run with none authorizes in a
+browser and is fine; it is the returning one that breaks, and a client left in Google's
+*Testing* publishing status expires its refresh token after seven days, so returning is
+the common case. A token that has expired or been revoked comes back as
 `invalid_grant`, and the fix is one line — delete
 `~/.config/gspread/authorized_user.json` and run `sheet` again, which reauthorizes in a
 browser. `credentials.json` stays. This is worth writing down here because the program
@@ -723,7 +726,7 @@ described above. What came back:
 **What that line establishes on its own**, before anybody opens the spreadsheet:
 authorization succeeded, `Investment Account Scrapes` was found, all four tabs were
 ensured, **`claim()` accepted all four before any of them was cleared**, and three
-`write_rows` calls plus the dashboard completed against real Sheets. Five broker
+`write_rows()` calls plus the dashboard completed against real Sheets. Five broker
 databases opened, and no `[-] Not on the sheet:` line means none was skipped. So the
 machinery — the authorization, the four-tab claim, the chunked RAW write — has now met
 the real thing rather than a `MagicMock`.

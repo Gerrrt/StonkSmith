@@ -705,8 +705,8 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write has not been run. The sheet has: it was built once
-from real databases on 2026-08-10, which is not the same as verified — what a
+reports. The database write has not been run. The sheet has been run once, from
+real databases on 2026-08-10 — which is not the same as verified. What a
 successful write cannot tell you is how the values render, and the refusal has
 still never been tried against a real tab. `docs/live-verification.md` has the
 procedure, that run written up, and one trap worth knowing about first — a
