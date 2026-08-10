@@ -88,12 +88,17 @@ PRICE_USER_AGENT = (
 )
 
 #: dfas.mil wants three things at once, and it took a while to establish what.
-#: Measured against the live host on 2026-08-10, same URL, same minute:
+#: Measured against the live host on 2026-08-10, same URL, same minute. Read one
+#: client at a time -- the rows are three separate experiments, not one ladder,
+#: and comparing across clients is what makes this look like a protocol problem
+#: it is not:
 #:
 #:   requests, browser UA + navigation headers      -> 403
 #:   requests, defaults cleared, stock TLS context  -> 403
+#:
 #:   curl --http1.1, browser UA + nav headers       -> 403
 #:   curl --http2,   browser UA + nav headers       -> 200
+#:
 #:   httpx, honest UA, with or without nav headers  -> 403
 #:   httpx, no User-Agent at all                    -> 403
 #:   httpx, browser UA, no nav headers              -> 403
@@ -105,6 +110,12 @@ PRICE_USER_AGENT = (
 #: failed, and why the record said for a time that dfas.mil refuses this
 #: network outright. It does not; it refuses a caller whose three layers do not
 #: agree with each other.
+#:
+#: The curl pair is the one that misleads, so: **HTTP/2 is not required.** Those
+#: two rows say curl's HTTP/1.1 handshake is refused, not that HTTP/1.1 is.
+#: httpx answers 200 over HTTP/1.1 with no h2 package installed at all, which is
+#: what the fetch below actually does. Enabling http2 here would pull in three
+#: packages to change a variable that was tested and found not to matter.
 #:
 #: The fingerprint is why the fetch below uses httpx rather than the requests
 #: session every other download here uses. urllib3 pins its own cipher list and
