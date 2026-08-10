@@ -8,16 +8,20 @@ tests that make it a refusal.
 """
 
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import gspread.exceptions
 
 from etc.portfolio_sheet import (
     ACCOUNTS_TAB,
     BANNER,
     BANNER_CELL,
     DASHBOARD_TAB,
+    GUARD_CHECK_TAB,
     HOLDINGS_TAB,
     MACHINE_OWNED_TABS,
     TRANSACTIONS_TAB,
+    check_ownership_guard,
     claim,
 )
 from helpers.sheets import SheetNotOwned, SheetsUnavailable
@@ -43,6 +47,183 @@ def worksheet(
     fake.get_all_values.return_value = values if values is not None else []
 
     return fake
+
+
+class FakeTab:
+    """
+    A tab that remembers what was written to it.
+
+    Column A only, which is all the ownership check writes, and enough for
+    ``claim`` to answer both of its reads off the same state rather than off two
+    canned returns. A stub that answered them independently could pass a case
+    whose staging never happened.
+    """
+
+    def __init__(self, book: FakeBook, title: str) -> None:
+        self.book = book
+        self.title = title
+
+    @property
+    def cells(self) -> dict[int, str]:
+        return self.book.tabs[self.title]
+
+    def clear(self) -> None:
+        self.cells.clear()
+
+    def update_acell(self, cell: str, text: str) -> None:
+        self.cells[int(cell[1:])] = text
+
+    def acell(self, cell: str) -> MagicMock:
+        return MagicMock(value=self.cells.get(int(cell[1:])))
+
+    def get_all_values(self) -> list[list[str]]:
+        if not self.cells:
+            return []
+
+        return [[self.cells.get(row, "")] for row in range(1, max(self.cells) + 1)]
+
+
+class FakeBook:
+    """A spreadsheet that tracks which tabs were made and removed."""
+
+    def __init__(self, existing: tuple[str, ...] = ()) -> None:
+        self.tabs: dict[str, dict[int, str]] = {name: {} for name in existing}
+        self.created: list[str] = []
+        self.deleted: list[str] = []
+        self.lookups: list[str] = []
+        self.delete_error: Exception | None = None
+
+    def worksheet(self, title: str) -> FakeTab:
+        self.lookups.append(title)
+
+        if title not in self.tabs:
+            raise gspread.exceptions.WorksheetNotFound(title)
+
+        return FakeTab(book=self, title=title)
+
+    def add_worksheet(self, title: str, rows: int, cols: int) -> FakeTab:
+        del rows, cols
+        self.tabs[title] = {}
+        self.created.append(title)
+
+        return FakeTab(book=self, title=title)
+
+    def del_worksheet(self, worksheet: FakeTab) -> None:
+        if self.delete_error is not None:
+            raise self.delete_error
+
+        self.deleted.append(worksheet.title)
+        self.tabs.pop(worksheet.title, None)
+
+
+def api_error(code: int = 429) -> gspread.exceptions.APIError:
+    return gspread.exceptions.APIError(
+        MagicMock(
+            status_code=code,
+            json=lambda: {"code": code, "message": "nope", "status": "FAILED"},
+        )
+    )
+
+
+class OwnershipCheckTests(unittest.TestCase):
+    """The guard, asked its three questions on a tab made for the purpose.
+
+    claim() decides on what a tab holds and not on what it is called, so the
+    refusal can be exercised without defacing a real tab. These cover the part
+    that has to be right for that to be safe: the check must never touch a tab it
+    did not create.
+    """
+
+    def test_all_three_questions_are_asked_and_the_tab_is_removed(self) -> None:
+        book = FakeBook()
+
+        cases = check_ownership_guard(book=book)
+
+        self.assertTrue(all(case.passed for case in cases), list(cases))
+        # Three questions plus the teardown, which reports as a case of its own.
+        self.assertEqual(len(cases), 4)
+        self.assertEqual(book.created, [GUARD_CHECK_TAB])
+        self.assertEqual(book.deleted, [GUARD_CHECK_TAB])
+        self.assertNotIn(GUARD_CHECK_TAB, book.tabs)
+
+    def test_a_tab_that_is_already_there_is_refused_and_never_deleted(self) -> None:
+        # The one that matters most. A tab of this name that already exists is
+        # somebody else's, and the check's whole safety rests on not adopting it.
+        book = FakeBook(existing=(GUARD_CHECK_TAB,))
+
+        with self.assertRaises(SheetsUnavailable) as caught:
+            check_ownership_guard(book=book)
+
+        self.assertIn(GUARD_CHECK_TAB, str(caught.exception))
+        self.assertEqual(book.deleted, [])
+        self.assertEqual(book.created, [])
+
+    def test_a_machine_owned_name_is_rejected_before_sheets_is_touched(self) -> None:
+        # So that a tab quietly joining MACHINE_OWNED_TABS cannot turn this into
+        # something that deletes it.
+        book = FakeBook()
+
+        for tab in MACHINE_OWNED_TABS:
+            with self.subTest(tab=tab), self.assertRaises(SheetsUnavailable):
+                check_ownership_guard(book=book, tab=tab)
+
+        self.assertEqual(book.lookups, [])
+        self.assertEqual(book.created, [])
+        self.assertEqual(book.deleted, [])
+
+    def test_a_lookup_that_was_rejected_is_not_read_as_an_absent_tab(self) -> None:
+        # The dangerous misreading: a request that failed for a reason other than
+        # absence, treated as absence, makes a second tab beside one already
+        # there. tab_exists routes through _find_worksheet so this arrives as
+        # SheetsUnavailable instead.
+        book = FakeBook()
+        book.worksheet = MagicMock(side_effect=api_error())  # type: ignore[method-assign]
+
+        with self.assertRaises(SheetsUnavailable):
+            check_ownership_guard(book=book)
+
+        self.assertEqual(book.created, [])
+
+    def test_the_tab_still_goes_when_a_case_raises_unexpectedly(self) -> None:
+        book = FakeBook()
+
+        with (
+            patch("etc.portfolio_sheet.claim", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+        ):
+            check_ownership_guard(book=book)
+
+        # The scratch tab is not left behind by a failure inside the check.
+        self.assertEqual(book.deleted, [GUARD_CHECK_TAB])
+
+    def test_a_guard_that_adopts_when_it_should_refuse_is_reported(self) -> None:
+        # The finding this command exists to surface, and the shape that eats
+        # somebody's work: claim() waving through a tab it should have refused.
+        book = FakeBook()
+
+        with patch("etc.portfolio_sheet.claim", return_value=None):
+            cases = check_ownership_guard(book=book)
+
+        refusals = [case for case in cases if case.expected == "refused"]
+
+        self.assertEqual(len(refusals), 2)
+        self.assertTrue(all(not case.passed for case in refusals))
+        self.assertTrue(all(case.detail for case in refusals))
+
+    def test_a_scratch_tab_that_will_not_delete_is_reported_not_raised(self) -> None:
+        # Teardown reports rather than raises. Raising here would replace the
+        # findings with the news that a scratch tab is still there.
+        book = FakeBook()
+        book.delete_error = api_error(code=403)
+
+        cases = check_ownership_guard(book=book)
+
+        self.assertTrue(all(case.passed for case in cases[:3]))
+        self.assertFalse(cases[-1].passed)
+        self.assertIn(GUARD_CHECK_TAB, cases[-1].detail)
+
+    def test_the_scratch_tab_is_not_one_of_the_tabs_that_get_written(self) -> None:
+        self.assertNotIn(GUARD_CHECK_TAB, MACHINE_OWNED_TABS)
 
 
 class ClaimTests(unittest.TestCase):

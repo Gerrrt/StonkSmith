@@ -757,10 +757,14 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write and the sheet have not been run;
-`docs/live-verification.md` has the procedure and one trap worth knowing about
-first — a statement's fund is read and logged but not carried into the mark,
-so a statement for one fund with another configured values the wrong one.
+reports. The database write has not been run. The sheet has been run twice from
+real databases on 2026-08-10 — which is not the same as verified. What those
+runs establish is that the tabs are written and that StonkSmith reads its own
+banner back; what they cannot establish is how the values render, and the
+refusal has still never been tried against a real tab. `docs/live-verification.md` has the
+procedure, those runs written up, and one trap worth knowing about first — a
+statement's fund is read and logged but not carried into the mark, so a
+statement for one fund with another configured values the wrong one.
 
 Manage stored credentials and scraped balances:
 
@@ -1002,6 +1006,35 @@ wrong number rather than a stale one, so it is reported as a failure rather than
 as a good night. Piping into the shell has always worked, but it exits `0`
 however the command went — and a scheduled step that cannot fail is one that
 stops working silently.
+
+`verify`, beside it, checks what a successful sync cannot show. Two halves, and
+either can be run alone:
+
+`verify tabs` reads the four tabs back. A write that returned says the request was
+accepted, not that the values arrived as the kind of thing they were meant to be —
+so this checks the banner on all four, row 2 against the column contract on the
+three that have one, the movement count against the databases, that every
+`Processed On` is `YYYY-MM-DD` and sorted newest-first within its account, that
+money came back as a number rather than as text, and that the dashboard's two
+totals agree. The last two are marked in the output as resting on an assumption
+about what a rendered cell returns, so a failure there is ambiguous between a
+wrong sheet and a wrong check until it has run once.
+
+`verify guard` creates one scratch tab and asks the ownership check whether a
+defaced first cell is refused, whether text below a blank one is refused, and
+whether a wholly empty tab is adopted, then deletes the tab again. No tab the sync
+writes is opened, and a tab of that name which already exists stops the run rather
+than being adopted.
+
+`verify` takes the same scripted form and the same statuses: `1` when a check did
+not behave, and `1` when a half could not be run at all. Not reaching the sheet
+says nothing about the guard, and "nothing known" must not exit the way "checked
+and clean" does.
+
+Two things neither half covers: that a refusal aborts the *whole* sync, and that an
+absent value arrived as an empty cell rather than an empty string — read back, those
+two are the same value, so only a formula's behaviour tells them apart.
+`docs/live-verification.md` has both steps.
 
 ### What a tab may promise
 

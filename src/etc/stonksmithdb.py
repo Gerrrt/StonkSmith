@@ -8,6 +8,7 @@ from os import listdir
 from pathlib import Path
 from sys import argv
 from types import ModuleType
+from typing import Any
 
 from sqlalchemy import Engine
 
@@ -37,6 +38,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    broker <name>     enter that broker (add/show/export live in there)\n"
         "    workspace list    list workspaces\n"
         "    sheet             rewrite the Google Sheet from these databases\n"
+        "    verify [tabs|guard]  check what a successful sheet write cannot show\n"
         "    help              commands at this level\n"
         "    exit              quit\n"
     )
@@ -218,6 +220,125 @@ class StonkSmithDBMenu(cmd.Cmd):
             # but the sheet it produced is missing a broker's money, which is
             # the wrong total rather than a stale one.
             self.failed = True
+
+    def do_verify(self, line: str) -> None:
+        """
+        Check what a successful sync cannot show, against real Sheets.
+
+        Two halves, and `verify` on its own runs both. ``tabs`` reads the four
+        tabs back: a write that returned says the request was accepted, not that
+        the values arrived as the kind of thing they were meant to be. ``guard``
+        asks claim() its three questions on a tab it makes and removes -- the
+        refusal is the one rule here whose failure cannot be undone by running
+        again, and observing it used to mean defacing a live tab.
+
+        Neither half retires the manual steps entirely. A refusal aborting the
+        *whole* sync is refresh() claiming every tab before clearing any, and the
+        scratch tab is not one of them; and an absent value arriving as an empty
+        cell rather than an empty string cannot be seen from a read at all.
+
+        A check that did not behave sets ``self.failed``, as does a half that
+        could not run at all, so the scripted form exits on the finding. A
+        verification that reports "unguarded" and exits 0 would be read by
+        everything downstream as a clean run.
+        :param line: "tabs", "guard", or empty for both
+        :return: None
+        """
+
+        # Same reason as do_sheet: this pulls in gspread and google-auth, and the
+        # shell is mostly used for things that never touch Sheets.
+        from etc.portfolio_sheet import (
+            GUARD_CHECK_TAB,
+            check_ownership_guard,
+            check_tabs,
+        )
+        from helpers.sheets import SPREADSHEET_NAME
+
+        which = line.strip().lower()
+
+        if which not in ("", "tabs", "guard"):
+            print(f"[-] Unknown check '{which}'. Use 'tabs', 'guard', or neither.")
+            self.failed = True
+            return
+
+        cases: list[Any] = []
+
+        if which in ("", "tabs"):
+            print(f"[*] Reading the four tabs back from '{SPREADSHEET_NAME}'.")
+            read = self._checked(
+                run=lambda: check_tabs(workspace=self.workspace), what="Tab check"
+            )
+
+            if read is None:
+                self.failed = True
+                return
+
+            cases.extend(read)
+
+        if which in ("", "guard"):
+            print(
+                f"[*] Making the tab '{GUARD_CHECK_TAB}' in '{SPREADSHEET_NAME}', "
+                "asking the guard about it, and deleting it again. No other tab "
+                "is opened."
+            )
+            guarded = self._checked(run=check_ownership_guard, what="Ownership check")
+
+            if guarded is None:
+                self.failed = True
+                return
+
+            cases.extend(guarded)
+
+        for case in cases:
+            print(f"{'[+]' if case.passed else '[-]'} {case.name}")
+
+            if not case.passed:
+                # The finding, not a footnote. A guard that adopted a tab it
+                # should have refused is the shape that eats somebody's work.
+                # Only on a failure: a passing refusal carries the refusal message
+                # as its detail, and printing that under a [+] is four lines
+                # saying the expected thing happened.
+                print(f"    Expected {case.expected}: {case.detail or 'it did not'}")
+
+        failed = [case for case in cases if not case.passed]
+
+        if failed:
+            print(
+                f"[-] {len(failed)} of {len(cases)} did not behave. Until this "
+                "reads clean, treat the machine-owned tabs as unguarded and do "
+                "not keep anything of your own in the spreadsheet."
+            )
+            self.failed = True
+            return
+
+        print(
+            f"[*] All {len(cases)} checks behaved, against real Sheets rather "
+            "than a stub. Two things they cannot cover are still in "
+            "docs/live-verification.md: a refusal aborting the whole sync, and "
+            "an absent value arriving as an empty cell."
+        )
+
+    def _checked(self, run: Any, what: str) -> Any:
+        """
+        Run one half, turning either failure into a line rather than a traceback.
+        :param run: The check to call
+        :param what: What to call it in an unexpected failure
+        :return: The cases, or None if it could not run
+        :rtype: Any
+        """
+
+        from helpers.sheets import SheetsUnavailable
+
+        try:
+            return run()
+
+        except SheetsUnavailable as e:
+            print(f"[-] {e}")
+
+        except Exception as e:
+            print(f"[-] {what} failed: {type(e).__name__}: {e}")
+
+        return None
 
     def write_config(self) -> None:
         """

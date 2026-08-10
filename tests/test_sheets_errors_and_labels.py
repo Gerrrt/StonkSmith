@@ -33,6 +33,72 @@ class OpenWorksheetErrorTests(unittest.TestCase):
         self.assertIn("credentials.json", message)
         self.assertIn("authorized_user.json", message)
 
+    def test_an_expired_token_is_not_told_to_replace_the_client(self) -> None:
+        # The exact error from the field, 2026-08-10. It is not the same failure
+        # as the one above and it does not have the same fix: the token expired
+        # on its own and the OAuth client behind it is untouched.
+        failure = RefreshError(
+            "invalid_grant: Token has been expired or revoked.",
+            {"error": "invalid_grant"},
+        )
+
+        with (
+            patch("helpers.sheets.gspread.oauth", side_effect=failure),
+            self.assertRaises(SheetsUnavailable) as caught,
+        ):
+            open_worksheet(worksheet_name="529 Plan")
+
+        message = str(caught.exception)
+
+        # The whole fix, and the only file that has to go.
+        self.assertIn("authorized_user.json", message)
+
+        # And not the expensive advice: a trip to the Google console to make a
+        # new client ID does nothing for a token that merely aged out. This is
+        # the assertion that would have failed before the split.
+        self.assertNotIn("create a new OAuth client", message)
+
+    def test_a_lazy_refresh_failure_still_says_what_to_do(self) -> None:
+        # gspread.oauth() reads the cached token off disk without touching the
+        # network, so an expired one gets past it and fails on the first real
+        # call instead. That is the branch a returning runner actually hits, and
+        # it used to report the failure with no fix attached at all.
+        client = MagicMock()
+        client.open.side_effect = RefreshError(
+            "invalid_grant: Token has been expired or revoked.",
+            {"error": "invalid_grant"},
+        )
+
+        with (
+            patch("helpers.sheets.gspread.oauth", return_value=client),
+            self.assertRaises(SheetsUnavailable) as caught,
+        ):
+            open_worksheet(worksheet_name="529 Plan")
+
+        self.assertIn("authorized_user.json", str(caught.exception))
+
+    def test_an_unrecognised_auth_failure_offers_both_fixes_in_order(self) -> None:
+        # Neither marker present -- a transport error, say. The function cannot
+        # tell which applies, so it names the cheap fix first rather than
+        # guessing, and both are better than the bare failure it used to give.
+        failure = RefreshError("Failed to retrieve token", {})
+
+        with (
+            patch("helpers.sheets.gspread.oauth", side_effect=failure),
+            self.assertRaises(SheetsUnavailable) as caught,
+        ):
+            open_worksheet(worksheet_name="529 Plan")
+
+        message = str(caught.exception)
+        self.assertIn("authorized_user.json", message)
+        self.assertIn("credentials.json", message)
+        self.assertLess(
+            message.index("authorized_user.json"),
+            message.index("credentials.json"),
+            "The cheap fix has to come first, or the expensive one reads as the "
+            "thing to try.",
+        )
+
     def test_missing_spreadsheet_names_the_spreadsheet(self) -> None:
         client = MagicMock()
         client.open.side_effect = gspread.exceptions.SpreadsheetNotFound("nope")
