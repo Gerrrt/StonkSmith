@@ -60,9 +60,9 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused two unrelated hosted environments, 2026-08-07 and 2026-08-09, and tsp.gov answered from both | No |
 | TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
 | TSP — database write | Unit tests with a mocked DB | No |
-| The sheet — four machine-owned tabs | One real run on 2026-08-10 wrote all four tabs from five databases, so `claim()` and `write_rows()` have met real Sheets; nobody then opened the spreadsheet, and the four checks on how the values render are exactly the ones a successful write does not answer | No |
-| The sheet — the whole transaction history reaching a tab | The same run, which wrote 9 movements. The shell reader stops at 500, so a workspace this size cannot put the question at all — this row needs a different workspace rather than a longer sitting | No |
-| The sheet — refusing a tab it does not own | Unit tests with a faked spreadsheet. The 2026-08-10 run claimed all four tabs successfully, which exercises `claim()`'s accept path only; the refusal is the path that matters and it stayed untouched | No |
+| The sheet — four machine-owned tabs | Two runs on 2026-08-10 from five databases, and the second accepted all four tabs the first had written — so the banner survives a round trip through Sheets and `claim()` recognises its own work. Nobody opened the spreadsheet, so the column contract and the four checks on how values render are still exactly what a successful write does not answer | No |
+| The sheet — the whole transaction history reaching a tab | The same two runs, 9 movements each. The shell reader stops at 500, so a workspace this size cannot put the question at all — this row needs a different workspace rather than a longer sitting | No |
+| The sheet — refusing a tab it does not own | Unit tests with a faked spreadsheet. The two 2026-08-10 runs accepted all four tabs each, so `claim()`'s accept path is now well covered against real Sheets; the refusal is the path that matters and it stayed untouched | No |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
 *one account state*: one investment account, one holding, one deposit account. So the
@@ -716,7 +716,7 @@ Then *Recording a result* below, which is where the asymmetry it warns about act
 bites: one `sheet` run touches all three of these rows, and the refusal is the only one
 that writes itself up.
 
-### Run once, on 2026-08-10
+### Run twice, on 2026-08-10
 
 The sync itself worked, on the second attempt — the first died on the expired token
 described above. What came back:
@@ -725,13 +725,44 @@ described above. What came back:
 [*] Refreshed: 16 accounts, 9 holdings, 9 movements from ally, fidelity, schwab529plan, snaptrade, tsp.
 ```
 
-**What that line establishes on its own**, before anybody opens the spreadsheet:
+Then again, deliberately, because a second run settles something the first cannot:
+
+```
+[*] Refreshed: 16 accounts, 9 holdings, 9 movements from ally, fidelity, schwab529plan, snaptrade, tsp.
+```
+
+Same counts, same five brokers, and **no authorization URL the second time** — which is
+the signature of the new token being cached and working rather than of nothing happening.
+
+**What the first line establishes on its own**, before anybody opens the spreadsheet:
 authorization succeeded, `Investment Account Scrapes` was found, all four tabs were
 ensured, **`claim()` accepted all four before any of them was cleared**, and three
 `write_rows()` calls plus the dashboard completed against real Sheets. Five broker
 databases opened, and no `[-] Not on the sheet:` line means none was skipped. So the
 machinery — the authorization, the four-tab claim, the chunked RAW write — has now met
 the real thing rather than a `MagicMock`.
+
+**What the second run adds is the banner round-trip**, and it is worth spelling out,
+because it does not follow from the counts being the same. `refresh()` opens fresh
+worksheet handles every time, and `claim()` remembers its answer on the handle rather
+than in the module, so a second run cannot inherit the first one's verdict: it has to
+read `A1` again, over the network, on all four tabs. By then those tabs were not empty —
+the first run had filled them — so the blank-`A1` path was not available either, since
+`claim()` answers a blank first cell by reading the whole tab and refusing it if anything
+is there. The only way all four could be accepted a second time is if `A1` came back
+holding exactly `BANNER`, after `.strip()`.
+
+That rules out the failure which would be worst to find late. A banner that Sheets stored
+differently from how it was sent — truncated, re-quoted, whitespace-folded, or turned into
+something `USER_ENTERED` would have parsed — would make StonkSmith refuse its own four
+tabs on every subsequent run, permanently, with a message blaming data the user never
+wrote. It is the one way the safety property could invert into a total lockout, and it is
+now ruled out against real Sheets rather than against a stub that returns whatever it was
+handed.
+
+Two runs also make the view idempotent in practice and not just by construction: the
+counts held, so the second sync neither appended to the tabs nor drifted from the
+databases it reads.
 
 **All three rows are still `No`, for three different reasons.** A write that returns says
 nothing about how the values *render*, and rendering is exactly what checks 2 through 4
@@ -743,14 +774,14 @@ the one whose failure costs somebody their work. And 9 movements cannot settle
 *the whole transaction history reaching a tab* at all: the reader stops at 500, so a tab
 that had silently windowed would have agreed with the shell exactly.
 
-**What would finish it, cheapest first.** Run `sheet` **twice** — the second run's
-`claim()` has to read back the banner the first one wrote, so four accepts on a second
-run prove `A1` carries the banner and round-trips, with nothing opened by hand. Then open
-the spreadsheet once for checks 1 through 4, which is all *four machine-owned tabs* still
-needs. Then the refusal, which needs the deliberate deface. The transaction row is the
-odd one out: it needs a workspace with a few hundred movements at least, and past 2,000
-to put a second chunked write in front of Sheets, so it waits on a broker rather than on
-an afternoon.
+**What would finish it.** Running twice was the cheapest evidence available and it is
+spent; what is left needs eyes or a deliberate act. Open the spreadsheet once for the
+column contract and checks 2 through 4, and *four machine-owned tabs* is done — that is
+one sitting, and the banner half of check 1 is already behind you. Then the refusal, which
+needs the deface and is the only one of the three that can be settled the other way. The
+transaction row is the odd one out: it needs a workspace with a few hundred movements at
+least, and past 2,000 to put a second chunked write in front of Sheets, so it waits on a
+broker rather than on an afternoon.
 
 ---
 
