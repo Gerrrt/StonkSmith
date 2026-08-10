@@ -93,12 +93,13 @@ saw one account state, though, so anything plural about an Ally account is still
 inference. TSP has in part: its statement and share-price parsers, the mark's
 arithmetic and its price download are verified against real data, but its
 database write, the contribution accrual and everything touching the DFAS pay
-table are not. The sheet it feeds sits between the two — its tabs and its
-refusal to overwrite a tab it does not own have met the real spreadsheet, and
-one check on how values render has not. Green tests say the code does what it
-was written to do, which
-is not the same as saying the site still looks the way it did when the parser
-was written.
+table are not. The sheet it feeds is verified: its four tabs were read back
+against the real spreadsheet and it was made to refuse a tab it did not own.
+What is unverified there is one claim about volume — that a tab holds every
+movement rather than the newest five hundred — which needs a broker with the
+history to ask it. Green tests say the code does what it was written to do,
+which is not the same as saying the site still looks the way it did when the
+parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
 gives the procedure for the rest — it is the record, and this paragraph
 summarises it rather than being maintained beside it.
@@ -709,11 +710,13 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write has not been run. The sheet has: on 2026-08-10 it was built
-from real databases, read back tab by tab, and made to refuse a tab it did not
-own. What is left there is one check a read cannot make — whether an absent
-value arrived as an empty cell or as an empty string — and the tabs' creation,
-since they already existed. `docs/live-verification.md` has the
+reports. The database write has not been run. The sheet has: on 2026-08-10 it was
+built from real databases, read back tab by tab, checked by eye where a read
+could not reach, made to refuse a tab it did not own, and rebuilt from nothing
+after its four tabs were deleted. What is left there is the one claim nine
+movements cannot put — that a tab holds every movement rather than the newest
+five hundred — which is tracked on its own as #141.
+`docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
 statement's fund is read and logged but not carried into the mark, so a
 statement for one fund with another configured values the wrong one.
