@@ -48,10 +48,16 @@ def get_config() -> configparser.ConfigParser:
     if _config is not None:
         return _config
 
-    defaults = configparser.ConfigParser()
+    # interpolation=None because a percent sign is a value here, not syntax.
+    # ConfigParser's default BasicInterpolation reads "%" as the start of a
+    # "%(name)s" reference and raises on anything else -- so a member who wrote
+    # the obvious "member_contribution = 5%" got an InterpolationSyntaxError out
+    # of a getter that strips a trailing "%" precisely because it expects one.
+    # Nothing shipped uses interpolation, so there is nothing to lose by it.
+    defaults = configparser.ConfigParser(interpolation=None)
     defaults.read(filenames=default_cfg_path)
 
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     config.read(filenames=user_cfg_path)
 
     backfilled: list[str] = []
@@ -116,9 +122,16 @@ def get_audit_mode() -> bool:
     :return: True when audit mode is enabled
     """
 
-    return get_config().getboolean(
-        section="STONKSMITH", option="audit_mode", fallback=False
-    )
+    try:
+        return get_config().getboolean(
+            section="STONKSMITH", option="audit_mode", fallback=False
+        )
+
+    except ValueError:
+        # Anything that is not a boolean is not permission to reveal a secret.
+        # getboolean raises rather than falling back, so without this a typo
+        # here takes down every command that displays a credential.
+        return False
 
 
 def get_reveal_chars() -> int:
@@ -128,13 +141,19 @@ def get_reveal_chars() -> int:
     """
 
     try:
-        return get_config().getint(
+        configured: int = get_config().getint(
             section="STONKSMITH", option="reveal_chars_of_pwd", fallback=0
         )
 
     except ValueError:
         # "False" is the shipped default and is not an int; reveal nothing.
         return 0
+
+    # A negative is not a shorter prefix, it is a slice counted from the end:
+    # text[:-3] on a secret returns all but the last three characters. Floor it
+    # here rather than trusting every caller to guard, which is the promise the
+    # return type already makes.
+    return max(0, configured)
 
 
 def get_log_mode() -> bool:
@@ -143,9 +162,15 @@ def get_log_mode() -> bool:
     :return: True when log mode is enabled
     """
 
-    return get_config().getboolean(
-        section="STONKSMITH", option="log_mode", fallback=False
-    )
+    try:
+        return get_config().getboolean(
+            section="STONKSMITH", option="log_mode", fallback=False
+        )
+
+    except ValueError:
+        # As with audit_mode: an unreadable value means "not enabled", not a
+        # crash on the way to doing the work the user asked for.
+        return False
 
 
 def get_host_info_colors() -> list[str]:
@@ -167,7 +192,13 @@ def get_host_info_colors() -> list[str]:
     except ValueError, SyntaxError:
         return list(DEFAULT_HOST_INFO_COLORS)
 
-    if len(colors) != 4:
+    # The isinstance check guards the len(), rather than a TypeError catching it
+    # afterwards: "host_info_colors = 5" is a perfectly good literal, so
+    # literal_eval returns it happily and len() is what raises -- a TypeError
+    # out of a getter documented to fall back on anything malformed. Something
+    # uncountable fails the four-name contract the same way a three-item list
+    # does, so it takes the same exit.
+    if not isinstance(colors, list | tuple) or len(colors) != 4:
         stonksmith_logger.error(msg="host_info_colors must have 4 values. Defaulting")
         return list(DEFAULT_HOST_INFO_COLORS)
 
