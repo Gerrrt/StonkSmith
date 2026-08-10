@@ -708,8 +708,8 @@ against real files, and the mark has been checked against what the site itself
 reports. The database write has not been run. The sheet has been run twice from
 real databases on 2026-08-10 — which is not the same as verified. What those
 runs establish is that the tabs are written and that StonkSmith reads its own
-banner back; what they cannot is how the values render, and the refusal has
-still never been tried against a real tab. `docs/live-verification.md` has the
+banner back; what they cannot establish is how the values render, and the
+refusal has still never been tried against a real tab. `docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
 statement's fund is read and logged but not carried into the mark, so a
 statement for one fund with another configured values the wrong one.

@@ -719,20 +719,28 @@ that writes itself up.
 ### Run twice, on 2026-08-10
 
 The sync itself worked, on the second attempt — the first died on the expired token
-described above. What came back:
+described above. Having deleted the cached token, the run reauthorized first:
 
 ```
+stonksmithdb (default) > sheet
+Please visit this URL to authorize this application: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=<elided>&redirect_uri=http%3A%2F%2Flocalhost%3A<port>%2F&scope=...auth%2Fspreadsheets+...auth%2Fdrive&state=<elided>&code_challenge=<elided>&code_challenge_method=S256&access_type=offline
 [*] Refreshed: 16 accounts, 9 holdings, 9 movements from ally, fidelity, schwab529plan, snaptrade, tsp.
 ```
 
-Then again, deliberately, because a second run settles something the first cannot:
+The client ID, the callback port and the PKCE parameters are elided; the two scopes are
+not, because which scopes are asked for is the part worth checking against
+*What it needs* above. Then again, deliberately, because a second run settles something
+the first cannot:
 
 ```
+stonksmithdb (default) > sheet
 [*] Refreshed: 16 accounts, 9 holdings, 9 movements from ally, fidelity, schwab529plan, snaptrade, tsp.
 ```
 
-Same counts, same five brokers, and **no authorization URL the second time** — which is
+Same counts, same five brokers, and **no authorization line the second time** — which is
 the signature of the new token being cached and working rather than of nothing happening.
+That absence is why both transcripts are quoted in full rather than trimmed to the
+`Refreshed:` line: it is evidence, and a trimmed pair would have looked identical.
 
 **What the first line establishes on its own**, before anybody opens the spreadsheet:
 authorization succeeded, `Investment Account Scrapes` was found, all four tabs were
