@@ -690,11 +690,24 @@ that must be exact arithmetic with no estimate in it.
 Anything that stops an estimate being made costs the estimate and not the run:
 a half-filled config, a rank that is not a pay grade, an unreadable service
 date, a grade DFAS publishes no rate for, or a refused download all report
-themselves and leave the anchored mark exactly as it was. The pay table is
-cached under `~/.stonksmith` for the rest of the year, since DFAS changes it
-every January. `--pay-table` reads a page saved by hand, the way `--prices`
-does. Unlike the share price download, **this one has not been run against
-dfas.mil for real** — see `docs/live-verification.md`.
+themselves and leave the anchored mark exactly as it was. A page whose columns
+do not line up with its own headings is refused too, rather than priced: rates
+are matched from the right, so one unexpected column would shift every figure by
+one band, and a rate read one band out is a real published number for a
+seniority the member does not have. That is the one failure here that would
+otherwise look like an answer. The pay table is cached under `~/.stonksmith` for
+the rest of the year, since DFAS changes it every January. `--pay-table` reads a
+page saved by hand, the way `--prices` does, and `--show-pay-table` prints the
+whole parsed grid for checking against the published page.
+
+Unlike the share price download, **this one has not been run against dfas.mil
+for real**: three hosted environments have been refused, most recently on
+2026-08-10 across four different header recipes, while tsp.gov answered from the
+same place each time. That says nothing about a home connection, which is why
+the four keys above are not qualified here. The page's *contents* have been
+checked against the parser, and doing so found two grades — E-9 and E-1 — being
+dropped because DFAS hangs footnote references off the pay grade cell. See
+`docs/live-verification.md`.
 
 Sheets needs no tab prepared: StonkSmith creates `Accounts`, `Holdings`,
 `Transactions` and `Dashboard` itself on the first sync. If the sheet cannot be written at all — no

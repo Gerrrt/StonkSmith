@@ -2,18 +2,30 @@
 <!--
   A reconstruction of the DFAS enlisted basic pay page, not a saved response.
 
-  dfas.mil sits behind a CDN that refuses every non-interactive client, so this
-  file could not be fetched the way tests/tsp_prices.csv was sliced out of the
-  real TSP price file. What is reproduced here is the *structure* observed on
-  the live page on 2026-08-08 -- two tables splitting the columns at twenty
-  years, a "Cumulative Years of Service" spanning header, a "Pay Grade" column,
-  the exact band labels, and E-9's genuinely empty cells below "Over 10" -- with
-  the published January 2026 rates for the grades the tests exercise. Grades not
-  under test are trimmed rather than invented.
+  dfas.mil sits behind a CDN that refuses this project's own client, so the file
+  could not be saved the way tests/tsp_prices.csv was sliced out of the real TSP
+  price file. What is reproduced here is the *structure* of the live page -- two
+  tables splitting the columns at twenty years, a "Cumulative Years of Service"
+  spanning header, a "Pay Grade" column, the exact band labels, and E-9's and
+  E-8's genuinely empty leading cells.
 
-  Replacing this with a browser-saved copy of the real page is the first step of
-  the live verification in docs/live-verification.md. Until that happens, the
-  parser is proven against this shape and not against DFAS's markup.
+  The rates, the grade list and the footnotes were read off the live page on
+  2026-08-10 and are reproduced verbatim, so the *data* here is no longer
+  invented -- see docs/live-verification.md for how, and for what that run did
+  and did not settle. All nine grades are present rather than only the ones
+  under test, because trimming the table was itself a way the reconstruction
+  differed from the page.
+
+  The detail that matters most is the one the earlier reconstruction got wrong:
+  the page hangs its footnote references off the pay grade cell, so E-9 reads
+  "E-9 (Notes 2 & 3)" and E-1 reads "E-1 (Notes 4 & 5)". Read strictly, both
+  rows are dropped -- the top and the bottom of the enlisted scale -- and the
+  run then reports that DFAS publishes no rate for the grade. That is why
+  helpers.dfas.grade_in_cell() exists, and this file is what keeps it honest.
+
+  Still not a saved response: the tag names, nesting and attributes are this
+  file's, not DFAS's. Replacing it with a browser-saved copy is still the first
+  step of the live verification in docs/live-verification.md.
 -->
 <html>
   <head><title>Basic Pay - Enlisted Members</title></head>
@@ -39,7 +51,7 @@
         <th>Over 18</th>
       </tr>
       <tr>
-        <td>E-9</td>
+        <td>E-9<br />(Notes 2 &amp; 3)</td>
         <td>&nbsp;</td>
         <td>&nbsp;</td>
         <td>&nbsp;</td>
@@ -51,6 +63,20 @@
         <td>$7,263.60</td>
         <td>$7,496.10</td>
         <td>$7,730.70</td>
+      </tr>
+      <tr>
+        <td>E-8</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>$5,656.50</td>
+        <td>$5,907.00</td>
+        <td>$6,061.80</td>
+        <td>$6,247.20</td>
+        <td>$6,448.20</td>
+        <td>$6,811.20</td>
       </tr>
       <tr>
         <td>E-7</td>
@@ -67,6 +93,48 @@
         <td>$6,177.30</td>
       </tr>
       <tr>
+        <td>E-6</td>
+        <td>$3,401.10</td>
+        <td>$3,743.10</td>
+        <td>$3,908.10</td>
+        <td>$4,068.90</td>
+        <td>$4,235.70</td>
+        <td>$4,612.80</td>
+        <td>$4,759.50</td>
+        <td>$5,043.30</td>
+        <td>$5,130.30</td>
+        <td>$5,193.60</td>
+        <td>$5,267.70</td>
+      </tr>
+      <tr>
+        <td>E-5</td>
+        <td>$3,342.90</td>
+        <td>$3,598.20</td>
+        <td>$3,775.80</td>
+        <td>$3,946.80</td>
+        <td>$4,110.00</td>
+        <td>$4,299.90</td>
+        <td>$4,395.30</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+      </tr>
+      <tr>
+        <td>E-4</td>
+        <td>$3,142.20</td>
+        <td>$3,303.00</td>
+        <td>$3,482.40</td>
+        <td>$3,658.50</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+      </tr>
+      <tr>
         <td>E-3</td>
         <td>$2,836.80</td>
         <td>$3,015.00</td>
@@ -81,7 +149,21 @@
         <td>$3,198.00</td>
       </tr>
       <tr>
-        <td>E-1</td>
+        <td>E-2</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+      </tr>
+      <tr>
+        <td>E-1<br />(Notes 4 &amp; 5)</td>
         <td>$2,407.20</td>
         <td>$2,407.20</td>
         <td>$2,407.20</td>
@@ -115,7 +197,7 @@
         <th>Over 40</th>
       </tr>
       <tr>
-        <td>E-9</td>
+        <td>E-9<br />(Notes 2 &amp; 3)</td>
         <td>$8,105.10</td>
         <td>$8,423.10</td>
         <td>$8,756.70</td>
@@ -127,6 +209,20 @@
         <td>$10,217.40</td>
         <td>$10,729.20</td>
         <td>$10,729.20</td>
+      </tr>
+      <tr>
+        <td>E-8</td>
+        <td>$6,995.40</td>
+        <td>$7,308.30</td>
+        <td>$7,481.70</td>
+        <td>$7,908.90</td>
+        <td>$7,908.90</td>
+        <td>$8,067.30</td>
+        <td>$8,067.30</td>
+        <td>$8,067.30</td>
+        <td>$8,067.30</td>
+        <td>$8,067.30</td>
+        <td>$8,067.30</td>
       </tr>
       <tr>
         <td>E-7</td>
@@ -143,6 +239,48 @@
         <td>$7,067.40</td>
       </tr>
       <tr>
+        <td>E-6</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+        <td>$5,267.70</td>
+      </tr>
+      <tr>
+        <td>E-5</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+        <td>$4,421.70</td>
+      </tr>
+      <tr>
+        <td>E-4</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+        <td>$3,815.40</td>
+      </tr>
+      <tr>
         <td>E-3</td>
         <td>$3,198.00</td>
         <td>$3,198.00</td>
@@ -157,7 +295,21 @@
         <td>$3,198.00</td>
       </tr>
       <tr>
-        <td>E-1</td>
+        <td>E-2</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+        <td>$2,697.90</td>
+      </tr>
+      <tr>
+        <td>E-1<br />(Notes 4 &amp; 5)</td>
         <td>$2,407.20</td>
         <td>$2,407.20</td>
         <td>$2,407.20</td>
@@ -172,7 +324,20 @@
       </tr>
     </table>
 
-    <p>NOTE 1. Basic pay is limited to the rate of basic pay for Level V of the
-    Executive Schedule during calendar year 2026, which is $15,408.30.</p>
+    <p>NOTE 1. For rank titles, see Volume 7A Comparable Grades.</p>
+    <p>NOTE 2. Basic pay for senior enlisted member (grade E-9) is $11,166.90
+    regardless of years of service while serving as: a. Senior Enlisted Advisor
+    of the Chairman, Joint Chiefs of Staff; b. Sergeant Major of the Army;
+    c. Master Chief Petty Officer of the Navy; d. Chief Master Sergeant of the
+    Air Force; e. Sergeant Major of the Marine Corps; f. Chief Master Sergeant
+    of the Space Force; g. Master Chief Petty Officer of the Coast Guard; or
+    h. Senior Enlisted Advisor to the Chief of the National Guard Bureau.</p>
+    <p>NOTE 3. If a member is placed on terminal leave pending retirement
+    immediately following the completion of service as the senior enlisted
+    member of a Military Department, the member is entitled to the higher
+    senior enlisted pay $11,166.90 up to a maximum of 60 days.</p>
+    <p>NOTE 4. Must have 4 months of active duty or more.</p>
+    <p>NOTE 5. Basic pay for an E-1 with less than 4 months of active duty is
+    $2,225.70.</p>
   </body>
 </html>

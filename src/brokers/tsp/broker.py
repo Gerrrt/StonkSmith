@@ -43,11 +43,15 @@ from etc.config import (
 from etc.logger import StonkSmithAdapter
 from etc.paths import stonksmith_path
 from helpers.dfas import (
+    BANDS,
+    SPLIT_BAND,
     TABLE_NAMES,
     TABLE_PATHS,
+    alignment_faults,
     band_on,
     basic_pay_table,
     effective_date,
+    missing_upper_table,
     normalize_grade,
     table_for,
 )
@@ -248,10 +252,91 @@ class Tsp(ApiConnection):
             )
             return
 
+        # Refused rather than reported, and this is the one failure here that
+        # takes the accrual down with it on purpose. Everything else that goes
+        # wrong leaves a rate unavailable, which the module says out loud. A page
+        # read one column out leaves a rate *available* and wrong by one band --
+        # a real figure for a seniority the member does not have, which reads as
+        # an answer all the way into a stored mark.
+        faults: list[str] = alignment_faults(html=html)
+
+        if faults:
+            self.logger.fail(
+                msg=(
+                    "The DFAS pay page does not line up with its own column "
+                    f"headings ({'; '.join(faults)}), so its rates would be "
+                    "read against the wrong years of service. That is a "
+                    "plausible number rather than an obvious error, so the "
+                    "accrual is dropped instead of priced on it. Pass "
+                    "--pay-table with a copy saved in a browser, or "
+                    "--no-accrual to value the unit count on its own."
+                )
+            )
+            return
+
+        # Short, not wrong: what was read is right as far as it goes, so this
+        # costs nothing until a member is past the split, and verify_pay_rate()
+        # already refuses that case by name. Said here so the page is diagnosed
+        # when it changes rather than when someone's anniversary reaches it.
+        if missing_upper_table(table=table):
+            self.logger.highlight(
+                msg=(
+                    f"The DFAS pay page published no column past {SPLIT_BAND!r}. "
+                    "It splits its columns at twenty years and only the first "
+                    "table was read, so no rate is available past that."
+                )
+            )
+
         self.pay_table = table
         self.grade = grade
         self.basd = basd
         self.pay_effective = effective_date(html=html)
+
+        if getattr(self.args, "show_pay_table", False):
+            self.show_pay_table(table=table)
+
+    def show_pay_table(self, table: dict[str, dict[str, float]]) -> None:
+        """
+        Print the whole parsed grid, in the two halves the page prints it in.
+
+        A run already prints the one rate the configured member is paid, which is
+        enough to price a contribution and not enough to check a parser against
+        the published page: one cell agreeing does not show that the blanks are
+        where the blanks are, or that the half past twenty years arrived at all.
+
+        This exists for that comparison. `tests/dfas_basic_pay_em.html` is a
+        reconstruction of DFAS's markup rather than a saved response, so the only
+        way to retire it is for somebody who can reach dfas.mil to save the real
+        page, print this against it, and read the two side by side --
+        docs/live-verification.md has the procedure. Laid out in the page's own
+        two halves for that reason, so the columns line up with what is on screen
+        beside it.
+
+        A band with no published rate is blank here, the way it is blank there.
+        :param table: A parsed page, as basic_pay_table() returns
+        :return: None
+        :rtype: None
+        """
+
+        labels: list[str] = [label for label, _years in BANDS]
+        split: int = labels.index(SPLIT_BAND) + 1
+
+        self.logger.success(
+            msg=f"DFAS basic pay as parsed: {len(table)} grade(s), monthly"
+        )
+
+        for columns in (labels[:split], labels[split:]):
+            self.logger.display(
+                msg="Grade " + "".join(f"{label:>12}" for label in columns)
+            )
+
+            for grade in sorted(table):
+                rates: dict[str, float] = table[grade]
+                cells: str = "".join(
+                    f"{rates[label]:>12,.2f}" if label in rates else f"{'':>12}"
+                    for label in columns
+                )
+                self.logger.display(msg=f"{grade:<6}{cells}")
 
     def pay_table_html(self, table_key: str) -> str | None:
         """

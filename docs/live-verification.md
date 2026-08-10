@@ -56,8 +56,8 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files |
 | TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
 | TSP — share price download | A real request on 2026-08-07; response written up in #48 | Yes |
-| TSP — DFAS pay table parse | `tests/dfas_basic_pay_em.html`, a **reconstruction** of the live page | No |
-| TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused two unrelated hosted environments, 2026-08-07 and 2026-08-09, and tsp.gov answered from both | No |
+| TSP — DFAS pay table parse | `tests/dfas_basic_pay_em.html`, still a **reconstruction** of the live page's markup, but its rates, grades and footnotes were read off that page on 2026-08-10 — which found two rows the parser was dropping | No |
+| TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused three unrelated hosted environments, 2026-08-07, 2026-08-09 and 2026-08-10 — the last across four header recipes — and tsp.gov answered from all three | No |
 | TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
 | TSP — database write | Unit tests with a mocked DB | No |
 | The sheet — four machine-owned tabs | Unit tests with a faked spreadsheet | No |
@@ -575,10 +575,61 @@ rather than the request, and **re-running this from a third hosted environment w
 help.** That is worth one line here because it is the cheap thing to try next and it is
 already known not to work.
 
-**What this does not say.** Two blocked cloud networks are not evidence about a home
-connection, so the README's TSP setup claim is left exactly as it stands. Only a run from
-a machine that is not in a data centre can qualify it, and that run is still the first
-half of this step.
+**Retried a third time on 2026-08-10, and the prediction above held.** Same refusal, same
+control, and this time the recipe was varied deliberately rather than repeated: a genuine
+Chrome User-Agent alone, `Sec-Fetch-*` headers alone, both together, and a complete
+browser header set — `Accept`, `Accept-Language`, `Upgrade-Insecure-Requests`,
+`sec-ch-ua*` and all four `Sec-Fetch-*` — over HTTP/2.
+
+```text
+GET .../Basic-Pay/EM/   browser UA alone            -> 403, 453 bytes
+GET .../Basic-Pay/EM/   Sec-Fetch-* alone           -> 403, 455 bytes
+GET .../Basic-Pay/EM/   both together               -> 403, 455 bytes  (3/3)
+GET .../Basic-Pay/EM/   full browser set, HTTP/2    -> 403, 455 bytes
+   Akamai "Access Denied", Reference #18.861c2117.1786331954.7aea66fd
+
+GET https://www.tsp.gov/data/fund-price-history.csv?...
+-> 200, 555,142 bytes            (same egress, same minute)
+```
+
+So it is **not a header problem**, and the earlier note that "every User-Agent tried" was
+refused, while true, pointed at the wrong thing: no combination of request headers gets
+through from a data centre, because what is being refused is the network. A headless
+Chromium on the same host could not reach `example.com` either, so it settles nothing
+further.
+
+**What this does not say.** Three blocked cloud networks are still not evidence about a
+home connection, so the README's TSP setup claim is left exactly as it stands. Only a run
+from a machine that is not in a data centre can qualify it, and that run is still the
+first half of this step.
+
+**The parse half is settled, and it found a bug.** The download stayed blocked, but the
+live page's *contents* were read on 2026-08-10 by a route that is not StonkSmith's own
+client, which is enough to check the parser against the real thing even though it is not
+enough to save the file. What that established:
+
+* The rates are right. All nine enlisted grades, both tables, checked figure by figure
+  against `tests/dfas_basic_pay_em.html`. Every rate the fixture already carried matched.
+* `Effective January 1, 2026` is on the page in the form `effective_date()` expects.
+* The column headings are exactly the band labels, in order, with no extra column at the
+  right of either table — so the shift described below is a hazard, not a present fault.
+* **The pay grade cells carry footnote references, and reading them strictly dropped two
+  rows.** The page prints `E-9 (Notes 2 & 3)` and `E-1 (Notes 4 & 5)`, and the grade
+  pattern is anchored, so both rows were skipped — the top and the bottom of the enlisted
+  scale. It was silent: a run for an E-9 reported that DFAS publishes no rate for the
+  grade and listed the grades it did carry, which reads as a gap in the pay table and
+  sends the reader to dfas.mil to look for a row that is printed right there. Fixed by
+  `helpers.dfas.grade_in_cell()`, which strips the reference for a table cell and only
+  for a table cell — a config file saying `E-9 (Notes 2 & 3)` is still refused.
+
+This is exactly what the second half of this step was for, and it is the argument for
+doing it even while the download is blocked: the reconstruction was accurate about every
+number and wrong about the one piece of markup that decided whether two rows existed.
+
+`tests/dfas_basic_pay_em.html` now carries all nine grades, the real footnote references
+and the real note text, so the data in it is no longer invented. **It is still a
+reconstruction** — the tag names, nesting and attributes are the fixture's, not DFAS's —
+so the row below stays `No` and replacing it with a saved page is still worth doing.
 
 Two things to establish, in order.
 
@@ -593,27 +644,39 @@ uv run stonksmith tsp -M tsp
 ```
 
 If instead it prints `The enlisted members pay table returned HTTP 403. dfas.mil
-refused the request...`, then this download is not unattended, and the README claim
-that four config keys are the whole setup needs the same qualification `--prices`
-carries. Say so there rather than leaving it standing.
+refused the request...`, then this download is not unattended, and the README's claim
+that four more config keys are all the contribution accrual needs — the `rank` / `basd` /
+`member_contribution` / `agency_contribution` block — needs the same qualification
+`--prices` carries. Say so there rather than leaving it standing.
 
 Second — and worth doing **either way** — that the parser reads the real markup:
 
 1. Open <https://www.dfas.mil/Military-Members/payentitlements/Pay-Tables/Basic-Pay/EM/>
    in a browser and save the page as HTML.
-2. Run against it: `uv run stonksmith tsp -M tsp --pay-table ~/Downloads/EM.html`
-3. Check the printed basic pay against the figure in that grade's row and time-in-service
-   column on the page itself.
+2. Run against it, printing the whole grid rather than the one rate the run needs:
+   `uv run stonksmith tsp -M tsp --pay-table ~/Downloads/EM.html --show-pay-table`
+3. Read the printed grid against the page. Every grade, both halves, and the blanks —
+   not just the configured member's own figure.
 
-If step 3 disagrees, the reconstruction differs from DFAS's markup in a way the tests
-cannot see. **Replace `tests/dfas_basic_pay_em.html` with the saved page** — trimmed of
-anything but the tables — and the fixture stops being a reconstruction. That is the
-single highest-value thing anyone with access to dfas.mil can do for this feature.
+Step 3 is written that way because of what the 2026-08-10 read found: one rate agreeing
+proves very little. E-7 was correct throughout while E-9 and E-1 were missing entirely,
+and a run configured for E-7 would have reported nothing wrong. **A missing row is as
+much a parse failure as a wrong number, and it is the quieter of the two.**
 
-A number that is merely *plausible* is the failure mode to watch for here. The columns
+If the grid disagrees with the page, the reconstruction differs from DFAS's markup in a
+way the tests cannot see. **Replace `tests/dfas_basic_pay_em.html` with the saved page** —
+trimmed of anything but the tables — and the fixture stops being a reconstruction. That
+is still the single highest-value thing anyone with access to dfas.mil can do for this
+feature, because the data in the fixture is now real and the *markup* still is not.
+
+A number that is merely *plausible* is the other failure mode to watch for. The columns
 are matched from the right, so a table with an unexpected trailing column would shift
 every rate by one band — which reads as a member being paid at the wrong seniority, not
-as a parse error, and looks entirely like an answer.
+as a parse error, and looks entirely like an answer. The live page has no such column
+today. `helpers.dfas.alignment_faults()` now asks that question of every page before its
+rates are used and drops the accrual rather than pricing on a shifted one, so this is
+guarded rather than merely known about — but the guard is written against the same
+reconstruction, which is one more reason to replace it.
 
 ---
 
