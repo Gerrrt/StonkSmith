@@ -87,12 +87,13 @@ split and database write were all exercised across nine live runs, and its
 session was found not to survive between runs at all, so it needs
 `--manual-login` every time it scrapes — `--from-prices` values it between
 scrapes without one; the published price feed behind that flag has been
-contacted, but the flag's own path has not been run. Those runs saw one account
-state, though, so anything plural about an Ally account is still inference. TSP
-has in part: its statement and share-price parsers, the mark's arithmetic and
-its price download are verified against real data, but its database write, the
-sheet it feeds, the contribution accrual and everything touching the DFAS pay
-table are not. Green tests say the code does what it was written to do, which
+contacted, and the flag has been seen to refuse a database holding no units
+and to open no browser doing it, but its valuing path has not been run. Those
+runs saw one account state, though, so anything plural about an Ally account
+is still inference. TSP has in part: its statement and share-price parsers,
+the mark's arithmetic and its price download are verified against real data,
+but its database write, the sheet it feeds, the contribution accrual and
+everything touching the DFAS pay table are not. Green tests say the code does what it was written to do, which
 is not the same as saying the site still looks the way it did when the parser
 was written.
 `docs/live-verification.md` records which claims stand on an observed run and

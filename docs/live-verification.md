@@ -49,7 +49,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | Ally — Ally Bank deposit accounts skipped, not filed as brokerage | The same nine runs | Yes |
 | Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one. The `units_as_of` stamp on each holding postdates those runs and has not been written to a real one | Yes |
 | Ally — one row per account across runs | `uq_accounts_broker_key`; the row count was never checked across those runs | No |
-| Ally — valuing from published prices without a login | Unit tests over a fake DB and a canned payload, `tests/test_ally_from_prices.py` | No |
+| Ally — valuing from published prices without a login | Unit tests over a fake DB and a canned payload, `tests/test_ally_from_prices.py`. The path's *refusal* has met a real empty database, 2026-08-10, written up under step 6 — but nothing has been valued, which is the claim | No |
 | Ally — the published price feed answers | A real request on 2026-08-09, written up below: 200 and 3,612 bytes of JSON for one symbol, read by `daily_closes()` into 23 dated closes | Yes |
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
 | TSP — statement parser | Real statements, read as issued through `-o STATEMENT=` | Yes, against real files |
@@ -76,9 +76,10 @@ rather than a second witness to it.
 ## Ally
 
 Seven steps. The whole sequence needs one signed-in browser session and about ten
-minutes — except step 6, which deliberately needs no session at all and has to be run
-on a later day than step 1 to mean anything. An eighth check sits after them, unnumbered
-because it is not part of the sequence and needs nothing whatsoever.
+minutes — except step 6, which deliberately needs no session at all, and most of which
+has to be run on a later day than step 1 to mean anything. Its refusal half needs not
+even that, and has been run. An eighth check sits after them, unnumbered because it is
+not part of the sequence and needs nothing whatsoever.
 
 The `[+]`, `[!]`, `[*]` and `[-]` prefixes below are what the logger prints for
 success, highlight, display and failure respectively. Quoted strings are copied from
@@ -280,8 +281,72 @@ the skip announces itself rather than happening quietly.
 
 ### 6. The account values from published prices, with no browser at all
 
-Needs step 1 to have run first, since the units come out of the database. Then, on any
-later day:
+Four things to establish, and they do not cost the same. **Two of them cost nothing** —
+that the run refuses a database with no units on record, and that it opens no browser
+doing it — and both have been run; they are written up first for that reason. The two
+that remain are about what happens when there *are* units, so they need step 1 to have
+run first, and a later day than step 1 for the price to be a different one.
+
+#### The half that needs nothing, run 2026-08-10
+
+Against a database with no Ally holdings on record, the run must refuse rather than
+value nothing:
+
+```
+[-] No holdings on record to value. Run with --manual-login once so a signed-in run can record the units.
+```
+
+A number here instead of a refusal would be the finding — it would mean the run had
+invented units rather than read them. That is the failure that matters more than the
+success, and until now it had only ever been met by a `MagicMock`.
+
+Run against a throwaway home, so a fresh `ally.db` is the whole of the database state.
+`$HOME` is the only input to the path StonkSmith derives — no flag or variable
+overrides it — so redirecting it relocates the entire tree:
+
+```bash
+SCRATCH=$(mktemp -d)
+HOME=$SCRATCH USERPROFILE=$SCRATCH \
+  PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring \
+  uv run stonksmith ally -M ally --from-prices
+```
+
+```text
+Broker:  Ally    [!] Kicking off broker flow
+Broker:  Ally    [+] Valuing from published prices; no sign-in needed.
+Module:  Ally    [!] Starting Ally sync for: published prices
+Module:  Ally    [-] No holdings on record to value. Run with --manual-login once so a signed-in run can record the units.
+
+exit=1
+```
+
+Both quoted lines appeared verbatim, and the run left `accounts`, `account_snapshots`
+and `holdings` all at zero rows — a refusal that had already written a row would be a
+worse fault than the invented number this is checking for. Repeating the command
+against the same home changed none of that.
+
+**No browser opened, and the filesystem is what says so.** First-run setup creates
+`~/.stonksmith/playwright/` whatever the run does, so the directory existing proves
+nothing; what it *contains* does. After the price run it was empty. The control is the
+same command with the flag removed:
+
+```text
+Broker:  Ally    [-] Could not start browser for Ally: BrowserType.launch: Executable
+                     doesn't exist at /opt/pw-browsers/firefox-1482/firefox/firefox
+```
+
+— and that run left `Ally.json` behind in the same directory. So the two branches are
+distinguishable on disk and not merely in the log: the scrape branch reached
+`BrowserType.launch` and got as far as writing session state, and the price branch
+returned before either. A price run that opened a window would have to explain the file.
+
+`tests/test_ally_from_prices_cli.py` now runs exactly this and reads the same four
+things back, so the strings quoted above stay true to the source rather than to the day
+they were copied.
+
+#### The half that still needs step 1
+
+On any day later than step 1:
 
 ```bash
 uv run stonksmith ally -M ally --from-prices
@@ -292,10 +357,6 @@ uv run stonksmith ally -M ally --from-prices
 [+] <label>: <units> <symbol> x <price> (<price date>) = <value>
 [*] <label>: priced at <price date>; units as recorded <stamp>. Re-run with --manual-login after a deposit.
 ```
-
-**No browser window should open.** That is most of the claim: this path returns before
-Playwright starts and before the preflight request to the bank, so a run that opens a
-window has taken the scrape branch instead.
 
 Three things to check in `stonksmithdb` afterwards. `show snapshots` should have one
 more row, and its `as_of` should carry the **price** date rather than being empty — this
@@ -313,19 +374,18 @@ the units a day old however old they are — drifting younger while the units dr
 older, and reading as fact the whole way. An unchanged date is the units' age still
 being the last sign-in's.
 
-Then the failure that matters more than the success. Against a database with no Ally
-holdings on record:
-
-```
-[-] No holdings on record to value. Run with --manual-login once so a signed-in run can record the units.
-```
-
-A number here instead of a refusal would be the finding — it would mean the run had
-invented units rather than read them.
-
 Worth knowing before ticking this: the sheet is **not** synced by a price run, so an
 unchanged `Holdings` tab is expected rather than a failure. Run `sheet` in
 `stonksmithdb` to refresh it.
+
+**What this settles, and what it does not.** The run above settles that the path
+refuses units it has no record of, and that it reaches that refusal without starting a
+browser. It does not settle the row *Ally — valuing from published prices without a
+login*, which stays `No`: nothing was valued. An empty database exercises the branch
+that declines to multiply, and the claim is about the branch that multiplies — the
+price date reaching `as_of`, the units surviving unchanged, and the stamp on them
+holding still across two runs. Those need units in the database, and units need a
+sign-in.
 
 ### 7. Re-running does not duplicate accounts
 
