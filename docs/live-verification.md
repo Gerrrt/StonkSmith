@@ -325,7 +325,7 @@ invented units rather than read them.
 
 Worth knowing before ticking this: the sheet is **not** synced by a price run, so an
 unchanged `Holdings` tab is expected rather than a failure. Run `sheet` in
-`stonksmithdb` to refresh it.
+`stonksmithdb` to refresh it — see *The sheet* below.
 
 ### 7. Re-running does not duplicate accounts
 
@@ -451,73 +451,24 @@ count* was true. A TSP mark is a unit count times a share price and the two are 
 as of different days, so a stored mark that carries only one of them cannot be audited
 later. `show holdings` displays it, and so does the `Holdings` tab.
 
-With the contribution keys filled in (step 6) there are **two** holding rows, not one:
+Confirm the two dates differ, and that `show holdings` reports the unit date under
+`Units As Of` rather than repeating the price date — that divergence is the whole
+reason this broker exists. Confirming the *tab* agrees with the shell belongs to
+*The sheet* below, which is the one procedure on this page needing a Google credential
+and therefore not one of these five steps.
+
+With the contribution keys filled in (step 5) there are **two** holding rows, not one:
 the anchored count, dated to the statement, and the estimate, dated to the last
 contribution it could price. They must sum to the snapshot's `value` — check that
 they do, because a total that does not add up is the one way this could be wrong
 while every individual number looks right.
 
-### 4. The sheet
+One check only a real database can make: open an existing `tsp.db` — one written before
+`holdings.units_as_of` existed — and confirm that marks stored back then show a `Units
+As Of` too. Those dates were migrated out of `holdings.raw_value`, and no test can
+prove that against your file.
 
-No tab needs creating: StonkSmith makes `Accounts`, `Holdings`, `Transactions` and
-`Dashboard` on the first sync. Nor does this need a scrape any more — the sheet is a view of the
-databases, so it can be built from them alone:
-
-```
-$ uv run stonksmithdb
-stonksmithdb (default) > sheet
-[*] Refreshed: 6 accounts, 23 holdings, 412 movements from ally, fidelity, snaptrade, tsp.
-```
-
-Five things to confirm on the tabs themselves, none of which a unit test can see:
-
-1. **The first cell of each tab carries the machine-owned banner**, and row 2 is the
-   column contract exactly as `src/etc/portfolio.py` spells it.
-2. **Money is a number, not text.** A currency cell should right-align on its own and
-   accept a number format. If it left-aligns, something is writing strings again.
-3. **The dashboard's `Total (USD)` equals its `Total as read`.** Those are the same
-   number computed by Sheets and by Python; a disagreement means the write was
-   truncated, and it is the only signal that would say so.
-4. **Empty cells are genuinely empty.** `Accounts` minus the count of `As Of` values
-   is how the dashboard counts accounts whose source never gave a date, and it relies
-   on an absent value arriving as an empty cell rather than as an empty string that
-   `COUNTA` still counts. If that figure reads 0 where the tab visibly has blank
-   `As Of` cells, the formula needs `COUNTIF(...,"<>")` instead.
-5. **`Transactions` holds every movement, not the newest five hundred.** Compare the
-   count on the line above against `show transactions` inside a broker shell, and do
-   it against a broker with a long history rather than a fresh one — five hundred is
-   the number the shell reader stops at, and a tab that silently agreed with it would
-   look entirely correct. Check the dates too: the 529 scraper stores `12/30/2025`
-   and SnapTrade stores ISO, so the tab is where they must both read `YYYY-MM-DD`,
-   sorted newest-first within each account. A `12/30/2025` reaching a cell means the
-   normalization was skipped, and the tab's order is then wrong wherever a December
-   row sits above a January one.
-
-Then the refusal, which is the point of the whole thing. Type something into a spare
-tab, rename it `Holdings`, and run `sheet` again:
-
-```
-[-] Tab 'Holdings' holds something StonkSmith did not write, so it was left
-    untouched and nothing was synced.
-```
-
-Confirm your text is still there, and that `Accounts` was **not** rewritten either —
-every tab is claimed before any of them is cleared, so a refusal costs nothing
-rather than leaving one tab fresh beside a stale one.
-
-Worth knowing while verifying TSP specifically: the unit count's own date is column
-`P`, `Units As Of`, beside the `As Of` that carries the price date. Confirm the two
-differ — that is the whole reason this broker exists — and that `show holdings` in
-`stonksmithdb` shows the same date the tab does.
-
-The Holdings tab is sixteen columns wide as of that change. A tab still ending at `O`
-after a sync is a visible sign the sync did not run.
-
-One check only a real database can make: open an existing `tsp.db` once and confirm
-that marks written *before* that upgrade show a `Units As Of` too. Those dates were
-migrated out of `holdings.raw_value`, and no test can prove that against your file.
-
-### 5. The staleness warning fires, and stays quiet
+### 4. The staleness warning fires, and stays quiet
 
 The threshold is 40 days: beyond that the unit count has almost certainly missed a
 contribution, since TSP posts at least monthly.
@@ -545,7 +496,7 @@ uv run stonksmith tsp -M tsp --units-as-of <today>
 The warning must come *before* the value, not after. Saying how old a number is only
 helps if it is said before the number is read.
 
-### 6. The DFAS pay table downloads at all
+### 5. The DFAS pay table downloads at all
 
 **This is the one step here that could not be attempted.** dfas.mil sits behind Akamai
 and answered every request from the development environment with a 403 and an "Access
@@ -614,6 +565,139 @@ A number that is merely *plausible* is the failure mode to watch for here. The c
 are matched from the right, so a table with an unexpected trailing column would shift
 every rate by one band — which reads as a member being paid at the wrong seniority, not
 as a parse error, and looks entirely like an answer.
+
+---
+
+## The sheet
+
+Five checks and a refusal, and it sits outside both broker sections because the sheet is
+not any broker's. One `sheet` run reads every database in the workspace, so the tabs it
+writes are as much Fidelity's and SnapTrade's as TSP's, and the three *The sheet — …*
+rows in the table above settle for all of them at once. This procedure lived under *TSP*
+until it was moved here, because TSP was the broker it happened to be written against.
+
+**This is the one procedure on this page that needs a credential, and the account it
+needs is not a broker's.** No sign-in to anything StonkSmith scrapes, no browser it
+drives. It is also the only one here that writes anywhere but a local database.
+
+**What it needs.** An OAuth client `gspread.oauth()` can authorize — a Desktop-app
+client ID with **both** the Sheets and the Drive API enabled, saved as
+`~/.config/gspread/credentials.json`, the path `GSPREAD_CONFIG_DIR` in
+`src/helpers/sheets.py` names — and a spreadsheet called `Investment Account Scrapes` in
+that Google account or shared with it. That name is `SPREADSHEET_NAME` in the same file
+and nothing reads it from config. Then a workspace with at least one broker database
+already in it, and for check 5 specifically, a broker with a long transaction history
+rather than a fresh one.
+
+**What it costs.** `sheet` clears and rewrites all four machine-owned tabs, and the
+refusal at the end has you deface the `Holdings` tab on purpose and hand it back
+afterwards. So this runs against a spreadsheet you are willing to have rewritten, which
+in practice means the real one. That is the whole reason these three rows are still `No`
+while others are settled: nothing in the procedure is difficult, but it needs a Google
+account and a database with real rows in it, and neither is available to anything
+holding only this repository.
+
+No tab needs creating: StonkSmith makes `Accounts`, `Holdings`, `Transactions` and
+`Dashboard` on the first sync. Nor does this need a scrape — the sheet is a view of the
+databases, so it can be built from them alone:
+
+```
+$ uv run stonksmithdb
+stonksmithdb (default) > sheet
+[*] Refreshed: 6 accounts, 23 holdings, 412 movements from ally, fidelity, snaptrade, tsp.
+```
+
+A workspace where one database will not open reports it and syncs the rest, one line per
+broker: `[-] Not on the sheet: <name> could not be read (<reason>).` If *every* database
+fails, the sheet is left as it was rather than emptied and the run says so instead of
+printing a count — clearing the tabs there would replace a correct sheet with a blank
+one and report success for doing it.
+
+Five things to confirm on the tabs themselves, none of which a unit test can see:
+
+1. **The first cell of every tab carries the machine-owned banner** — all four,
+   `Dashboard` included, since a banner cannot be read back off a tab that was never
+   created. On the three that carry columns, row 2 is the column contract exactly as
+   `src/etc/portfolio.py` spells it; the dashboard has no such row, and its labels run
+   down the summary column instead. `Holdings` is the one worth counting: sixteen
+   columns, ending at `P`, `Units As Of` — `HOLDING_COLUMNS` in that same file. A tab
+   still ending at `O` after a sync is a visible sign the sync did not run, and TSP is
+   the broker where the price date and the unit date visibly differ.
+2. **Money is a number, not text.** A currency cell should right-align on its own and
+   accept a number format. If it left-aligns, something is writing strings again.
+3. **The dashboard's `Total (USD)` equals its `Total as read`.** Those are the same
+   number computed by Sheets and by Python; a disagreement means the write was
+   truncated, and it is the only signal that would say so.
+4. **Empty cells are genuinely empty.** `Accounts` minus the count of `As Of` values
+   is how the dashboard counts accounts whose source never gave a date, and it relies
+   on an absent value arriving as an empty cell rather than as an empty string that
+   `COUNTA` still counts. If that figure reads 0 where the tab visibly has blank
+   `As Of` cells, the formula needs `COUNTIF(...,"<>")` instead.
+5. **`Transactions` holds every movement, not the newest five hundred.** Compare the
+   count on the line above against `show transactions` inside a broker shell, and do
+   it against a broker with a long history rather than a fresh one — five hundred is
+   the number the shell reader stops at, and a tab that silently agreed with it would
+   look entirely correct. Past 2,000 movements it is also the only thing that puts a
+   second write in front of real Sheets, since `write_rows()` sends `CHUNK_ROWS` rows
+   at a time. Check the dates too: the 529 scraper stores `12/30/2025` and SnapTrade
+   stores ISO, so the tab is where they must both read `YYYY-MM-DD`, sorted
+   newest-first within each account. A `12/30/2025` reaching a cell means the
+   normalization was skipped, and the tab's order is then wrong wherever a December
+   row sits above a January one.
+
+**Then the refusal, which is the point of the whole thing — and it goes last.** A
+refused tab means nothing is synced at all, so doing this first would leave the five
+checks above reading a sheet the run never wrote.
+
+By this point `Holdings` exists and carries the banner, and Sheets will not let a second
+tab take a name already in use — so the move is to make the tab that is there look
+hand-written rather than to bring in a new one. Type something of your own over `A1`,
+replacing the banner, and run `sheet` again:
+
+```
+[-] Tab 'Holdings' holds something StonkSmith did not write, so it was left
+    untouched and nothing was synced. StonkSmith rewrites this tab from scratch
+    every run and would have lost whatever is on it. Move your work to a tab of
+    your own, empty this one to hand it over, or delete it and let the next sync
+    recreate it.
+```
+
+Then the subtler path, which is the one actually worth exercising: clear `A1` and leave
+your text somewhere below it instead. A blank first cell is exactly the shape a leftover
+layout has, and exactly the shape a tab someone started on row 3 has, so `claim()` reads
+the whole tab before deciding rather than adopting it on the strength of an empty corner.
+The same refusal should come back. An adoption here — a sync that went ahead — is the
+finding, and it is the expensive one, because that is the shape a person's own tab has.
+
+Either way, confirm your text is still there, and that `Accounts` was **not** rewritten
+either — every tab is claimed before any of them is cleared, so a refusal costs nothing
+rather than leaving one tab fresh beside a stale one. To get the sheet back afterwards,
+empty that tab or delete it and run `sheet` once more; an empty tab is adopted, which is
+the third way out the message offers.
+
+**What this settles.** Three rows, and each check belongs to exactly one of them.
+
+*The sheet — four machine-owned tabs* is checks 1 through 4: the banner on all four and
+the column contract on the three that have one, money arriving as a number, the
+dashboard's two totals agreeing, and an absent value arriving as an empty cell rather
+than an empty string. Those are four ways for a tab StonkSmith owns to be written wrongly
+while looking written. One caveat: a spreadsheet whose four tabs already exist observes
+the write but never the *creation* this section opens by asserting — delete the four, or
+point at a fresh spreadsheet, to see that half too.
+
+*The sheet — the whole transaction history reaching a tab* is check 5 alone, and it has a
+wrong way to pass. Against a broker holding fewer than five hundred movements, agreement
+with `show transactions` confirms nothing at all, because that is where the shell reader
+itself stops. The date half of the check belongs to this row too.
+
+*The sheet — refusing a tab it does not own* is the refusal, and it is the only one of
+the three that can be settled the other way. A sync that went ahead and ate your text is
+not a failed check; it is that row observed as **Run, and it cannot** be relied on. Write
+it up that way, and say which tab.
+
+Then *Recording a result* below, which is where the asymmetry it warns about actually
+bites: one `sheet` run touches all three of these rows, and the refusal is the only one
+that writes itself up.
 
 ---
 
