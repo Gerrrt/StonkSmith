@@ -95,9 +95,9 @@ contribution accrual and everything touching the DFAS pay table are not. The
 sheet it feeds is verified: its four tabs were read back against the real
 spreadsheet and it was made to refuse a tab it did not own. What is unverified
 there is one claim about volume — that a tab holds every movement rather than
-the newest five hundred — which needs a broker with the history to ask it. Green tests say the code does what it was written to do, which
-is not the same as saying the site still looks the way it did when the parser
-was written.
+the newest five hundred — which needs a broker with the history to ask it.
+Green tests say the code does what it was written to do, which is not the same
+as saying the site still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
 gives the procedure for the rest — it is the record, and this paragraph
 summarises it rather than being maintained beside it.
