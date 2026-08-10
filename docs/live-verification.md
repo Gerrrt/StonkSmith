@@ -33,9 +33,9 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*18 of 20 claims have been settled by a live run — 17 confirmed, 1 disproved. The
-remaining 2 rest on evidence no run has produced yet: one needs a second price run on
-a later day, the other a broker with the transaction volume to put the question.*
+*19 of 20 claims have been settled by a live run — 18 confirmed, 1 disproved. The
+remaining 1 rests on evidence no run here can produce: a broker with the transaction
+volume to put the question.*
 
 `tests/test_live_verification_tally.py` derives those five numbers from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
@@ -50,7 +50,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | Ally — Ally Bank deposit accounts skipped, not filed as brokerage | The same nine runs | Yes |
 | Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one. The `units_as_of` stamp on each holding postdates those runs and has not been written to a real one | Yes |
 | Ally — one row per account across runs | Two signed-in runs on 2026-08-10, 21:57:58 and 22:03:26, written up below: `show accounts` held at one row while `show snapshots` went 26 → 27 → 28 | Yes |
-| Ally — valuing from published prices without a login | A real run on 2026-08-10 valued a real account with no sign-in, written up under step 6: the price date reached `as_of` and the units carried through with step 1's stamp. What is left is the stamp *holding still* — one price run cannot show that, and on this day the stamp and the newest snapshot were the same timestamp, so the two possible sources are indistinguishable. Needs one run on a later day | No |
+| Ally — valuing from published prices without a login | Three price runs on 2026-08-10 against a real account with no sign-in, written up under step 6: the price date reached `as_of`, and the units' stamp held at `22:03:26` across snapshots 29, 30 and 31 while the newest snapshot's own time moved under it | Yes |
 | Ally — the published price feed answers | A real request on 2026-08-09, written up below: 200 and 3,612 bytes of JSON for one symbol, read by `daily_closes()` into 23 dated closes | Yes |
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
 | TSP — statement parser | Real statements, read as issued through `-o STATEMENT=` | Yes, against real files |
@@ -286,10 +286,9 @@ Four things to establish, and they do not cost the same. **Two of them cost noth
 that the run refuses a database with no units on record, and that it opens no browser
 doing it — and both have been run; they are written up first for that reason. The two
 that remain are about what happens when there *are* units, so they need step 1 to have
-run first. Three of the four have now been run. The fourth is not expensive either, but
-it cannot be bought with effort: it needs a **second price run on a later day**, and no
-amount of running today substitutes for it. Why that is so is the last part of this
-step.
+run first. **All four have now been run**, on 2026-08-10 — though the fourth took three
+price runs rather than one, for a reason worth reading before repeating this: the first
+of them could not ask the question, and was what made asking it possible.
 
 #### The half that needs nothing, run 2026-08-10
 
@@ -399,51 +398,83 @@ broker's own number agree to the cent, on the same units, by two paths that shar
 code. Worth recording because a valuing path can be perfectly self-consistent and still
 be wrong about the world.
 
-#### The one thing a second run is needed for
-
-Run it again on a **later day** and check `Units As Of`. It must still read
-`2026-08-10 22:03:26`.
+#### The stamp holds still: three price runs, 2026-08-10
 
 A date that advances to the previous price run is the failure this exists to catch:
 these runs write snapshots, so an age inferred from the newest snapshot reports the
 units a day old however old they are — drifting younger while the units drift older,
 and reading as fact the whole way.
 
-**The 2026-08-10 run could not settle this, and it is worth being precise about why.**
+**The first price run could not ask this, which is why it took three.**
 `value_from_prices` takes the stamp from the holdings it read, falling back to the
-account's last-seen time only when no row carries one. On that evening those two were
-the same timestamp: the newest snapshot was 28, scraped `22:03:26`, and the holdings'
-stamp was also `22:03:26`. A run reading the stamp and a run inferring it from the
-newest snapshot would have printed the identical line. The check did not fail — it was
-not yet askable.
+account's last-seen time only when no row carries one. At 22:04:27 those two agreed:
+the newest snapshot was 28, scraped `22:03:26`, and the holdings' stamp was also
+`22:03:26`. A run reading the stamp and a run inferring it from the newest snapshot
+would have printed the identical line. That check did not fail — it was not yet
+askable.
 
-The next run can ask it, because the two have since diverged: the newest snapshot is
-now 29, scraped `22:04:27`, while the holdings' stamp is still `22:03:26`. A later run
-printing `22:04:27` is reading the snapshot, which is the bug; printing `22:03:26` is
-reading the units, which is the claim. Capture `show accounts` alongside it — the price
-run may have moved `Last Seen` too, which is the other place the fallback could come
-from.
+Writing snapshot 29 is what made it askable, by putting a timestamp on the newest
+snapshot that the units never had. Two more price runs followed, **30 and 31** — 29 is
+shown with them because it is what they each read, not because it is one of the two:
+
+```text
+| 31 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:29:44 | $2,470.38 | USD |
+| 30 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:27:17 | $2,470.38 | USD |
+| 29 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
+```
+
+Each of the two ran with a newest snapshot whose `scraped_at` was **not** `22:03:26` —
+29's `22:04:27` for the first, 30's `22:27:17` for the second — and each printed:
+
+```text
+[*] Individual (...0847): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26.
+```
+
+`22:03:26`, not the newest snapshot's time. That is the discriminator firing: a run
+inferring the age from the snapshot it could see had a different number available to
+print and did not print it.
+
+And the stamp survived being written, which is the half that would start the drift.
+`show holdings 30`:
+
+```text
+| Individual (...0847) | SWPPX | Schwab S&P 500 Index | 123.519 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
+```
+
+So the stamp passed through three consecutive price snapshots — 29, 30, 31 — without
+moving, each hop being a fresh chance to restamp it with the run's own clock. Reading
+it correctly once and then storing it wrong would have looked identical at the console
+and drifted anyway; it is the stored value that had to be checked, and it holds.
+
+**Same day, and that limits one thing.** All three ran on 2026-08-10 against a price
+still dated 2026-08-07, so the price date never advanced during the test. That does not
+weaken what was shown — the divergence the check turns on was between the stamp and the
+snapshot, not between two price dates — but a later-day run remains the only way to
+watch `as_of` move forward while `Units As Of` stays put. Worth doing, no longer
+load-bearing.
+
+`show accounts` was not captured alongside these runs. It would have closed off the
+fallback path by observation as well as by reading, and is the one thing a repeat should
+add.
 
 Worth knowing before ticking this: the sheet is **not** synced by a price run, so an
 unchanged `Holdings` tab is expected rather than a failure. Run `sheet` in
 `stonksmithdb` to refresh it — see *The sheet* below.
 
-**What this settles, and what it does not.** The runs above settle three of the four:
-the path refuses units it has no record of, it reaches that refusal without starting a
-browser, and — given units — it values them, dating the value by the price and carrying
-the units' own stamp through untouched.
+**What this settles.** All four, and the row *Ally — valuing from published prices
+without a login* moves to `Yes`. The path refuses units it has no record of; it reaches
+that refusal without starting a browser; given units it values them, dating the value
+by the price rather than by the run; and the units' own stamp holds still across three
+consecutive price runs rather than drifting toward the newest snapshot.
 
-The row *Ally — valuing from published prices without a login* still stays `No`, and
-the reason has narrowed rather than gone. It is no longer "nothing was valued";
-something was, correctly. What is left is the third component of the same claim, that
-the stamp **holds still**, and one run cannot show that however carefully it is read.
-The row moves on the next price run on any later day — thirty seconds, no sign-in, no
-account state to arrange.
+The row was held at `No` through the first of those runs, on the ground that a check
+which cannot be asked has not been answered. That was the right call and it cost one
+evening's patience: the run that made the check askable was the same run that would
+have been mistaken for settling it.
 
-Holding a row at `No` over one unaskable check is the conservative reading, and it is
-the one this file takes: a verdict is what a run observed, and no run has yet observed
-this. A reader who wants the row's other three components can find them settled in the
-`Rests on` column, which is what that column is for.
+What is **not** settled is anything plural. One account, one holding, one price date.
+The four checks are about a path, and they are met; an account with a second position
+would be asking a different question, and no run here has asked it.
 
 ### 7. Re-running does not duplicate accounts
 
@@ -490,9 +521,9 @@ anything an account holds; a feed that answered for `SPY` and not for some parti
 fund would still have failed step 6, which is why the two are separate rows rather than
 one.
 
-That particular worry has since been answered from the other side: step 6's run on
+That particular worry has since been answered from the other side: step 6's runs on
 2026-08-10 priced `SWPPX`, a mutual fund actually held, and the feed returned a dated
-close for it. The row still stays `No`, but no longer for this reason — see step 6.
+close for it. That row is now `Yes` — see step 6.
 
 ---
 
