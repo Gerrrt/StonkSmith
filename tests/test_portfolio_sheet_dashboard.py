@@ -37,6 +37,7 @@ from etc.portfolio_sheet import (
     SUMMARY_COL,
     SUMMARY_LABELS,
     UNREADABLE_COL,
+    _block_updates,
     column_index,
     column_letter,
     column_of,
@@ -812,6 +813,139 @@ class AllocationTests(unittest.TestCase):
 
         self.assertIn(f"{names}{FIRST_DATA_ROW}:{names}{bottom}", self.literals)
         self.assertIn(f"{values}{FIRST_DATA_ROW}:{values}{bottom}", self.formulas)
+
+    def test_a_fund_named_like_a_formula_is_not_run(self) -> None:
+        # The module docstring's whole reason for going up RAW, exercised on the
+        # one column here that carries text a broker chose. A name is a name
+        # even when it is spelled "=IMPORTXML(...)".
+        hostile: str = '=IMPORTXML("http://example.invalid","//a")'
+        formulas, literals = dashboard_cells(
+            portfolio=allocating(
+                holdings=(
+                    HoldingRow(
+                        broker="tsp",
+                        source="tsp",
+                        account="C Fund",
+                        account_key="c",
+                        symbol=hostile,
+                        value=100.0,
+                    ),
+                )
+            ),
+            today=TODAY,
+        )
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        self.assertIn(hostile, self._cells(block=BY_POSITION_COL, offset=0))
+
+        # In the batch that goes up RAW, and in no cell of the one that does not.
+        names: str = self._column(block=BY_POSITION_COL, offset=0)
+        self.assertTrue(
+            any(name.startswith(names) for name in self.literals),
+            "the name column did not go up as a literal",
+        )
+        for values in self.formulas.values():
+            for row in values:
+                self.assertNotIn(hostile, row)
+
+    def test_the_name_column_is_literal_by_rule_and_not_by_inspection(
+        self,
+    ) -> None:
+        # Asked of _block_updates directly, because dashboard_cells cannot
+        # currently produce this grid: every block ends with a "Slices sum to"
+        # row, so the name column is never all-formula and an inspection-based
+        # split lands it in the literal batch by luck. That is a coincidence of
+        # the present layout, not a property of it -- a block that lost its
+        # check row would start executing scraped text. So the rule is pinned
+        # where it lives.
+        grid: list[list[Any]] = [
+            ["Position", "Value (USD)", "Share of total (USD)"],
+            ['=IMPORTXML("http://example.invalid","//a")', "=SUMIFS(x)", "=A1/B1"],
+        ]
+        formulas, literals = _block_updates(start=BY_POSITION_COL, grid=grid)
+
+        self.assertEqual(
+            cells(updates=literals)[
+                f"{BY_POSITION_COL}{FIRST_DATA_ROW}:{BY_POSITION_COL}{FIRST_DATA_ROW}"
+            ],
+            [['=IMPORTXML("http://example.invalid","//a")']],
+        )
+        for values in cells(updates=formulas).values():
+            for row in values:
+                self.assertNotIn('=IMPORTXML("http://example.invalid","//a")', row)
+
+    def test_a_name_is_grouped_exactly_as_it_was_written_to_the_tab(self) -> None:
+        # etc.portfolio._cell writes verbatim, so a criterion that has been
+        # tidied no longer matches the cell it is meant to find. "VTI " grouped
+        # under "VTI" and searched for as "VTI" adds up to nothing at all, and
+        # the row would sit there showing a confident zero.
+        spaced = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="VTI ",
+                    value=100.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(portfolio=spaced, today=TODAY)
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        self.assertIn('"VTI "', self._cells(block=BY_POSITION_COL, offset=1)[0])
+
+    def test_two_spellings_of_one_name_stay_two_slices(self) -> None:
+        # They are two different strings on the tab. Merging them would leave a
+        # criterion that finds one and a row that claims both.
+        both = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="VTI",
+                    value=100.0,
+                ),
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="VTI ",
+                    value=50.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(portfolio=both, today=TODAY)
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+        criteria = self._cells(block=BY_POSITION_COL, offset=1)
+
+        self.assertIn('"VTI"', criteria[0])
+        self.assertIn('"VTI "', criteria[1])
+
+    def test_a_name_of_nothing_but_spaces_is_still_labelled(self) -> None:
+        # Stripped for the label, raw for the criterion. An all-spaces name
+        # renders as an empty row, which is what a failed write looks like.
+        spaces = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="   ",
+                    value=100.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(portfolio=spaces, today=TODAY)
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        self.assertEqual(self._cells(block=BY_POSITION_COL, offset=0)[0], "(no symbol)")
+        self.assertIn('"   "', self._cells(block=BY_POSITION_COL, offset=1)[0])
 
 
 if __name__ == "__main__":

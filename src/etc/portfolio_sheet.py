@@ -654,10 +654,21 @@ def _slices(rows: Sequence[Any], name: str, currency: str) -> list[tuple[str, fl
         if row.value is None or row.currency != currency:
             continue
 
-        # Kept under the empty string, which is what _cell wrote to the sheet
-        # and therefore what the criterion has to match. The label the reader
-        # sees is chosen at the call site; the criterion stays "".
-        key: str = str(object=getattr(row, name) or "").strip()
+        # Grouped on exactly what _cell wrote to the sheet -- not stripped, not
+        # case-folded, not tidied. This key becomes a SUMIFS criterion, and a
+        # criterion that has been cleaned up no longer matches the cell it is
+        # meant to find: a broker reporting "VTI " would be grouped under "VTI",
+        # searched for as "VTI", and add up to nothing. Two spellings of one
+        # ticker therefore get two rows, which looks worse and is right -- they
+        # are two different strings on the tab, and between a breakdown that
+        # shows both and one that silently drops half a position, the honest
+        # answer is both. Tidying belongs on the way in, where the tab would see
+        # it too, and not here.
+        #
+        # None becomes "" for the same reason: that is the cell _cell wrote, and
+        # "" is the criterion that matches an empty one. The label the reader
+        # sees is chosen at the call site; the criterion stays raw.
+        key: str = str(object=getattr(row, name) or "")
         totals[key] = totals.get(key, 0.0) + row.value
 
     return sorted(totals.items(), key=lambda pair: (-pair[1], pair[0]))
@@ -711,7 +722,12 @@ def _block(
         row: int = FIRST_DATA_ROW + offset
         grid.append(
             [
-                name or unnamed,
+                # Stripped for the label and only for the label. A name that is
+                # blank or nothing but spaces reads as an empty row, which is
+                # indistinguishable from one that failed to write -- so it is
+                # named. The criterion beside it keeps the raw string, because
+                # that is what is on the tab.
+                name.strip() or unnamed,
                 f"=SUMIFS({value_range},{criterion_range},"
                 f'"{_quoted(text=name)}",{currency_range},"{currency}")',
                 f'=IFERROR({values}{row}/{total},"")',
@@ -868,7 +884,19 @@ def _block_updates(
             "values": column,
         }
 
-        if all(_is_formula(cell=cell[0]) for cell in column):
+        # The name column is literal because of what it holds, not because of
+        # what it looks like. It is the one column here carrying text a broker
+        # chose, and a fund named "=IMPORTXML(...)" is precisely the string that
+        # must not be asked whether it looks like a formula -- the answer is
+        # yes, and the whole module goes up RAW to stop that answer mattering.
+        #
+        # Today the question never reaches it: every block ends with a "Slices
+        # sum to" row, so the column is never all-formula and the check below
+        # would land it in the literal batch anyway. That is a coincidence of
+        # the current layout, not a property of it. A block that ever loses its
+        # check row, or renders a single slice and nothing else, would start
+        # executing scraped text and say nothing about it.
+        if offset and all(_is_formula(cell=cell[0]) for cell in column):
             formulas.append(update)
 
         else:
