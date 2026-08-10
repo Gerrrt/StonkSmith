@@ -57,8 +57,8 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files |
 | TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
 | TSP — share price download | A real request on 2026-08-07 written up in #48, and again unattended on 2026-08-10 (#116): 200 and 555,142 bytes, fetched by the run itself rather than by hand | Yes |
-| TSP — DFAS pay table parse | The live page, parsed on 2026-08-10 (#116) into all nine enlisted grades; `tests/dfas_basic_pay_em.html` is now that page rather than a reconstruction, and the reconstruction read **zero** grades off it | Yes |
-| TSP — DFAS pay table download | A real request on 2026-08-10 (#116): 200 and 116,257 bytes, unattended, through `fetch_pay_table`. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes |
+| TSP — DFAS pay table parse | All four published pages, parsed as served: the enlisted one on 2026-08-10 (#116) into all nine grades, and the officer, prior-service and warrant pages on 2026-08-11 (#118) into O-1..O-10, O-1E..O-3E and W-1..W-5. Every fixture in `tests/` is now a served page; the enlisted reconstruction read **zero** grades off the real one, and the prior-service reconstruction's rates were invented outright | Yes |
+| TSP — DFAS pay table download | Real requests through `fetch_pay_table`: the enlisted page unattended on 2026-08-10 (#116), 200 and 116,257 bytes, and the other three on 2026-08-11 (#118), 200 each. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes |
 | TSP — the contribution accrual | A live run on 2026-08-10 (#116) over the published price file and the DFAS page, both fetched by the run; all six months recomputed independently and matched on every field | Yes |
 | TSP — database write | Five runs on 2026-08-10 (#116) into a real `tsp.db`, four dates on one snapshot and the holdings summing to its value exactly; plus a genuine pre-migration database, migrated on open | Yes |
 | The sheet — four machine-owned tabs | All four checks, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes |
@@ -815,10 +815,42 @@ Both are fixed, and the fixture is now the served page trimmed to its two tables
 otherwise byte-for-byte — **do not reflow it, the whitespace is the fixture.** It parses
 to all nine enlisted grades, with E-9's low bands still absent rather than zero.
 
-A number that is merely *plausible* remains the failure mode to watch for. The columns
-are matched from the right, so a table with an unexpected trailing column would shift
-every rate by one band — which reads as a member being paid at the wrong seniority, not
-as a parse error, and looks entirely like an answer.
+A number that is merely *plausible* was the failure mode to watch for, and it is now
+guarded rather than only named. The columns are matched from the right, so a table with
+an unexpected trailing column shifts every rate by one band — which reads as a member
+paid at the wrong seniority, not as a parse error, and looks entirely like an answer.
+`alignment_faults()` refuses such a page and drops the accrual rather than pricing on
+it; `missing_upper_table()` reports a page that yielded nothing past `Over 18`. Both ask
+the question of the page itself, because a test cannot ask it of a shape nobody serves.
+
+#### The other three pages, 2026-08-11
+
+DFAS publishes four, and only the enlisted one had been read. The officer and warrant
+pages had no fixture at all, and the prior-service fixture was a reconstruction whose
+**dollar figures were invented outright** — its own header said not to quote it as pay.
+All three were fetched through the same client the run uses, 200 each, and all three
+now sit in `tests/` as served:
+
+```text
+CO      200   127,403 bytes   O-1 .. O-10
+CO_FE   200    91,801 bytes   O-1E .. O-3E
+WO      200    97,027 bytes   W-1 .. W-5
+```
+
+The parser read every grade on every page, with no alignment fault and both halves
+present. Two things only the full set could show:
+
+* **DFAS does not mark up its own four pages alike.** The officer pages write
+  `<b>Over 10</b>` on one line; the enlisted and warrant pages stack it over a line
+  break. Matching a heading with its spacing removed is what makes both spellings the
+  same column — a fix that would have looked over-general with one page in hand.
+* **The officer page footnotes every grade**, `O-10 (Note 4)` through
+  `O-1 (Notes 5, 6 & 7)`, not two of them. Read literally it yields no grades at all,
+  where the same bug cost the enlisted page its top and bottom rows.
+
+The prior-service page also publishes no column below `Over 4`, because these rates
+exist to protect a new officer who already has four years' service. The invented
+fixture could have had any shape there and the tests would have agreed with it.
 
 **What this does not settle.** It was run from a hosted environment, so it says nothing
 about a home connection beyond the obvious — a network that was refused before is
