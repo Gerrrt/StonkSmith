@@ -91,8 +91,10 @@ contacted, but the flag's own path has not been run. Those runs saw one account
 state, though, so anything plural about an Ally account is still inference. TSP
 has in most part: its statement and share-price parsers, the mark's arithmetic,
 its price download, its database write, its contribution accrual and both halves
-of the DFAS pay table are verified against real data; only the sheet it feeds is
-not. Green tests say the code does what it was written to do, which
+of the DFAS pay table are verified against real data. The sheet it feeds is the
+one part left, and even it sits between the two — its tabs and its refusal to
+overwrite a tab it does not own have met the real spreadsheet, and one check on
+how values render has not. Green tests say the code does what it was written to do, which
 is not the same as saying the site still looks the way it did when the parser
 was written.
 `docs/live-verification.md` records which claims stand on an observed run and
@@ -707,11 +709,11 @@ it. That message is about the sheet, not about the broker.
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
 reports. The database write has been run, against a real `tsp.db` and against
-one written before the `units_as_of` column existed. The sheet has been run
-twice from real databases on 2026-08-10 — which is not the same as verified.
-What those runs establish is that the tabs are written and that StonkSmith reads
-its own banner back; what they cannot establish is how the values render, and the
-refusal has still never been tried against a real tab. `docs/live-verification.md` has the
+one written before the `units_as_of` column existed. The sheet has been run too: on
+2026-08-10 it was built from real databases, read back tab by tab, and made to
+refuse a tab it did not own. What is left there is one check a read cannot make —
+whether an absent value arrived as an empty cell or as an empty string — and the
+tabs' creation, since they already existed. `docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
 statement naming a different fund from your config is refused, but one whose
 fund cannot be read at all is still priced with the configured fund.
@@ -951,9 +953,9 @@ so this checks the banner on all four, row 2 against the column contract on the
 three that have one, the movement count against the databases, that every
 `Processed On` is `YYYY-MM-DD` and sorted newest-first within its account, that
 money came back as a number rather than as text, and that the dashboard's two
-totals agree. The last two are marked in the output as resting on an assumption
-about what a rendered cell returns, so a failure there is ambiguous between a
-wrong sheet and a wrong check until it has run once.
+totals agree. The last two used to be marked as resting on an assumption about
+what a rendered cell returns; the 2026-08-10 run settled that, since a wrong
+assumption would have failed rather than passed quietly.
 
 `verify guard` creates one scratch tab and asks the ownership check whether a
 defaced first cell is refused, whether text below a blank one is refused, and
