@@ -848,9 +848,23 @@ present. Two things only the full set could show:
   `O-1 (Notes 5, 6 & 7)`, not two of them. Read literally it yields no grades at all,
   where the same bug cost the enlisted page its top and bottom rows.
 
-The prior-service page also publishes no column below `Over 4`, because these rates
-exist to protect a new officer who already has four years' service. The invented
-fixture could have had any shape there and the tests would have agreed with it.
+And the prior-service page prints the **literal word `blank`** in every cell with no
+rate, where the other three leave the cell empty:
+
+```html
+<td ...> blank</td>   <td ...> blank</td>   <td ...>7,382.70</td>
+```
+
+The columns are all present — `2 or less` through `Over 18` in the header, as
+everywhere else — but no prior-service rate exists below `Over 4`, because these rates
+protect a new officer who already has four years' service. Nothing downstream notices:
+`to_number()` returns `None` for `blank` exactly as it does for an empty cell, and an
+absent band is what both mean. That is luck rather than design, so a test pins it —
+treating a non-empty cell as a published figure would put the string `blank` where a
+rate belongs, on the one page that writes it.
+
+None of that could have come from the reconstruction, which had no such cells and
+invented the figures around them.
 
 **What this does not settle.** It was run from a hosted environment, so it says nothing
 about a home connection beyond the obvious — a network that was refused before is

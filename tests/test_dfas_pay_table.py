@@ -43,6 +43,7 @@ from helpers.dfas import (
     normalize_grade,
     table_for,
 )
+from helpers.tsp import to_number
 
 FIXTURES = Path(__file__).resolve().parent
 ENLISTED = FIXTURES / "dfas_basic_pay_em.html"
@@ -53,6 +54,18 @@ WARRANTS = FIXTURES / "dfas_basic_pay_wo.html"
 
 def _enlisted() -> dict[str, dict[str, float]]:
     return basic_pay_table(html=ENLISTED.read_text(encoding="utf-8"))
+
+
+def _cell_texts(html: str) -> set[str]:
+    """Every table cell's text, as the parser reads it."""
+
+    soup = BeautifulSoup(markup=html, features="html.parser")
+
+    return {
+        cell.get_text(strip=True)
+        for table in soup.find_all(name="table")
+        for cell in table.find_all(name=["th", "td"])
+    }
 
 
 class GradeSpellingTests(unittest.TestCase):
@@ -232,17 +245,45 @@ class PayTableTests(unittest.TestCase):
         self.assertEqual(prior["O-3E"]["Over 4"], 7382.70)
         self.assertEqual(prior["O-3E"]["Over 40"], 9609.60)
 
-    def test_the_prior_service_page_starts_at_over_four(self) -> None:
-        # These rates exist to protect a new officer who already has four
-        # years' enlisted or warrant service, so the page publishes no column
-        # below "Over 4" at all -- there is nobody for it to describe. The
-        # fixture this replaced was invented, and an invented one could have
-        # had any shape here.
+    def test_the_prior_service_rates_start_at_over_four(self) -> None:
+        # The columns are all there -- "2 or less" through "Over 18", as on
+        # every other page -- but no prior-service rate exists below "Over 4",
+        # because these rates protect a new officer who already has four years'
+        # enlisted or warrant service. So the bands are absent from the parse
+        # while the headings are present in the markup, and those are different
+        # facts. The fixture this replaced was invented and had neither.
         prior = basic_pay_table(html=PRIOR_SERVICE.read_text(encoding="utf-8"))
 
         self.assertNotIn("2 or less", prior["O-3E"])
         self.assertNotIn("Over 3", prior["O-3E"])
+        self.assertEqual(prior["O-3E"]["Over 4"], 7382.70)
         self.assertEqual(sorted(prior, key=grade_order), ["O-1E", "O-2E", "O-3E"])
+
+    def test_the_word_blank_is_not_a_rate(self) -> None:
+        # This page writes the literal word "blank" into every cell with no
+        # rate; the other three leave the cell empty. It costs nothing today
+        # because to_number() returns None for it exactly as for "", so the
+        # band is absent either way -- but that is luck, not design, and it is
+        # the sort of thing only the served page could have taught. Pinned so
+        # that anything later treating a non-empty cell as a published figure
+        # fails here rather than storing the string where a rate belongs.
+        page = PRIOR_SERVICE.read_text(encoding="utf-8")
+
+        self.assertIn("blank", _cell_texts(html=page))
+        self.assertIsNone(to_number(text="blank"))
+
+        for band in ("2 or less", "Over 2", "Over 3"):
+            with self.subTest(band=band):
+                self.assertNotIn(band, basic_pay_table(html=page)["O-3E"])
+
+        # And only this page does it, so the others are not silently relying
+        # on the same accident. Asked of the cells rather than of the file,
+        # which also says the word in its header comment.
+        for other in (ENLISTED, OFFICERS, WARRANTS):
+            with self.subTest(page=other.name):
+                texts = _cell_texts(html=other.read_text(encoding="utf-8"))
+                self.assertNotIn("blank", texts)
+                self.assertIn("", texts)
 
 
 class OfficerAndWarrantPageTests(unittest.TestCase):

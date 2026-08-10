@@ -9,12 +9,23 @@
   machine that would have read them. Its own header said so and told the reader
   not to quote it as pay.
 
-  It is the served page now, so the rates are the published rates. What the
-  invented figures could not have caught: the columns start at "Over 4" and
-  there is no "2 or less" column at all, because these rates exist to protect a
-  new officer who already has four years' enlisted or warrant service. A
-  fixture written from imagination could have had any shape here and the tests
-  would have agreed with it.
+  It is the served page now, so the rates are the published rates. And what the
+  invented figures could not have caught is stranger than a missing column:
+  this page prints the **literal word "blank"** in every cell with no rate.
+
+      <td ...> blank</td>   <td ...> blank</td>   <td ...>7,382.70</td>
+
+  The columns themselves are all there -- "2 or less", "Over 2" and "Over 3"
+  are in the header like everywhere else -- but no prior-service rate exists
+  below "Over 4", because these rates protect a new officer who already has
+  four years' enlisted or warrant service. The other three pages leave such a
+  cell empty. This one writes a word in it.
+
+  Nothing downstream notices, because to_number() returns None for "blank" the
+  same as for "", and an absent band is what both mean. That is luck rather
+  than design, and it is why the test below pins it: a future reader who treats
+  a non-empty cell as a published figure would put the string "blank" where a
+  rate belongs, on the only page that does this.
 
   Like the officer page and unlike the enlisted one, the band headings are
   written on one line rather than stacked.
