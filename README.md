@@ -705,10 +705,13 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write and the sheet have not been run;
-`docs/live-verification.md` has the procedure and one trap worth knowing about
-first — a statement's fund is read and logged but not carried into the mark,
-so a statement for one fund with another configured values the wrong one.
+reports. The database write has not been run. The sheet has: it was built once
+from real databases on 2026-08-10, which is not the same as verified — what a
+successful write cannot tell you is how the values render, and the refusal has
+still never been tried against a real tab. `docs/live-verification.md` has the
+procedure, that run written up, and one trap worth knowing about first — a
+statement's fund is read and logged but not carried into the mark, so a
+statement for one fund with another configured values the wrong one.
 
 Manage stored credentials and scraped balances:
 

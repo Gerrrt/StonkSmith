@@ -60,9 +60,9 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused two unrelated hosted environments, 2026-08-07 and 2026-08-09, and tsp.gov answered from both | No |
 | TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
 | TSP — database write | Unit tests with a mocked DB | No |
-| The sheet — four machine-owned tabs | Unit tests with a faked spreadsheet | No |
-| The sheet — the whole transaction history reaching a tab | Unit tests with a faked spreadsheet | No |
-| The sheet — refusing a tab it does not own | Unit tests with a faked spreadsheet | No |
+| The sheet — four machine-owned tabs | One real run on 2026-08-10 wrote all four tabs from five databases, so `claim()` and `write_rows()` have met real Sheets; nobody then opened the spreadsheet, and the four checks on how the values render are exactly the ones a successful write does not answer | No |
+| The sheet — the whole transaction history reaching a tab | The same run, which wrote 9 movements. The shell reader stops at 500, so a workspace this size cannot put the question at all — this row needs a different workspace rather than a longer sitting | No |
+| The sheet — refusing a tab it does not own | Unit tests with a faked spreadsheet. The 2026-08-10 run claimed all four tabs successfully, which exercises `claim()`'s accept path only; the refusal is the path that matters and it stayed untouched | No |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
 *one account state*: one investment account, one holding, one deposit account. So the
@@ -589,6 +589,18 @@ and nothing reads it from config. Then a workspace with at least one broker data
 already in it, and for check 5 specifically, a broker with a long transaction history
 rather than a fresh one.
 
+**Expect the first attempt to fail on authorization, and do not believe what it tells
+you to do about it.** A cached token that has expired or been revoked comes back as
+`invalid_grant`, and the fix is one line — delete
+`~/.config/gspread/authorized_user.json` and run `sheet` again, which reauthorizes in a
+browser. `credentials.json` stays. This is worth writing down here because the program
+will not tell you: `open_spreadsheet()` has two authorization branches, and the one an
+expired token actually reaches — the lazy refresh on the first API call — raises
+`Google authorization failed (...)` and stops, carrying none of the fix. The other
+branch, which does carry a fix, says `invalid_grant` means the OAuth client no longer
+exists and sends you off to create a new client ID. That is the remedy for
+`deleted_client`; for an expired token it is wrong and costs an afternoon.
+
 **What it costs.** `sheet` clears and rewrites all four machine-owned tabs, and the
 refusal at the end has you deface the `Holdings` tab on purpose and hand it back
 afterwards. So this runs against a spreadsheet you are willing to have rewritten, which
@@ -698,6 +710,42 @@ it up that way, and say which tab.
 Then *Recording a result* below, which is where the asymmetry it warns about actually
 bites: one `sheet` run touches all three of these rows, and the refusal is the only one
 that writes itself up.
+
+### Run once, on 2026-08-10
+
+The sync itself worked, on the second attempt — the first died on the expired token
+described above. What came back:
+
+```
+[*] Refreshed: 16 accounts, 9 holdings, 9 movements from ally, fidelity, schwab529plan, snaptrade, tsp.
+```
+
+**What that line establishes on its own**, before anybody opens the spreadsheet:
+authorization succeeded, `Investment Account Scrapes` was found, all four tabs were
+ensured, **`claim()` accepted all four before any of them was cleared**, and three
+`write_rows` calls plus the dashboard completed against real Sheets. Five broker
+databases opened, and no `[-] Not on the sheet:` line means none was skipped. So the
+machinery — the authorization, the four-tab claim, the chunked RAW write — has now met
+the real thing rather than a `MagicMock`.
+
+**All three rows are still `No`, for three different reasons.** A write that returns says
+nothing about how the values *render*, and rendering is exactly what checks 2 through 4
+are for: money can arrive as text, the dashboard's two totals can disagree, and an absent
+value can arrive as an empty string, all through a RAW upload that reports success.
+Nobody looked, so *four machine-owned tabs* stands unsettled. The refusal was never run,
+and the accept path succeeding four times says nothing about the refuse path — which is
+the one whose failure costs somebody their work. And 9 movements cannot settle
+*the whole transaction history reaching a tab* at all: the reader stops at 500, so a tab
+that had silently windowed would have agreed with the shell exactly.
+
+**What would finish it, cheapest first.** Run `sheet` **twice** — the second run's
+`claim()` has to read back the banner the first one wrote, so four accepts on a second
+run prove `A1` carries the banner and round-trips, with nothing opened by hand. Then open
+the spreadsheet once for checks 1 through 4, which is all *four machine-owned tabs* still
+needs. Then the refusal, which needs the deliberate deface. The transaction row is the
+odd one out: it needs a workspace with a few hundred movements at least, and past 2,000
+to put a second chunked write in front of Sheets, so it waits on a broker rather than on
+an afternoon.
 
 ---
 
