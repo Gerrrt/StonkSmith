@@ -8,8 +8,12 @@ at least 4 years and 1 day)" -- so the anniversary itself is still the band
 below, which is exactly the sort of boundary that gets a member paid at the
 wrong rate for a month and never looks wrong.
 
-The fixtures are reconstructions, not saved responses; each says so at the top
-and says why. Nothing here touches the network or the real config file.
+The enlisted fixture is the page as DFAS serves it, trimmed to its two tables.
+It used to be a reconstruction, and the swap is why two of the tests below
+exist: the reconstruction was right about every rate and wrong about the markup
+in two ways, and the parser passed against it while reading nothing whatever
+off the real page. The prior-service fixture is still a reconstruction and says
+so at the top. Nothing here touches the network or the real config file.
 """
 
 import datetime as dt
@@ -43,6 +47,20 @@ class GradeSpellingTests(unittest.TestCase):
 
     def test_keeps_the_prior_service_suffix(self) -> None:
         self.assertEqual(normalize_grade(rank="o3e"), "O-3E")
+
+    def test_reads_a_grade_the_page_footnotes(self) -> None:
+        # Exactly the two grades whose rates come with conditions carry a note
+        # marker, and reading the cell literally dropped both of them -- E-9
+        # silently, which is the worst way for a senior member's accrual to be
+        # wrong, because "no rate published" looks like an answer.
+        self.assertEqual(normalize_grade(rank="E-9(Notes 2 & 3)"), "E-9")
+        self.assertEqual(normalize_grade(rank="E-1 (Notes 4 & 5)"), "E-1")
+
+    def test_a_note_does_not_make_a_grade_out_of_prose(self) -> None:
+        # Only a trailing parenthesis goes. The refusal to guess at rank names
+        # is the rule the trimming must not quietly widen.
+        self.assertIsNone(normalize_grade(rank="Sergeant (Note 1)"))
+        self.assertIsNone(normalize_grade(rank="Cumulative Years of Service(Note 1)"))
 
     def test_refuses_a_rank_title(self) -> None:
         # "Sergeant" is a different pay grade in different services, so there
@@ -126,6 +144,36 @@ class PayTableTests(unittest.TestCase):
             effective_date(html=ENLISTED.read_text(encoding="utf-8")),
             dt.date(2026, 1, 1),
         )
+
+    def test_every_enlisted_grade_is_carried(self) -> None:
+        # Nine grades, and the two the served page footnotes are the two that
+        # went missing. Asserting the whole set rather than a sample is the
+        # point: a grade dropped from the parse is indistinguishable from a
+        # grade the page publishes no rate for, so nothing else would say.
+        self.assertEqual(
+            sorted(self.table),
+            ["E-1", "E-2", "E-3", "E-4", "E-5", "E-6", "E-7", "E-8", "E-9"],
+        )
+
+    def test_a_band_heading_split_over_a_line_break_is_still_that_band(self) -> None:
+        # How the served page writes its headings: the word and the number are
+        # stacked, so reading the cell as text returns them run together. This
+        # matched no label, so no header row was found, so basic_pay_table
+        # skipped the table -- and a page of perfectly good rates parsed to {}.
+        stacked = """
+        <table>
+          <tr><td>Pay Grade</td><td><b>Over</b><br/>10</td>
+              <td><b>Over</b><br/>12</td></tr>
+          <tr><td>E-7</td><td>5,300.40</td><td>5,591.70</td></tr>
+        </table>
+        """
+
+        table = basic_pay_table(html=stacked)
+
+        # Canonically spelled on the way out, whatever the markup did, because
+        # band_on names the column it wants and has to find it.
+        self.assertEqual(table["E-7"]["Over 10"], 5300.40)
+        self.assertEqual(table["E-7"]["Over 12"], 5591.70)
 
     def test_ignores_a_page_that_is_not_a_pay_table(self) -> None:
         denied = "<html><body>Access Denied</body></html>"

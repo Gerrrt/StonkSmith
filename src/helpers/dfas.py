@@ -90,9 +90,37 @@ BANDS: tuple[tuple[str, int], ...] = (
 #: The first band, which every grade has and which nothing is "over".
 BASE_BAND: str = BANDS[0][0]
 
-#: Band labels, for recognising a header row without caring what the page calls
-#: the columns around it.
-BAND_LABELS: frozenset[str] = frozenset(label for label, _years in BANDS)
+#: Any run of whitespace, including the non-breaking spaces an HTML table is apt
+#: to head its columns with.
+SPACING = re.compile(pattern=r"\s+")
+
+#: Band labels keyed by their spacing removed entirely, because how much space
+#: falls inside one is not a fact about the column. The served page stacks the
+#: heading over two lines --
+#:
+#:     <td><b>Over</b><br/><span><b>10</b></span></td>
+#:
+#: -- which a reader sees as "Over 10" and which reading the cell as text
+#: returns as "Over10", the line break being markup rather than a character. A
+#: copy saved from a browser and reflowed says "Over 10" instead. Matching the
+#: label exactly therefore found no header row in the page DFAS actually
+#: serves, and since basic_pay_table skips a table whose header it cannot find,
+#: the whole page parsed to nothing rather than to something visibly wrong.
+#:
+#: Keying on the spaceless form rather than adding a second spelling to BANDS
+#: keeps one name per column: the canonical label is what comes back, so
+#: everything downstream -- band_on's lookups above all -- still sees "Over 10".
+BAND_BY_SHAPE: dict[str, str] = {
+    SPACING.sub(repl="", string=label).casefold(): label for label, _years in BANDS
+}
+
+#: A trailing footnote marker on a pay grade, as the published first column
+#: writes it: "E-9(Notes 2 & 3)", "E-1(Notes 4 & 5)". Only the two grades whose
+#: rates carry conditions have one, which is what made this expensive to notice
+#: -- E-8 through E-2 read cleanly, so the table parsed and simply had no E-9 in
+#: it. A senior enlisted member then accrues nothing, and the run still looks
+#: like it worked.
+FOOTNOTE = re.compile(pattern=r"\s*\([^)]*\)\s*$")
 
 #: A pay grade as the tables write it: "E-7", "O-3", "W-5", and the "E" suffix
 #: that marks an officer with prior enlisted or warrant service, "O-3E". The
@@ -127,13 +155,20 @@ def normalize_grade(rank: str) -> str | None:
     a hyphen. What it will not do is guess: a rank name like "Sergeant" maps to
     different grades in different services, and there is no honest way to turn
     one into a pay grade without knowing which service.
-    :param rank: The grade as configured
+
+    A trailing parenthesised note is dropped first. That is how the published
+    tables write the two grades whose rates come with conditions, and reading
+    the cell literally dropped both of them from the parse -- silently, because
+    a grade that is absent from the table is indistinguishable from a grade the
+    table publishes no rate for. Only a *trailing* group goes, and only the
+    outermost one: nothing that could be part of a grade lives inside it.
+    :param rank: The grade as configured, or as the first column writes it
     :return: The canonical spelling, e.g. "E-5" or "O-3E", or None when the text
         is not a pay grade at all
     :rtype: str | None
     """
 
-    found = GRADE.match(string=rank.strip())
+    found = GRADE.match(string=FOOTNOTE.sub(repl="", string=rank.strip()))
 
     if found is None:
         return None
@@ -234,6 +269,12 @@ def header_bands(rows: list[Tag]) -> tuple[int, list[str]]:
     markup -- the one thing that is stable is that the columns are called what
     the pay tables have always called them.
 
+    Called what they are called, but not spaced how they are spaced: the served
+    page writes "Over10" and a saved copy "Over 10". So the comparison is made
+    on the label with its spacing removed, and what is returned is the canonical
+    spelling rather than whatever the cell said -- the rest of this module, and
+    band_on in particular, has one name per column and must keep it.
+
     The row carrying the *most* labels wins, not the first row carrying a
     couple. Taking the first would let any row that happens to hold two band
     strings -- a footnote, a nested caption, a "see Over 20" cross-reference --
@@ -256,9 +297,14 @@ def header_bands(rows: list[Tag]) -> tuple[int, list[str]]:
 
     for index, row in enumerate(iterable=rows):
         labels: list[str] = [
-            text
+            label
             for cell in row.find_all(name=["th", "td"])
-            if (text := cell.get_text(strip=True)) in BAND_LABELS
+            if (
+                label := BAND_BY_SHAPE.get(
+                    SPACING.sub(repl="", string=cell.get_text(strip=True)).casefold()
+                )
+            )
+            is not None
         ]
 
         if len(labels) > len(best[1]):

@@ -29,8 +29,14 @@ DEFAULT_TSP_PRICE_URL = "https://www.tsp.gov/data/fund-price-history.csv"
 #: hang off this as path segments -- see helpers.dfas.TABLE_PATHS -- so a move
 #: only invalidates the base, which is what makes one overridable URL enough to
 #: fix all four without a release.
+#:
+#: "MilitaryMembers" rather than "Military-Members": the hyphenated path is the
+#: one DFAS published for years, and it now 301s here. Following the redirect
+#: costs a round trip on every fetch and, more to the point, a redirect is a
+#: courtesy that gets withdrawn -- the eventual 404 would arrive as "DFAS has no
+#: pay table for your grade" rather than as a moved page.
 DEFAULT_DFAS_PAY_URL = (
-    "https://www.dfas.mil/Military-Members/payentitlements/Pay-Tables/Basic-Pay/"
+    "https://www.dfas.mil/MilitaryMembers/payentitlements/Pay-Tables/Basic-Pay/"
 )
 
 _config: configparser.ConfigParser | None = None

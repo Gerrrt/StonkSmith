@@ -90,16 +90,15 @@ scrapes without one; the published price feed behind that flag has been
 contacted, and the flag has been seen to refuse a database holding no units and
 to open no browser doing it, but its valuing path has not been run. Those runs
 saw one account state, though, so anything plural about an Ally account is still
-inference. TSP has in part: its statement and share-price parsers, the mark's
-arithmetic and its price download are verified against real data, but its
-database write, the contribution accrual and everything touching the DFAS pay
-table are not. The sheet it feeds is verified: its four tabs were read back
-against the real spreadsheet and it was made to refuse a tab it did not own.
-What is unverified there is one claim about volume — that a tab holds every
-movement rather than the newest five hundred — which needs a broker with the
-history to ask it. Green tests say the code does what it was written to do,
-which is not the same as saying the site still looks the way it did when the
-parser was written.
+inference. TSP has too: its statement and share-price parsers, the mark's
+arithmetic, its price download, its database write, its contribution accrual and
+both halves of the DFAS pay table are verified against real data. The sheet it
+feeds is verified as well: its four tabs were read back against the real
+spreadsheet and it was made to refuse a tab it did not own. What is unverified
+there is one claim about volume — that a tab holds every movement rather than
+the newest five hundred — which needs a broker with the history to ask it.
+Green tests say the code does what it was written to do, which is not the same
+as saying the site still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
 gives the procedure for the rest — it is the record, and this paragraph
 summarises it rather than being maintained beside it.
@@ -698,8 +697,9 @@ date, a grade DFAS publishes no rate for, or a refused download all report
 themselves and leave the anchored mark exactly as it was. The pay table is
 cached under `~/.stonksmith` for the rest of the year, since DFAS changes it
 every January. `--pay-table` reads a page saved by hand, the way `--prices`
-does. Unlike the share price download, **this one has not been run against
-dfas.mil for real** — see `docs/live-verification.md`.
+does, and remains the fallback: dfas.mil fingerprints its callers, so a download
+that works today can stop. **It has been run against dfas.mil for real** — see
+`docs/live-verification.md`.
 
 Sheets needs no tab prepared: StonkSmith creates `Accounts`, `Holdings`,
 `Transactions` and `Dashboard` itself on the first sync. If the sheet cannot be written at all — no
@@ -710,16 +710,17 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write has not been run. The sheet has: on 2026-08-10 it was
-built from real databases, read back tab by tab, checked by eye where a read
-could not reach, made to refuse a tab it did not own, and rebuilt from nothing
-after its four tabs were deleted. What is left there is the one claim nine
-movements cannot put — that a tab holds every movement rather than the newest
+reports. The database write has been run, against a real `tsp.db` and against
+one written before the `units_as_of` column existed. The sheet has been run too: on
+2026-08-10 it was built from real databases, read back tab by tab, checked by eye
+where a read could not reach, made to refuse a tab it did not own, and rebuilt
+from nothing after its four tabs were deleted. What is left there is the one claim
+nine movements cannot put — that a tab holds every movement rather than the newest
 five hundred — which is tracked on its own as #141.
 `docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
-statement's fund is read and logged but not carried into the mark, so a
-statement for one fund with another configured values the wrong one.
+statement naming a different fund from your config is refused, but one whose
+fund cannot be read at all is still priced with the configured fund.
 
 Manage stored credentials and scraped balances:
 
