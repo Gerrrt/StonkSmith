@@ -196,8 +196,9 @@ class StonkSmithDBMenu(cmd.Cmd):
         """
         Check what a successful sync cannot show, against real Sheets.
 
-        Two halves, and `verify` on its own runs both. ``tabs`` reads the four
-        tabs back: a write that returned says the request was accepted, not that
+        Two halves, and `verify` on its own runs both. ``tabs`` reads the
+        machine-owned tabs back: a write that returned says the request was
+        accepted, not that
         the values arrived as the kind of thing they were meant to be. ``guard``
         asks claim() its three questions on a tab it makes and removes -- the
         refusal is the one rule here whose failure cannot be undone by running
@@ -229,7 +230,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         cases: list[Any] = []
 
         if which in ("", "tabs"):
-            print(f"[*] Reading the four tabs back from '{SPREADSHEET_NAME}'.")
+            print(f"[*] Reading the tabs back from '{SPREADSHEET_NAME}'.")
             read = self._checked(
                 run=lambda: check_tabs(workspace=self.workspace), what="Tab check"
             )

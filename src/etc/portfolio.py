@@ -8,7 +8,7 @@ Five brokers wrote five unrelated worksheet layouts. Nothing shared a column:
 `Price date` and `Units as of` were three answers to one question. Each broker
 was re-deriving its own projection of a shape the database already had.
 
-So the projection lives here instead, once. Three row types, ordered columns,
+So the projection lives here instead, once. Four row types, ordered columns,
 and one function that produces them from every broker database in a workspace.
 
 **The columns are append-only.** A new column goes on the end, never in the
@@ -33,6 +33,20 @@ rather than the newest run's worth. That is why the read behind it takes no
 limit: a history shown five hundred rows at a time, with nothing saying so, is
 the failure this project keeps finding rather than a smaller feature.
 
+The account series is the fourth, and the first that is *constructed* rather
+than projected. The other three each render what some source said; this one
+renders what the portfolio was worth on a date, which no source ever says
+because the sources do not report together. Ally needs a manual sign-in and may
+go a week, TSP runs unattended, SnapTrade runs whenever -- so totalling the
+stored snapshots by date puts one broker's money on a date only that broker ran
+on, and draws a portfolio that repeatedly collapses and recovers while looking
+entirely like data. net_worth_history carries each account's last known value
+forward instead, so every date sums the same accounts, and every row says
+whether its number was read that day or carried onto it. It is unbounded for
+the same reason Transactions is, and for one more: a series whose oldest points
+have silently fallen off the end is a chart of a shorter history than the one
+you have.
+
 **Money is a number here, never a formatted string.** Every saver so far wrote
 `format_amount()` output, which puts "$1,234.56" in a cell that cannot then be
 added up. Formatting is the cell's job. `None` stays empty rather than becoming
@@ -47,6 +61,7 @@ them. Nothing here can dedupe across brokers, which is why the `[SNAPTRADE]
 exclude_accounts` setting is still the thing that decides who owns an account.
 """
 
+import datetime as dt
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -142,6 +157,68 @@ TRANSACTION_COLUMNS: tuple[str, ...] = (
     "External Id",
 )
 
+#: How long an account's last known value may be carried forward before the
+#: account drops out of the series rather than persisting at a stale number.
+#:
+#: Not the dashboard's STALE_DAYS, which is seven. That one answers "should a
+#: human look at this account", and a week is right for it. This one answers
+#: "may this account still be counted in a total", and a week is wrong for it:
+#: Ally needs a manual sign-in and routinely goes longer, so a seven-day horizon
+#: would drop a live account out of the series and restore it a run later. A
+#: chart built that way collapses and recovers while looking entirely like data,
+#: which is the failure this whole shape exists to avoid. Thirty days carries a
+#: monthly cadence without carrying a broker that has genuinely stopped.
+CARRY_DAYS: int = 30
+
+#: The account series, in order. One row per account per date on which anything
+#: in the workspace was observed -- not one per snapshot, because the whole
+#: point is that brokers do not scrape on the same day.
+#:
+#: The first four columns are the same identity prefix the other three views
+#: carry, so all four join on Broker + Account Key.
+NET_WORTH_COLUMNS: tuple[str, ...] = (
+    "Broker",
+    "Source",
+    "Account",
+    "Account Key",
+    #: The date this row stands on, which is the one column here no source ever
+    #: claimed. It is not "As Of": that means "the date the source says the
+    #: value is for", and on a carried row the source never said anything about
+    #: this date at all. Two meanings, so two names -- the same rule that keeps
+    #: "Units As Of" and "Processed On" off "As Of".
+    "Date",
+    "Value",
+    "Currency",
+    #: Whether this row's number was read on its Date or carried onto it. The
+    #: reason the tab can exist honestly: a point that is nine parts observed
+    #: and one part carried forward is not the same fact as one where everything
+    #: was observed, and a chart rendering them identically asserts a precision
+    #: it does not have.
+    #:
+    #: Two words, "observed" and "carried", rather than a blank for one of them.
+    #: A blank cell means the source said nothing, everywhere else in this
+    #: contract, and this column is computed here rather than reported by
+    #: anyone -- so it always has an answer and always says it.
+    #:
+    #: Not a second spelling of "Cost Basis" on the holdings view. That one is
+    #: what was paid for a position; this is whether a number is a reading or a
+    #: carry. Neither name appears in the other's tuple, which the contract test
+    #: pins.
+    "Basis",
+    #: The date the value was actually read for -- equal to Date on an observed
+    #: row, and older on a carried one. The difference is how stale the point is,
+    #: which is the question "Basis" answers yes-or-no and this one answers in
+    #: days.
+    "Observed On",
+    #: What the source itself said, blank when it said nothing, exactly as on the
+    #: account view. Beside "Observed On" rather than instead of it: "Observed
+    #: On" always has a date because it falls back to the run's own, and the
+    #: difference between the two is whether that date is the source's claim or
+    #: StonkSmith's clock.
+    "As Of",
+    "Scraped At",
+)
+
 
 def _cell(value: Any) -> Any:
     """
@@ -215,6 +292,55 @@ def _sortable(date: str | None) -> str:
     """
 
     return date if date and _ISO_DATE.match(string=date) else ""
+
+
+def _observed_on(as_of: str | None, scraped_at: str) -> str:
+    """
+    The date one snapshot is evidence about.
+
+    Two facts arrive per snapshot and neither alone answers this. ``as_of`` is
+    the date the source says the value is for, and several sources never say it;
+    ``scraped_at`` is when the run happened, and it is always there because
+    StonkSmith writes it. So the source's own date is preferred and the run's
+    date is the fallback, which is the same order of preference the dashboard's
+    staleness panel already applies.
+
+    Only a date that parses counts. _iso hands back text it could not read --
+    deliberately, because an unreadable date is still evidence -- but a series
+    cannot place a point on "whenever", and comparing that text to a real date
+    puts it above every digit. So an unparseable ``as_of`` costs its snapshot
+    the source's date and falls through to the run's, rather than costing it the
+    row: the value was still observed, just on the day StonkSmith looked.
+    :param as_of: The date the source says the value is for, if it said one
+    :param scraped_at: The run timestamp, "YYYY-MM-DD HH:MM:SS"
+    :return: A YYYY-MM-DD date, or "" when neither field holds one
+    :rtype: str
+    """
+
+    claimed: str = _sortable(date=_iso(date=as_of))
+
+    if claimed:
+        return claimed
+
+    # The date half of the run timestamp. Sliced rather than parsed because the
+    # format is StonkSmith's own and fixed -- but still checked, so a database
+    # holding something else does not put a point on a date-shaped nothing.
+    return _sortable(date=str(object=scraped_at or "")[:10])
+
+
+def _date(text: str) -> dt.date:
+    """
+    One YYYY-MM-DD string as a date, for measuring the gap a carry crosses.
+
+    Only ever called on text _observed_on produced, which is why it can be this
+    blunt: that function returns either a string _ISO_DATE matched or "", and
+    the callers here drop the empty case before they get this far.
+    :param text: A YYYY-MM-DD date
+    :return: The date it spells
+    :rtype: dt.date
+    """
+
+    return dt.date.fromisoformat(text)
 
 
 def _reason(error: Exception) -> str:
@@ -430,6 +556,84 @@ class TransactionRow:
         ]
 
 
+#: What the "Basis" column says of a value read on the date it sits on.
+OBSERVED: str = "observed"
+
+#: What it says of a value carried onto a date nobody read it on.
+CARRIED: str = "carried"
+
+
+@dataclass(frozen=True, slots=True)
+class NetWorthRow:
+    """
+    One account on one date, at the last value anything knew it to be.
+
+    The fourth shape, and the only one that is neither current state nor a log.
+    Accounts and holdings are "what is true now"; transactions are "what
+    happened". This is a *series*, and a series over sources that do not report
+    together has to be constructed rather than read: see net_worth_history below
+    for why summing snapshots by date instead would undercount.
+
+    Which makes ``basis`` the load-bearing field. Every other row shape here
+    carries only what a source said. This one carries some numbers that were
+    read on their date and some that were carried onto it, and the column that
+    tells them apart is what keeps that honest rather than merely convenient.
+    """
+
+    #: The same identity prefix the other three carry.
+    broker: str
+    source: str
+    account: str
+    account_key: str
+
+    #: The date this row stands on. Always a date -- a row is never emitted for
+    #: a date the series could not place.
+    date: str = ""
+
+    #: What the account was worth, as of ``observed_on`` rather than ``date``.
+    #: Never None: an account with no value to carry is absent from the date
+    #: rather than present at nothing, which is the row-shape rule one step on.
+    #: A value the source never gave stays empty on the account view; here it
+    #: does not become a row at all, because a series point with an empty value
+    #: would be counted as a gap in a total rather than read as a silence.
+    value: float | None = None
+
+    currency: str = "USD"
+
+    #: OBSERVED or CARRIED. See the column comment.
+    basis: str = OBSERVED
+
+    #: The date ``value`` was read for. Equal to ``date`` when observed.
+    observed_on: str = ""
+
+    #: The source's own date for that reading, where it gave one.
+    as_of: str | None = None
+
+    #: The run that took that reading.
+    scraped_at: str = ""
+
+    def cells(self) -> list[Any]:
+        """
+        This row in NET_WORTH_COLUMNS order.
+        :return: One value per column
+        :rtype: list[Any]
+        """
+
+        return [
+            self.broker,
+            self.source,
+            self.account,
+            self.account_key,
+            self.date,
+            _cell(self.value),
+            self.currency,
+            self.basis,
+            self.observed_on,
+            _cell(self.as_of),
+            _cell(self.scraped_at),
+        ]
+
+
 @dataclass(frozen=True, slots=True)
 class Portfolio:
     """
@@ -454,6 +658,14 @@ class Portfolio:
     #: (name, reason) for anything that could not be read -- normally a broker,
     #: or the workspace itself when the whole directory is missing.
     unreadable: tuple[tuple[str, str], ...] = ()
+
+    #: The account series: every account on every date anything was observed.
+    #: Appended after ``unreadable`` rather than slotted in beside the three row
+    #: tuples it belongs with, on the same instinct the columns follow -- every
+    #: construction of this class is by keyword, so nothing breaks either way,
+    #: and a field that has always been fifth is easier to reason about later
+    #: than one that used to be fourth.
+    net_worth: tuple[NetWorthRow, ...] = ()
 
     def total(self, currency: str = "USD") -> float:
         """
@@ -481,6 +693,48 @@ class Portfolio:
         )
 
 
+def _account_row(broker: str, row: tuple[Any, ...]) -> AccountRow:
+    """
+    Project one account tuple into the account view's shape.
+
+    Shared by read_broker and read_history because the two reads behind them
+    return the same nine columns deliberately -- get_account_history is
+    get_current_accounts with its newest-snapshot restriction taken off. One
+    mapping rather than two means the fallbacks below cannot drift apart, which
+    would show an account under one name on one tab and another on the next.
+    :param broker: The broker name, which becomes the Broker column
+    :param row: One row in get_current_accounts() order
+    :return: The account as this view spells it
+    :rtype: AccountRow
+    """
+
+    (
+        account_key,
+        source,
+        display_name,
+        beneficiary,
+        kind,
+        value,
+        currency,
+        as_of,
+        scraped_at,
+    ) = row
+
+    return AccountRow(
+        broker=broker,
+        # Only an aggregator fills this; a direct scraper is its own source.
+        source=str(object=source or "").strip() or broker,
+        account=display_name,
+        account_key=account_key,
+        kind=kind,
+        beneficiary=beneficiary,
+        value=value,
+        currency=currency or "USD",
+        as_of=as_of,
+        scraped_at=scraped_at or "",
+    )
+
+
 def read_broker(
     broker: str, db: PortfolioDbProtocol
 ) -> tuple[list[AccountRow], list[HoldingRow], list[TransactionRow]]:
@@ -498,32 +752,10 @@ def read_broker(
     accounts: list[AccountRow] = []
     by_key: dict[str, AccountRow] = {}
 
-    for (
-        account_key,
-        source,
-        display_name,
-        beneficiary,
-        kind,
-        value,
-        currency,
-        as_of,
-        scraped_at,
-    ) in db.get_current_accounts():
-        row = AccountRow(
-            broker=broker,
-            # Only an aggregator fills this; a direct scraper is its own source.
-            source=str(object=source or "").strip() or broker,
-            account=display_name,
-            account_key=account_key,
-            kind=kind,
-            beneficiary=beneficiary,
-            value=value,
-            currency=currency or "USD",
-            as_of=as_of,
-            scraped_at=scraped_at or "",
-        )
+    for current in db.get_current_accounts():
+        row: AccountRow = _account_row(broker=broker, row=current)
         accounts.append(row)
-        by_key[account_key] = row
+        by_key[row.account_key] = row
 
     holdings: list[HoldingRow] = []
 
@@ -629,6 +861,182 @@ def read_broker(
     return accounts, holdings, transactions
 
 
+def read_history(broker: str, db: PortfolioDbProtocol) -> list[AccountRow]:
+    """
+    Every snapshot one broker holds, as account rows rather than as the newest.
+
+    Separate from read_broker rather than a fourth element of its return,
+    because what comes back here is not a fourth tab. It is the input to
+    net_worth_history, which cannot run per broker: the dates a broker's
+    accounts have to be carried onto belong to the *other* brokers, and a
+    function that only ever sees one database cannot know them.
+
+    An AccountRow per snapshot rather than a shape of its own. An observation is
+    an account row -- the same nine facts about the same account -- and the only
+    thing distinguishing it from the one on the Accounts tab is that a newer one
+    exists. Inventing a near-identical record to say that would be the
+    duplication etc.portfolio was written to end.
+    :param broker: The broker name, which becomes the Broker column
+    :param db: An open database
+    :return: One row per stored snapshot, oldest first within each account
+    :rtype: list[AccountRow]
+    """
+
+    return [_account_row(broker=broker, row=row) for row in db.get_account_history()]
+
+
+def net_worth_history(
+    observations: Iterable[AccountRow], horizon_days: int = CARRY_DAYS
+) -> list[NetWorthRow]:
+    """
+    The account series, built so that every date sums the same set of accounts.
+
+    **The problem this exists to solve is not plumbing.** Brokers do not scrape
+    on the same day: Ally needs a manual sign-in and may go a week, TSP runs
+    unattended, SnapTrade runs whenever. Group the stored snapshots by date and
+    total them, and a date on which only one broker ran has one broker's money
+    on it. The resulting chart shows a portfolio that repeatedly collapses and
+    recovers -- while looking entirely like data, which is what makes it worse
+    than no chart.
+
+    So each account's last known value is carried forward onto every later date,
+    and every point sums the same accounts. That is the correct construction and
+    it is also partly made up, which is why three things are true of it:
+
+    - **A carried value says it was carried.** ``basis`` is OBSERVED or CARRIED
+      on every row, and ``observed_on`` says how far the carry reached. The same
+      argument "As Of" and "Scraped At" already settle: two different facts, two
+      names, and nothing rendering them identically.
+    - **A carry does not reach forever.** Past ``horizon_days`` the account drops
+      out of the series rather than persisting at a stale value. Crossing a
+      weekend is not crossing a quarter.
+    - **An account that did not exist yet is absent, not zero.** No row is
+      emitted for a date before that account's first reading. Zero and absent
+      are different, and the row-shape rules already say a value the source never
+      gave stays empty rather than becoming 0 -- because an account that
+      reported no number is not an account worth nothing. A back-filled zero
+      would be that same mistake with a number invented on top.
+
+    The dates are the ones something was actually read on, not every day on the
+    calendar. A point exists because a broker ran, so nothing here invents a
+    date any more than it invents a value -- and the tab grows with the number
+    of runs rather than with the passage of time.
+    :param observations: Every snapshot from every broker, in any order
+    :param horizon_days: How long a value may be carried before its account
+        drops out of the series
+    :return: One row per account per date it can be placed on, oldest first
+        within each account
+    :rtype: list[NetWorthRow]
+    """
+
+    # Keyed on (broker, account_key) because identity is per-broker: account_key
+    # is unique inside one broker's database and means nothing outside it, so
+    # two brokers sharing a key are two accounts and must not merge into one
+    # series. Same reason nothing here dedupes a 529 held under two names.
+    readings: dict[tuple[str, str], dict[str, AccountRow]] = {}
+
+    for row in observations:
+        # A snapshot with no value is the source declining to say, which is not
+        # a reading. It cannot become a carried value, it does not reset a carry
+        # that is already running, and it does not put a date on the axis --
+        # a date whose only event was a silence would be a point on which every
+        # account was carried, which is a chart of nothing pretending otherwise.
+        if row.value is None:
+            continue
+
+        on: str = _observed_on(as_of=row.as_of, scraped_at=row.scraped_at)
+
+        if not on:
+            continue
+
+        # Last one wins within a date. The read comes back ordered by
+        # scraped_at, so that is the latest reading of that account that day --
+        # the same rule get_current_accounts applies across all dates.
+        readings.setdefault((row.broker, row.account_key), {})[on] = row
+
+    axis: list[str] = sorted({on for dates in readings.values() for on in dates})
+
+    if not axis:
+        return []
+
+    horizon: dt.timedelta = dt.timedelta(days=horizon_days)
+    series: list[NetWorthRow] = []
+
+    def label(key: tuple[str, str]) -> tuple[str, str, str, str]:
+        """
+        Where one account's block of the series sorts.
+
+        Read off the account's *newest* reading, not off each row. Every row
+        carries the source and display name of whichever reading it carries,
+        and a display name is explicitly not identity -- it is free to change,
+        and does. Sorting the rows on it would put an account renamed halfway
+        through its history in two separate blocks of the tab, each internally
+        in order and neither one the account. So the ordering is decided once
+        per account, on the name it goes by now, and the rows underneath keep
+        the order they were built in.
+        :param key: The (broker, account_key) this account is grouped under
+        :return: Its sort position
+        :rtype: tuple[str, str, str, str]
+        """
+
+        newest: AccountRow = readings[key][max(readings[key])]
+
+        # Broker and key break the tie, so two accounts that display the same
+        # still order deterministically rather than by dictionary order.
+        return (newest.source, newest.account, *key)
+
+    # Ordered here rather than by sorting the finished rows, which is also why
+    # nothing sorts them afterwards: each account's block is emitted in axis
+    # order, which is ascending, and the blocks are emitted in this one.
+    #
+    # Forward in time within each, not newest-first like Transactions. That one
+    # is a log, where the last thing that happened is the thing you came to
+    # read; this is a series, which is read in the direction it was lived.
+    for dates in [readings[key] for key in sorted(readings, key=label)]:
+        # Walked in step with the axis rather than searched per date: both are
+        # sorted, so one pass over each is enough and a workspace with years of
+        # runs does not turn into a quadratic scan.
+        observed: list[str] = sorted(dates)
+        at: int = 0
+        carried: AccountRow | None = None
+
+        for date in axis:
+            while at < len(observed) and observed[at] <= date:
+                carried = dates[observed[at]]
+                at += 1
+
+            # Nothing read at or before this date. The account did not exist
+            # yet, as far as anything here can know, so it is absent.
+            if carried is None:
+                continue
+
+            on = _observed_on(as_of=carried.as_of, scraped_at=carried.scraped_at)
+
+            if _date(text=date) - _date(text=on) > horizon:
+                continue
+
+            series.append(
+                NetWorthRow(
+                    broker=carried.broker,
+                    source=carried.source,
+                    account=carried.account,
+                    account_key=carried.account_key,
+                    date=date,
+                    value=carried.value,
+                    # The carried reading's own currency, never a converted one.
+                    # Portfolio.total refuses to add a dollar to a euro and this
+                    # must not do quietly what that declines to do loudly.
+                    currency=carried.currency,
+                    basis=OBSERVED if on == date else CARRIED,
+                    observed_on=on,
+                    as_of=carried.as_of,
+                    scraped_at=carried.scraped_at,
+                )
+            )
+
+    return series
+
+
 def workspace_path(workspace: str | None = None, root: Path | None = None) -> Path:
     """
     Where a workspace's broker databases live.
@@ -668,6 +1076,7 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
     accounts: list[AccountRow] = []
     holdings: list[HoldingRow] = []
     transactions: list[TransactionRow] = []
+    observations: list[AccountRow] = []
     read: list[str] = []
     unreadable: list[tuple[str, str]] = []
 
@@ -682,6 +1091,7 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
             broker_accounts, broker_holdings, broker_transactions = read_broker(
                 broker=broker, db=db
             )
+            broker_observations: list[AccountRow] = read_history(broker=broker, db=db)
 
         # Deliberately broad. A file in this directory can fail to be a usable
         # database in more ways than are worth enumerating -- corrupt, truncated,
@@ -702,6 +1112,7 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
         accounts.extend(broker_accounts)
         holdings.extend(broker_holdings)
         transactions.extend(broker_transactions)
+        observations.extend(broker_observations)
         read.append(broker)
 
     return Portfolio(
@@ -710,6 +1121,12 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
         transactions=tuple(transactions),
         brokers_read=tuple(read),
         unreadable=tuple(unreadable),
+        # Built here rather than inside the loop, and that is the whole design.
+        # The dates one broker's accounts must be carried onto are the dates the
+        # *other* brokers ran on, so the series cannot be assembled a database at
+        # a time -- a per-broker series would each be right on its own and sum to
+        # a portfolio that collapses every day only one of them scraped.
+        net_worth=tuple(net_worth_history(observations=observations)),
     )
 
 
