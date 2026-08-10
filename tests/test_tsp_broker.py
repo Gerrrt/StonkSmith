@@ -363,6 +363,62 @@ class TspPayTableTests(unittest.TestCase):
         self.assertIn("no rates", self._logged())
         self.assertIsNone(self.broker.pay_table)
 
+    def test_a_page_read_one_column_out_is_refused_rather_than_priced(self) -> None:
+        # The one failure here that is not self-announcing. Every other way this
+        # can go wrong ends with no rate, which the module reports; this one ends
+        # with a rate that is real, published, and for the wrong seniority. So it
+        # is the one failure that has to drop the estimate on suspicion.
+        shifted = PAY_TABLE.read_text(encoding="utf-8").replace(
+            "</tr>", "<td>&nbsp;</td></tr>"
+        )
+        self.broker.session.get.return_value = _response(text=shifted)
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        logged = self._logged()
+        self.assertIn("does not line up", logged)
+        self.assertIn("E-7", logged)
+        self.assertIn("--no-accrual", logged)
+        self.assertIsNone(self.broker.pay_table)
+
+    def test_half_the_page_is_said_out_loud_and_still_used(self) -> None:
+        # Short is not wrong. The rates read are correct as far as they go, so
+        # this one warns and carries on -- a member inside eighteen years is
+        # priced exactly right, and one past it is refused by name later.
+        html = PAY_TABLE.read_text(encoding="utf-8")
+        first = html[: html.find("</table>") + len("</table>")]
+        self.broker.session.get.return_value = _response(text=first)
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        self.assertIn("Over 18", self._logged())
+        self.assertEqual(self.broker.pay_table["E-7"]["Over 10"], 5300.40)
+
+    def test_the_whole_grid_is_printable_for_checking_against_the_page(self) -> None:
+        # What makes the fixture retirable: one rate agreeing does not show that
+        # the blanks are where the blanks are or that the half past twenty years
+        # arrived. See docs/live-verification.md.
+        self.broker.args = Namespace(
+            prices=str(PRICES),
+            pay_table=str(PAY_TABLE),
+            no_accrual=False,
+            show_pay_table=True,
+        )
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        logged = self._logged()
+        self.assertIn("Over 40", logged)
+        self.assertIn("5,300.40", logged)
+        self.assertIn("7,067.40", logged)
+
+    def test_the_grid_is_not_printed_unless_it_is_asked_for(self) -> None:
+        self._serve()
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        self.assertNotIn("as parsed", self._logged())
+
     def test_a_rank_title_is_refused_by_name(self) -> None:
         self._configure(rank="Sergeant First Class")
 
