@@ -164,17 +164,41 @@ class VerifyCommandTests(unittest.TestCase):
         self.assertIn("deleting it again", printed)
 
     def test_a_clean_run_still_says_what_it_did_not_cover(self) -> None:
-        # The two halves that stay manual: a refusal aborting the whole sync, and
-        # an absent value arriving as an empty cell. A clean report that implied
-        # otherwise would retire steps nobody has done.
+        # A clean report that implied otherwise would retire a step nobody has
+        # done. The guard half's gap is the whole-sync abort.
         with patch("etc.portfolio_sheet.check_ownership_guard") as check:
             check.return_value = self._cases(True, True, True)
             printed = self._run()
 
         self.assertIn("[*]", printed)
         self.assertIn("live-verification", printed)
-        self.assertIn("empty cell", printed)
+        self.assertIn("aborting the whole sync", printed)
         self.assertNotIn("[-]", printed)
+
+    def test_each_half_names_only_the_gap_that_is_its_own(self) -> None:
+        # A guard-only run listing the empty-cell gap points at a tab check nobody
+        # asked for, and a caveat that does not apply teaches a reader to skim the
+        # ones that do.
+        with (
+            patch("etc.portfolio_sheet.check_ownership_guard") as guard,
+            patch("etc.portfolio_sheet.check_tabs") as tabs,
+        ):
+            guard.return_value = self._cases(True)
+            tabs.return_value = self._cases(True)
+
+            guard_only = self._run(line="guard")
+            tabs_only = self._run(line="tabs")
+            both = self._run(line="")
+
+        self.assertIn("aborting the whole sync", guard_only)
+        self.assertNotIn("empty cell", guard_only)
+
+        self.assertIn("empty cell", tabs_only)
+        self.assertNotIn("aborting the whole sync", tabs_only)
+
+        self.assertIn("empty cell", both)
+        self.assertIn("aborting the whole sync", both)
+        self.assertIn("Two things", both)
 
     def test_each_half_can_be_run_on_its_own(self) -> None:
         with (

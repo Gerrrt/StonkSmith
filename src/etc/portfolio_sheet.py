@@ -352,16 +352,6 @@ def _refusal(tab: str) -> str:
     )
 
 
-#: Marks a case whose assertion has itself never met real Sheets. The structural
-#: cases compare strings and cannot be wrong about the API; the two that carry
-#: this rest on what a render option gives back, so a failure is ambiguous between
-#: "the tab is wrong" and "this check is". Kept visible rather than buried, because
-#: reporting an unconfirmed assumption as a confirmed defect is its own kind of
-#: wrong. Count it from the constant, not from memory: an earlier draft said three,
-#: having been written before the empty-cell check turned out to be impossible.
-UNCONFIRMED: str = " (assertion unconfirmed against real Sheets)"
-
-
 def check_tabs(
     workspace: str | None = None,
     root: Path | None = None,
@@ -380,9 +370,21 @@ def check_tabs(
     Most compare strings and are certain: the banner, the column contract on
     each tab that has one, the movement count against the databases, the date
     format, and the ordering. Two read cell *values* -- money as a number and
-    the dashboard's two totals agreeing -- and those depend on what gspread hands
-    back for a rendered cell. Those two are marked, because until this has run
-    once they test the assertion as much as the sheet.
+    the dashboard's two totals agreeing -- and those rested on what gspread hands
+    back for a rendered cell, which no test here could settle. They carried a
+    marker saying so, on the grounds that reporting an unconfirmed assumption as
+    a confirmed defect is its own kind of wrong.
+
+    The marker is gone because the run happened: 2026-08-10, against the real
+    spreadsheet, every check then defined passing. A pass settles both directions
+    at once -- had the unformatted read returned display text, every money cell
+    would have been rejected as text, and a formula arriving as its own source
+    would have failed float() into "could not read both". Restoring the marker
+    would mean a new assumption, not a rediscovered one.
+
+    The Net Worth contract check postdates that run and has not been through it.
+    It is one of the certain ones -- row 2 against a literal -- so it rests on
+    nothing that run settled.
 
     A third value check was intended and cannot exist: an absent date arriving as
     an empty cell rather than as an empty string is invisible to a read, since
@@ -436,11 +438,19 @@ def check_tabs(
     cases.append(_money_case(worksheet=tabs[ACCOUNTS_TAB]))
     cases.append(_totals_case(worksheet=tabs[DASHBOARD_TAB]))
 
-    # Check 4 -- an absent date arriving as an empty cell rather than an empty
-    # string -- is deliberately absent, and cannot be added here. Read back, the
-    # two are the same value: Sheets returns "" or a short row for both. The only
-    # witness to the difference is a formula's behaviour over the cell, so that
-    # check stays an eyeball one, and docs/live-verification.md says so.
+    # Check 4 -- an account with no date being surfaced rather than counted at
+    # face value -- is deliberately absent and cannot be added here. It is a
+    # question about a formula's behaviour, not a cell's contents, and read back an
+    # empty cell and an empty string are the same value: "" or a short row for
+    # both.
+    #
+    # Its absence costs less than it looks. The distinction only matters where a
+    # formula counts one and not the other, and no dashboard formula does: As Of
+    # reaches exactly one, the staleness QUERY in _bands, whose "is null or
+    # < cutoff" catches an undated account either way -- the column holds text, not
+    # dates, because the RAW write keeps it that way. Add a COUNTA or COUNTIF over
+    # As Of and that stops holding, at which point this check has to come back.
+    # docs/live-verification.md carries the reasoning.
 
     return tuple(cases)
 
@@ -653,7 +663,7 @@ def _money_case(worksheet: Any) -> GuardCase:
     text: list[Any] = [value for value in values if not isinstance(value, (int, float))]
 
     return GuardCase(
-        name=f"Accounts Value is a number, not text{UNCONFIRMED}",
+        name="Accounts Value is a number, not text",
         expected="numeric",
         passed=not text,
         detail="" if not text else f"{len(text)} of {len(values)} came back as text",
@@ -674,7 +684,7 @@ def _totals_case(worksheet: Any) -> GuardCase:
     """
 
     labels: list[Any] = _column_at(worksheet=worksheet, letter=SUMMARY_COL)
-    name: str = f"The dashboard's two totals agree{UNCONFIRMED}"
+    name: str = "The dashboard's two totals agree"
 
     try:
         computed = _summary_value(

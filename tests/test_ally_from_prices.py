@@ -328,6 +328,18 @@ class WhenItCannot(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(context.db.saved, [])
 
+        # The sentence, not a fragment of it. docs/live-verification.md and the
+        # README both quote this line verbatim, and the file says a quoted
+        # string that does not appear means the step failed or the message was
+        # edited -- which only holds while something compares the two. Asserted
+        # as one string so re-wrapping the implicit concatenation in
+        # ally_module.py is caught here rather than in a doc nobody re-reads.
+        self.assertIn(
+            "No holdings on record to value. Run with --manual-login once so "
+            "a signed-in run can record the units.",
+            " ".join(str(object=c) for c in context.log.fail.call_args_list),
+        )
+
     def test_a_feed_that_will_not_answer_saves_nothing(self) -> None:
         """Better no mark than one carried over from a previous day."""
         ok, context, _connection = _run(status_raises=True)

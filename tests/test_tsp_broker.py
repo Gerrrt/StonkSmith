@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+from bs4 import BeautifulSoup
 from requests.exceptions import RequestException
 
 BROKER_FILE = (
@@ -237,13 +238,19 @@ class TspLoadTests(unittest.TestCase):
 
 
 class TspPayTableTests(unittest.TestCase):
-    """The DFAS download, which is the share price download's twin.
+    """The DFAS download, which is the share price download's near twin.
 
     dfas.mil sits behind the same kind of CDN as tsp.gov and refuses a plain
-    client the same way, so the same header and the same offline flag are what
-    make this runnable at all. What differs is the consequence of failing:
+    client the same way, so a browser-shaped request and an offline flag are
+    what make this runnable at all. What differs is the consequence of failing:
     prices are the mark, and the pay table is an addition to it -- so every
     failure here has to leave the run working rather than end it.
+
+    Where the twins stop being identical is the request itself. tsp.gov accepts
+    a User-Agent that names StonkSmith; dfas.mil wants a real browser's UA and a
+    real browser's navigation headers together, and 403s anything less. That
+    asymmetry is deliberate and tested for here, because collapsing the two back
+    into one header is the obvious tidy-up and it silently stops the accrual.
     """
 
     def setUp(self) -> None:
@@ -261,6 +268,11 @@ class TspPayTableTests(unittest.TestCase):
         self.broker = self.module.Tsp()
         self.broker.args = Namespace(prices=str(PRICES), pay_table="", no_accrual=False)
         self.broker.session = MagicMock()
+        # The pay table does not go through self.session: dfas.mil refuses
+        # urllib3's handshake, so it has a client of its own. Mocked at that
+        # seam rather than at the client, so a test that expects no request
+        # still fails if one is made.
+        self.broker.pay_table_get = MagicMock()
 
         self.module.get_tsp_fund = lambda: "C Fund"
         self.module.get_tsp_price_url = lambda: "https://example.invalid/prices.csv"
@@ -292,7 +304,7 @@ class TspPayTableTests(unittest.TestCase):
         return " ".join(self.capture.messages)
 
     def _serve(self, status: int = 200) -> None:
-        self.broker.session.get.return_value = _response(
+        self.broker.pay_table_get.return_value = _response(
             status=status, text=PAY_TABLE.read_text(encoding="utf-8")
         )
 
@@ -303,7 +315,7 @@ class TspPayTableTests(unittest.TestCase):
 
         self.assertTrue(self.broker.create_conn_obj())
 
-        self.broker.session.get.assert_not_called()
+        self.broker.pay_table_get.assert_not_called()
         self.assertIsNone(self.broker.pay_table)
         self.assertEqual(self.capture.messages, [])
 
@@ -317,21 +329,71 @@ class TspPayTableTests(unittest.TestCase):
         self.assertIn("member_contribution", self._logged())
         self.assertIsNone(self.broker.pay_table)
 
-    def test_the_pay_request_carries_the_user_agent(self) -> None:
+    def test_the_pay_request_carries_the_browser_headers(self) -> None:
+        # Down at the real method, since everything above mocks it away. All
+        # three of these were measured against the live host and all three are
+        # needed: drop any one and DFAS answers 403.
+        captured: dict[str, Any] = {}
+
+        class _Client:
+            def __init__(self, **kwargs: Any) -> None:
+                captured["client"] = kwargs
+
+            def __enter__(self) -> _Client:
+                return self
+
+            def __exit__(self, *_: Any) -> None:
+                return None
+
+            def get(self, url: str, headers: dict[str, str]) -> MagicMock:
+                captured["url"] = url
+                captured["headers"] = headers
+                return _response(text="")
+
+        self.module.Client = _Client
+
+        # setUp replaced the bound method with a mock, so reach past it to the
+        # real one -- it is the thing under test here.
+        self.module.Tsp.pay_table_get(
+            self.broker, url="https://example.invalid/pay/EM/"
+        )
+
+        headers = captured["headers"]
+        self.assertEqual(headers["User-Agent"], self.module.PAY_TABLE_USER_AGENT)
+        self.assertTrue(
+            any(name.startswith("Sec-Fetch-") for name in headers),
+            f"no navigation headers on the pay table request: {sorted(headers)}",
+        )
+        # DFAS moved this path once already, from Military-Members to
+        # MilitaryMembers, and answered the old one with a 301.
+        self.assertTrue(captured["client"]["follow_redirects"])
+
+    def test_the_pay_table_does_not_touch_the_shared_session(self) -> None:
+        # A whole separate client, not merely a separate header, so the way it
+        # could leak is by being asked for at all.
         self._serve()
 
         self.broker.create_conn_obj()
 
-        headers = self.broker.session.get.call_args.kwargs["headers"]
-        self.assertEqual(headers["User-Agent"], self.module.PRICE_USER_AGENT)
+        self.broker.session.get.assert_not_called()
         self.broker.session.headers.__setitem__.assert_not_called()
+
+    def test_dfas_is_not_asked_by_the_user_agent_tsp_gov_is(self) -> None:
+        # Two hosts, two answers, and the honest one must not drift onto DFAS
+        # or the accrual stops -- nor the browser one onto tsp.gov, which has
+        # no need of it and is told truthfully who is calling.
+        self.assertNotEqual(
+            self.module.PAY_TABLE_USER_AGENT, self.module.PRICE_USER_AGENT
+        )
+        self.assertIn("stonksmith", self.module.PRICE_USER_AGENT)
+        self.assertNotIn("stonksmith", self.module.PAY_TABLE_USER_AGENT)
 
     def test_the_grade_picks_the_page(self) -> None:
         self._serve()
 
         self.broker.create_conn_obj()
 
-        url = self.broker.session.get.call_args.kwargs["url"]
+        url = self.broker.pay_table_get.call_args.kwargs["url"]
         self.assertEqual(url, "https://example.invalid/pay/EM/")
 
     def test_a_successful_load_carries_the_grade_and_the_service_date(self) -> None:
@@ -345,7 +407,7 @@ class TspPayTableTests(unittest.TestCase):
         self.assertEqual(self.broker.pay_table["E-7"]["Over 10"], 5300.40)
 
     def test_a_refusal_costs_the_estimate_and_not_the_run(self) -> None:
-        self.broker.session.get.return_value = _response(status=403, text="Denied")
+        self.broker.pay_table_get.return_value = _response(status=403, text="Denied")
 
         self.assertTrue(self.broker.create_conn_obj())
 
@@ -356,7 +418,7 @@ class TspPayTableTests(unittest.TestCase):
         self.assertIsNone(self.broker.pay_table)
 
     def test_a_block_page_served_as_200_is_not_read_as_a_pay_table(self) -> None:
-        self.broker.session.get.return_value = _response(text=ACCESS_DENIED_HTML)
+        self.broker.pay_table_get.return_value = _response(text=ACCESS_DENIED_HTML)
 
         self.assertTrue(self.broker.create_conn_obj())
 
@@ -369,7 +431,7 @@ class TspPayTableTests(unittest.TestCase):
         self.assertTrue(self.broker.create_conn_obj())
 
         self.assertIn("not a pay grade", self._logged())
-        self.broker.session.get.assert_not_called()
+        self.broker.pay_table_get.assert_not_called()
 
     def test_an_unreadable_service_date_says_what_was_expected(self) -> None:
         self._configure(basd="March 2016")
@@ -377,7 +439,7 @@ class TspPayTableTests(unittest.TestCase):
         self.assertTrue(self.broker.create_conn_obj())
 
         self.assertIn("YYYY-MM-DD", self._logged())
-        self.broker.session.get.assert_not_called()
+        self.broker.pay_table_get.assert_not_called()
 
     def test_the_pay_table_flag_skips_the_download(self) -> None:
         self.broker.args = Namespace(
@@ -386,7 +448,7 @@ class TspPayTableTests(unittest.TestCase):
 
         self.assertTrue(self.broker.create_conn_obj())
 
-        self.broker.session.get.assert_not_called()
+        self.broker.pay_table_get.assert_not_called()
         self.assertEqual(self.broker.pay_table["E-7"]["Over 10"], 5300.40)
 
     def test_no_accrual_skips_the_whole_thing(self) -> None:
@@ -394,7 +456,7 @@ class TspPayTableTests(unittest.TestCase):
 
         self.assertTrue(self.broker.create_conn_obj())
 
-        self.broker.session.get.assert_not_called()
+        self.broker.pay_table_get.assert_not_called()
         self.assertIsNone(self.broker.pay_table)
 
     def test_a_downloaded_page_is_cached_and_the_next_run_reuses_it(self) -> None:
@@ -411,10 +473,11 @@ class TspPayTableTests(unittest.TestCase):
         again = self.module.Tsp()
         again.args = self.broker.args
         again.session = MagicMock()
+        again.pay_table_get = MagicMock()
 
         self.assertTrue(again.create_conn_obj())
 
-        again.session.get.assert_not_called()
+        again.pay_table_get.assert_not_called()
         self.assertEqual(again.pay_table["E-7"]["Over 10"], 5300.40)
 
     def test_a_missing_state_directory_is_not_created_to_cache_into(self) -> None:
@@ -427,6 +490,76 @@ class TspPayTableTests(unittest.TestCase):
 
         self.assertFalse((Path(self.cache.name) / "absent").exists())
         self.assertEqual(self.broker.pay_table["E-7"]["Over 10"], 5300.40)
+
+    def _served_with_a_trailing_column(self) -> None:
+        """The served page, grown one column after the last band."""
+
+        soup = BeautifulSoup(
+            markup=PAY_TABLE.read_text(encoding="utf-8"), features="html.parser"
+        )
+
+        for element in soup.find_all(name="table"):
+            for row in element.find_all(name="tr"):
+                cell = soup.new_tag(name="td")
+                cell.string = "Note 6"
+                row.append(cell)
+
+        self.broker.pay_table_get.return_value = _response(text=str(object=soup))
+
+    def test_a_page_read_one_column_out_drops_the_accrual(self) -> None:
+        # The one failure here that is refused rather than reported, and the
+        # reason is that it does not look like a failure. Every other way this
+        # can go wrong leaves a rate unavailable and says so; this one leaves
+        # $5,591.70 available for a member who is paid $5,300.40, which prices
+        # an accrual and is stored as a mark with nothing to show for it.
+        self._served_with_a_trailing_column()
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        logged = self._logged()
+        self.assertIn("does not line up", logged)
+        self.assertIn("wrong years of service", logged)
+        self.assertIsNone(self.broker.pay_table)
+
+    def test_half_a_page_is_reported_and_still_priced(self) -> None:
+        # Short, not wrong: the difference between this and a misalignment, and
+        # why one warns and the other refuses.
+        soup = BeautifulSoup(
+            markup=PAY_TABLE.read_text(encoding="utf-8"), features="html.parser"
+        )
+        soup.find_all(name="table")[-1].decompose()
+        self.broker.pay_table_get.return_value = _response(text=str(object=soup))
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        self.assertIn("Over 18", self._logged())
+        self.assertEqual(self.broker.pay_table["E-7"]["Over 10"], 5300.40)
+
+    def test_show_pay_table_prints_the_whole_grid(self) -> None:
+        # What a single printed rate cannot show. E-7 was correct throughout
+        # while E-9 and E-1 were missing entirely, so the run that would have
+        # caught that is the one that prints every grade and every blank.
+        self.broker.args = Namespace(
+            prices=str(PRICES), pay_table="", no_accrual=False, show_pay_table=True
+        )
+        self._serve()
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        logged = self._logged()
+        self.assertIn("9 grade(s)", logged)
+        self.assertIn("E-9", logged)
+        self.assertIn("6,910.20", logged)
+        # Both halves of the page, so the columns past twenty years are visibly
+        # there rather than assumed.
+        self.assertIn("Over 40", logged)
+
+    def test_the_grid_is_not_printed_unless_it_is_asked_for(self) -> None:
+        self._serve()
+
+        self.assertTrue(self.broker.create_conn_obj())
+
+        self.assertNotIn("as parsed", self._logged())
 
     def test_a_grade_with_no_rate_today_drops_the_estimate_and_says_so(self) -> None:
         # verify_access() is where a bad grade turns into one actionable line,

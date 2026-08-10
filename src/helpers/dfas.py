@@ -31,10 +31,19 @@ Two things about the published tables that a naive reader gets wrong:
 * A cell with no rate is empty, not zero. E-9 has no rate below "Over 10",
   because nobody reaches E-9 that fast. Reading the blank as $0.00 would report
   a senior enlisted member as contributing nothing, which looks like an answer.
+
+Both of those fail loudly once you know to look. The one that does not is the
+match itself: values are taken from the right, so a column the page grows after
+the last band moves every rate one place, and a rate one place out is a genuine
+published figure for the wrong time in service. Nothing downstream can tell it
+from the right one -- it is not missing, not zero and not out of range, so it
+prices an accrual and is stored as a mark. alignment_faults() asks that question
+of the page directly.
 """
 
 import datetime as dt
 import re
+from collections.abc import Iterator
 
 from bs4 import BeautifulSoup, Tag
 
@@ -90,9 +99,61 @@ BANDS: tuple[tuple[str, int], ...] = (
 #: The first band, which every grade has and which nothing is "over".
 BASE_BAND: str = BANDS[0][0]
 
-#: Band labels, for recognising a header row without caring what the page calls
-#: the columns around it.
-BAND_LABELS: frozenset[str] = frozenset(label for label, _years in BANDS)
+#: Any run of whitespace, including the non-breaking spaces an HTML table is apt
+#: to head its columns with.
+SPACING = re.compile(pattern=r"\s+")
+
+#: Band labels keyed by their spacing removed entirely, because how much space
+#: falls inside one is not a fact about the column. The served page stacks the
+#: heading over two lines --
+#:
+#:     <td><b>Over</b><br/><span><b>10</b></span></td>
+#:
+#: -- which a reader sees as "Over 10" and which reading the cell as text
+#: returns as "Over10", the line break being markup rather than a character. A
+#: copy saved from a browser and reflowed says "Over 10" instead. Matching the
+#: label exactly therefore found no header row in the page DFAS actually
+#: serves, and since basic_pay_table skips a table whose header it cannot find,
+#: the whole page parsed to nothing rather than to something visibly wrong.
+#:
+#: Keying on the spaceless form rather than adding a second spelling to BANDS
+#: keeps one name per column: the canonical label is what comes back, so
+#: everything downstream -- band_on's lookups above all -- still sees "Over 10".
+BAND_BY_SHAPE: dict[str, str] = {
+    SPACING.sub(repl="", string=label).casefold(): label for label, _years in BANDS
+}
+
+#: Where each band sits in the published order. A header row's labels should be a
+#: contiguous run of these: the page splits its columns in two and prints each
+#: half in order, so a set of labels that skips or repeats one did not come off a
+#: single header row, and the columns under it are not the columns it names.
+BAND_ORDER: dict[str, int] = {
+    label: index for index, (label, _years) in enumerate(iterable=BANDS)
+}
+
+#: The last column of the first published table. A page that produced nothing
+#: above this was read as one table rather than two.
+SPLIT_BAND: str = "Over 18"
+
+#: A published rate, as the tables print it: dollars and cents, with or without
+#: the dollar sign and the thousands separator. No leading sign on purpose --
+#: basic pay is never negative, and accepting one would let a negative number
+#: pass for a rate in the one place this is asked.
+#:
+#: Deliberately not to_number(), which is the statement reader's and finds the
+#: "-7" inside "E-7". That is right where every token it sees is already known to
+#: be money, and wrong for asking whether a cell *is* money -- which is the only
+#: thing this pattern is ever used for, on the one cell that decides whether the
+#: columns were matched where the page put them.
+RATE = re.compile(pattern=r"^\$?\s*\d[\d,]*\.\d{2}\b")
+
+#: A trailing footnote marker on a pay grade, as the published first column
+#: writes it: "E-9(Notes 2 & 3)", "E-1(Notes 4 & 5)". Only the two grades whose
+#: rates carry conditions have one, which is what made this expensive to notice
+#: -- E-8 through E-2 read cleanly, so the table parsed and simply had no E-9 in
+#: it. A senior enlisted member then accrues nothing, and the run still looks
+#: like it worked.
+FOOTNOTE = re.compile(pattern=r"\s*\([^)]*\)\s*$")
 
 #: A pay grade as the tables write it: "E-7", "O-3", "W-5", and the "E" suffix
 #: that marks an officer with prior enlisted or warrant service, "O-3E". The
@@ -127,13 +188,20 @@ def normalize_grade(rank: str) -> str | None:
     a hyphen. What it will not do is guess: a rank name like "Sergeant" maps to
     different grades in different services, and there is no honest way to turn
     one into a pay grade without knowing which service.
-    :param rank: The grade as configured
+
+    A trailing parenthesised note is dropped first. That is how the published
+    tables write the two grades whose rates come with conditions, and reading
+    the cell literally dropped both of them from the parse -- silently, because
+    a grade that is absent from the table is indistinguishable from a grade the
+    table publishes no rate for. Only a *trailing* group goes, and only the
+    outermost one: nothing that could be part of a grade lives inside it.
+    :param rank: The grade as configured, or as the first column writes it
     :return: The canonical spelling, e.g. "E-5" or "O-3E", or None when the text
         is not a pay grade at all
     :rtype: str | None
     """
 
-    found = GRADE.match(string=rank.strip())
+    found = GRADE.match(string=FOOTNOTE.sub(repl="", string=rank.strip()))
 
     if found is None:
         return None
@@ -151,6 +219,28 @@ def normalize_grade(rank: str) -> str | None:
         return None
 
     return f"{family}-{number}{prior}"
+
+
+def grade_order(grade: str) -> tuple[str, int, str]:
+    """
+    Sort key putting the grades in the order the tables print them.
+
+    Sorting the strings themselves puts "O-10" between "O-1" and "O-2", because
+    "1" sorts before "2" a character at a time. The officer tables run to O-10,
+    so anything displaying a whole page has to take the number apart -- a grid
+    printed for checking a parser against the published page is worth nothing if
+    its rows are not in the page's order.
+    :param grade: A canonical grade, as normalize_grade() returns
+    :return: (family, number, prior-service suffix), ascending in each
+    :rtype: tuple[str, int, str]
+    """
+
+    found = GRADE.match(string=grade)
+
+    if found is None:
+        return (grade, 0, "")
+
+    return (found.group(1).upper(), int(found.group(2)), found.group(3).upper())
 
 
 def table_for(rank: str) -> str | None:
@@ -234,6 +324,12 @@ def header_bands(rows: list[Tag]) -> tuple[int, list[str]]:
     markup -- the one thing that is stable is that the columns are called what
     the pay tables have always called them.
 
+    Called what they are called, but not spaced how they are spaced: the served
+    page writes "Over10" and a saved copy "Over 10". So the comparison is made
+    on the label with its spacing removed, and what is returned is the canonical
+    spelling rather than whatever the cell said -- the rest of this module, and
+    band_on in particular, has one name per column and must keep it.
+
     The row carrying the *most* labels wins, not the first row carrying a
     couple. Taking the first would let any row that happens to hold two band
     strings -- a footnote, a nested caption, a "see Over 20" cross-reference --
@@ -256,15 +352,70 @@ def header_bands(rows: list[Tag]) -> tuple[int, list[str]]:
 
     for index, row in enumerate(iterable=rows):
         labels: list[str] = [
-            text
+            label
             for cell in row.find_all(name=["th", "td"])
-            if (text := cell.get_text(strip=True)) in BAND_LABELS
+            if (
+                label := BAND_BY_SHAPE.get(
+                    SPACING.sub(repl="", string=cell.get_text(strip=True)).casefold()
+                )
+            )
+            is not None
         ]
 
         if len(labels) > len(best[1]):
             best = (index, labels)
 
     return best if len(best[1]) >= 2 else (-1, [])
+
+
+def pay_tables(html: str) -> Iterator[tuple[list[str], list[tuple[str, list[str]]]]]:
+    """
+    Walk the page's pay tables, each with the rows that carry rates.
+
+    Shared so that anything asked to check the parse looks at exactly the rows
+    the parse reads. A guard that scanned a row set of its own would be sound
+    about a page nobody parses: the rows it passed over would be precisely the
+    ones whose faults went unreported.
+
+    A table whose header names no bands is not yielded at all -- there is nothing
+    to align rates against, and the page's prose and navigation are full of such
+    tables. Rows that are not pay grades, and rows too short to hold every band,
+    are dropped for the same reason they are dropped from the parse: the pages
+    carry footnote rows, repeated headers and spacers, and none of them is a
+    grade whose rates went missing.
+    :param html: The page as served
+    :return: (band labels in order, [(canonical grade, that row's cell texts)])
+        for each table on the page that names at least two bands
+    :rtype: Iterator[tuple[list[str], list[tuple[str, list[str]]]]]
+    """
+
+    soup = BeautifulSoup(markup=html, features="html.parser")
+
+    for element in soup.find_all(name="table"):
+        rows: list[Tag] = element.find_all(name="tr")
+        start, bands = header_bands(rows=rows)
+
+        if not bands:
+            continue
+
+        found: list[tuple[str, list[str]]] = []
+
+        for row in rows[start + 1 :]:
+            cells: list[str] = [
+                cell.get_text(strip=True) for cell in row.find_all(name=["th", "td"])
+            ]
+
+            if not cells:
+                continue
+
+            grade: str | None = normalize_grade(rank=cells[0])
+
+            if grade is None or len(cells) <= len(bands):
+                continue
+
+            found.append((grade, cells))
+
+        yield bands, found
 
 
 def basic_pay_table(html: str) -> dict[str, dict[str, float]]:
@@ -294,31 +445,10 @@ def basic_pay_table(html: str) -> dict[str, dict[str, float]]:
     :rtype: dict[str, dict[str, float]]
     """
 
-    soup = BeautifulSoup(markup=html, features="html.parser")
     table: dict[str, dict[str, float]] = {}
 
-    for element in soup.find_all(name="table"):
-        rows: list[Tag] = element.find_all(name="tr")
-        start, bands = header_bands(rows=rows)
-
-        if not bands:
-            continue
-
-        for row in rows[start + 1 :]:
-            cells: list[str] = [
-                cell.get_text(strip=True) for cell in row.find_all(name=["th", "td"])
-            ]
-
-            if not cells:
-                continue
-
-            grade: str | None = normalize_grade(rank=cells[0])
-
-            # A footnote row, a repeated header, or anything else that is not a
-            # pay grade. Skipped rather than refused: the pages carry several.
-            if grade is None or len(cells) <= len(bands):
-                continue
-
+    for bands, rows in pay_tables(html=html):
+        for grade, cells in rows:
             rates: dict[str, float] = table.setdefault(grade, {})
 
             for offset, band in enumerate(iterable=reversed(bands)):
@@ -328,6 +458,99 @@ def basic_pay_table(html: str) -> dict[str, dict[str, float]]:
                     rates[band] = value
 
     return table
+
+
+def alignment_faults(html: str) -> list[str]:
+    """
+    Report a page whose columns are not where basic_pay_table() matched them.
+
+    Matching from the right is what lets the parser ignore how many label cells
+    a page puts in front of the first band, and it is also the whole exposure:
+    one unexpected column *after* the last band shifts every rate one place, and
+    a rate read one place out is a real published figure for the wrong
+    seniority. On the enlisted page that turns E-7 at "Over 10" from $5,300.40
+    into $5,591.70 -- both real rates, one of them for a member with six more
+    years in service.
+
+    Two things are checked, and both ask whether the page still has the shape
+    the match assumes rather than whether the numbers look sensible. There is no
+    sensible-looking test that a neighbouring band's rate would fail.
+
+    A header's labels must be a contiguous run of the published bands. The page
+    prints "2 or less" through "Over 18" and then "Over 20" through "Over 40",
+    so a header that skips or repeats one was assembled out of something other
+    than a single header row, and the columns beneath it are not the ones named.
+
+    And no data row may carry a rate in the cell immediately before the matched
+    ones. That cell holds the pay grade on a well-formed row, so money there
+    means a published rate fell outside the columns the match consumed -- the
+    trailing-column shift, seen directly.
+
+    Keying on money rather than on a cell count is what makes this specific to
+    the silent fault. A column grown in *front* of the grade shifts nothing: the
+    rates still end where they ended, and the row is dropped from the parse
+    entirely because its first cell no longer names a grade -- a page that says
+    it has no rates at all, which the caller already reports in those words. So
+    the two are told apart by consequence, not by shape: this fires for the
+    failure that produces a plausible wrong number, and stays quiet for the one
+    that produces no number.
+    :param html: The page as served
+    :return: One line per fault, empty when the page lines up with its headings
+    :rtype: list[str]
+    """
+
+    faults: list[str] = []
+
+    for bands, rows in pay_tables(html=html):
+        first: int = BAND_ORDER[bands[0]]
+
+        if [BAND_ORDER[label] for label in bands] != list(
+            range(first, first + len(bands))
+        ):
+            faults.append(
+                f"a header running {bands[0]!r} to {bands[-1]!r} skips or "
+                "repeats a published band"
+            )
+            # Every row under it would report that one fault again, differently.
+            continue
+
+        for grade, cells in rows:
+            spare: str = cells[len(cells) - len(bands) - 1]
+
+            if RATE.match(string=spare):
+                faults.append(
+                    f"{grade} carries a rate at {spare!r}, outside the "
+                    f"{len(bands)} columns matched"
+                )
+
+    return faults
+
+
+def missing_upper_table(table: dict[str, dict[str, float]]) -> bool:
+    """
+    Whether a parsed page yielded only the first of its two tables.
+
+    The columns are split at twenty years across two tables, so a page that
+    produced no band above "Over 18" was read as one table. Nothing already read
+    is wrong -- it is short, which is the difference between this and an
+    alignment fault, and why it is worth saying rather than refusing over.
+
+    Asked of the whole page rather than of each grade. A grade DFAS drops from
+    the second table would otherwise be reported every run as a page half read.
+    :param table: A parsed page, as basic_pay_table() returns
+    :return: True when no grade carries a band past the split; False for an empty
+        page, which is a different failure and already has its own message
+    :rtype: bool
+    """
+
+    if not table:
+        return False
+
+    split: int = BAND_ORDER[SPLIT_BAND]
+
+    return not any(
+        BAND_ORDER[band] > split for rates in table.values() for band in rates
+    )
 
 
 def effective_date(html: str) -> dt.date | None:

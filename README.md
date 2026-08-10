@@ -86,15 +86,21 @@ sign-in hand-off, holdings parse, masked-number reconciliation, bank/brokerage
 split and database write were all exercised across nine live runs, and its
 session was found not to survive between runs at all, so it needs
 `--manual-login` every time it scrapes — `--from-prices` values it between
-scrapes without one; the published price feed behind that flag has been
-contacted, but the flag's own path has not been run. Those runs saw one account
-state, though, so anything plural about an Ally account is still inference. TSP
-has in part: its statement and share-price parsers, the mark's arithmetic and
-its price download are verified against real data, but its database write, the
-sheet it feeds, the contribution accrual and everything touching the DFAS pay
-table are not. Green tests say the code does what it was written to do, which
-is not the same as saying the site still looks the way it did when the parser
-was written.
+scrapes without one, and that flag has now valued a real account with no
+sign-in: it refuses a database holding no units, opens no browser doing it,
+dates the value by the price rather than by the run, and holds the units' own
+date still across three price runs. Those runs saw one account state, though,
+so anything plural about an Ally account is still inference. TSP has too: its
+statement and share-price parsers, the mark's arithmetic, its price download,
+its database write, its contribution accrual and both halves of the DFAS pay
+table are verified against real data. The sheet it feeds is verified as well:
+four of its five tabs were read back against the real spreadsheet and it was made
+to refuse a tab it did not own. What is unverified there is one claim about volume
+— that a tab holds every movement rather than the newest five hundred — which
+needs a broker with the history to ask it, and the fifth tab, `Net Worth`, which
+postdates every run against the real spreadsheet.
+Green tests say the code does what it was written to do, which is not the same
+as saying the site still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
 gives the procedure for the rest — it is the record, and this paragraph
 summarises it rather than being maintained beside it.
@@ -690,11 +696,19 @@ that must be exact arithmetic with no estimate in it.
 Anything that stops an estimate being made costs the estimate and not the run:
 a half-filled config, a rank that is not a pay grade, an unreadable service
 date, a grade DFAS publishes no rate for, or a refused download all report
-themselves and leave the anchored mark exactly as it was. The pay table is
+themselves and leave the anchored mark exactly as it was. So does a page whose
+columns stop lining up with its own headings — rates are matched from the right,
+so a column grown after the last one would shift every figure by one band and
+hand back a real published rate for the wrong seniority. That is the one failure
+here that would otherwise look like an answer, so the accrual is dropped rather
+than priced on it. `--show-pay-table` prints the whole parsed grid, grades down
+and years of service across, for checking the parser against the published page
+rather than against the single rate a run happens to need. The pay table is
 cached under `~/.stonksmith` for the rest of the year, since DFAS changes it
 every January. `--pay-table` reads a page saved by hand, the way `--prices`
-does. Unlike the share price download, **this one has not been run against
-dfas.mil for real** — see `docs/live-verification.md`.
+does, and remains the fallback: dfas.mil fingerprints its callers, so a download
+that works today can stop. **It has been run against dfas.mil for real** — see
+`docs/live-verification.md`.
 
 Sheets needs no tab prepared: StonkSmith creates `Accounts`, `Holdings`,
 `Transactions` and `Dashboard` itself on the first sync. If the sheet cannot be written at all — no
@@ -705,14 +719,18 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write has not been run. The sheet has been run twice from
-real databases on 2026-08-10 — which is not the same as verified. What those
-runs establish is that the tabs are written and that StonkSmith reads its own
-banner back; what they cannot establish is how the values render, and the
-refusal has still never been tried against a real tab. `docs/live-verification.md` has the
+reports. The database write has been run, against a real `tsp.db` and against
+one written before the `units_as_of` column existed. The sheet has been run too: on
+2026-08-10 it was built from real databases, read back tab by tab, checked by eye
+where a read could not reach, made to refuse a tab it did not own, and rebuilt
+from nothing after the four tabs it then had were deleted. What is left there is the
+claim nine movements cannot put — that a tab holds every movement rather than the
+newest five hundred — which is tracked on its own as #141, and the `Net Worth` tab,
+which came after all of that and has never been written to a real spreadsheet.
+`docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
-statement's fund is read and logged but not carried into the mark, so a
-statement for one fund with another configured values the wrong one.
+statement naming a different fund from your config is refused, but one whose
+fund cannot be read at all is still priced with the configured fund.
 
 Manage stored credentials and scraped balances:
 
@@ -944,15 +962,15 @@ sitting at a sign-in page for no reason.
 `verify`, beside it, checks what a successful sync cannot show. Two halves, and
 either can be run alone:
 
-`verify tabs` reads the four tabs back. A write that returned says the request was
-accepted, not that the values arrived as the kind of thing they were meant to be —
-so this checks the banner on all four, row 2 against the column contract on the
-three that have one, the movement count against the databases, that every
+`verify tabs` reads the machine-owned tabs back. A write that returned says the request
+was accepted, not that the values arrived as the kind of thing they were meant to be —
+so this checks the banner on all five, row 2 against the column contract on the
+four that have one, the movement count against the databases, that every
 `Processed On` is `YYYY-MM-DD` and sorted newest-first within its account, that
 money came back as a number rather than as text, and that the dashboard's two
-totals agree. The last two are marked in the output as resting on an assumption
-about what a rendered cell returns, so a failure there is ambiguous between a
-wrong sheet and a wrong check until it has run once.
+totals agree. The last two used to be marked as resting on an assumption about
+what a rendered cell returns; the 2026-08-10 run settled that, since a wrong
+assumption would have failed rather than passed quietly.
 
 `verify guard` creates one scratch tab and asks the ownership check whether a
 defaced first cell is refused, whether text below a blank one is refused, and
@@ -1160,7 +1178,7 @@ SnapTrade already supplies one, which is why only the 529 scraper's rows are
 keyed this way at all.
 
 `src/etc/portfolio_sheet.py` is the only thing that writes them: one read of the
-workspace, one authorization, four tabs. Values go up raw, so a number arrives
+workspace, one authorization, five tabs. Values go up raw, so a number arrives
 as a number — and so an account whose display name begins with `=` stays a name
 instead of becoming a formula the spreadsheet runs.
 

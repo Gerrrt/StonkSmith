@@ -299,14 +299,16 @@ class ReadBackTests(unittest.TestCase):
 
         self.assertFalse(cases[totals[0]])
 
-    def test_the_render_dependent_cases_say_they_are_unconfirmed(self) -> None:
-        # Until this has run once against real Sheets, a failure on one of these
-        # three is ambiguous between a wrong sheet and a wrong assertion. Saying
-        # so is the difference between a finding and a guess.
+    def test_no_case_still_calls_itself_unconfirmed(self) -> None:
+        # Money and the two totals used to say so, because what a rendered cell
+        # comes back as was an assumption no test here could settle. The
+        # 2026-08-10 run settled it in both directions -- a wrong assumption would
+        # have failed rather than passed quietly -- so the marker came off. This
+        # keeps it off: putting one back means a new assumption, not this one.
         cases = run(fake=book())
-        marked = [name for name in cases if "unconfirmed" in name]
+        marked = [name for name in cases if "unconfirmed" in name.lower()]
 
-        self.assertEqual(len(marked), 2)
+        self.assertEqual(marked, [])
 
     def test_a_missing_tab_reports_rather_than_creating_one(self) -> None:
         # Creating it would manufacture the thing being checked.
