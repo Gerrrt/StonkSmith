@@ -36,6 +36,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    broker <name>     enter that broker (add/show/export live in there)\n"
         "    workspace list    list workspaces\n"
         "    sheet             rewrite the Google Sheet from these databases\n"
+        "    verify            check the sheet's ownership guard on a scratch tab\n"
         "    help              commands at this level\n"
         "    exit              quit\n"
     )
@@ -189,6 +190,72 @@ class StonkSmithDBMenu(cmd.Cmd):
             # Printed as well as written to the tab. A total short by a whole
             # broker is exactly the failure that must not be quiet.
             print(f"[-] Not on the sheet: {name} could not be read ({reason}).")
+
+    def do_verify(self, line: str) -> None:
+        """
+        Ask the ownership guard its three questions, against real Sheets.
+
+        The refusal is the one rule here whose failure cannot be undone by
+        running again, and observing it used to mean defacing a live tab and
+        handing it back -- done once, nervously, if at all. This asks claim() the
+        same three questions on a tab it makes and removes, so the check is
+        repeatable and the real tabs are never opened.
+
+        What it cannot show is that a refusal stops the *whole* sync rather than
+        leaving one tab freshly written beside a stale one. That is refresh()
+        claiming every tab before clearing any, and the scratch tab is not one of
+        them.
+        :param line: Ignored
+        :return: None
+        """
+
+        del line
+
+        # Same reason as do_sheet: this pulls in gspread and google-auth, and the
+        # shell is mostly used for things that never touch Sheets.
+        from etc.portfolio_sheet import GUARD_CHECK_TAB, check_ownership_guard
+        from helpers.sheets import SPREADSHEET_NAME, SheetsUnavailable
+
+        print(
+            f"[*] Making the tab '{GUARD_CHECK_TAB}' in '{SPREADSHEET_NAME}', "
+            "asking the guard about it, and deleting it again. No other tab is "
+            "opened."
+        )
+
+        try:
+            cases = check_ownership_guard()
+
+        except SheetsUnavailable as e:
+            print(f"[-] {e}")
+            return
+
+        except Exception as e:
+            print(f"[-] Ownership check failed: {type(e).__name__}: {e}")
+            return
+
+        for case in cases:
+            print(f"{'[+]' if case.passed else '[-]'} {case.name}")
+
+            if not case.passed:
+                # The finding, not a footnote. A guard that adopted a tab it
+                # should have refused is the shape that eats somebody's work.
+                print(f"    Expected {case.expected}: {case.detail or 'it did not'}")
+
+        failed = [case for case in cases if not case.passed]
+
+        if failed:
+            print(
+                f"[-] {len(failed)} of {len(cases)} did not behave. Until this "
+                "reads clean, treat the machine-owned tabs as unguarded and do "
+                "not keep anything of your own in the spreadsheet."
+            )
+            return
+
+        print(
+            f"[*] The guard behaved on all {len(cases)} counts. That is claim() "
+            "against real Sheets, not a stub -- but a refusal aborting the whole "
+            "sync still needs the manual step in docs/live-verification.md."
+        )
 
     def write_config(self) -> None:
         """
