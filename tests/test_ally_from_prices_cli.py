@@ -47,6 +47,10 @@ REFUSAL = (
     "signed-in run can record the units."
 )
 
+#: Generous against a cold CI runner, and far below the five minutes the
+#: manual-login path would sit there for.
+SECONDS_BEFORE_SOMETHING_IS_WRONG = 120
+
 #: Runs the entry point the `stonksmith` console script points at.
 INVOKE = (
     "import sys; "
@@ -86,6 +90,14 @@ class TheRefusalOnTheCommandLine(unittest.TestCase):
             text=True,
             check=False,
             cwd=REPO,
+            # Bounded and mute, so the failure this guards against fails rather
+            # than hangs. The regression it is watching for is a run that takes
+            # the scrape branch, and that branch waits MANUAL_LOGIN_TIMEOUT_MS
+            # -- five minutes -- for a human at a browser. Inheriting stdin
+            # would let it wait on one indefinitely. The run itself takes about
+            # a second, including first-run setup of five databases.
+            timeout=SECONDS_BEFORE_SOMETHING_IS_WRONG,
+            stdin=subprocess.DEVNULL,
         )
 
         # Rich renders to a non-TTY here and re-wraps regardless of COLUMNS, so
@@ -95,13 +107,17 @@ class TheRefusalOnTheCommandLine(unittest.TestCase):
         cls.said = " ".join((cls.result.stdout + cls.result.stderr).split())
 
     def test_it_refuses_rather_than_valuing_nothing(self) -> None:
-        self.assertIn(REFUSAL, self.said, self.result.stderr)
+        # No third argument to assertIn: it reports the haystack itself, and
+        # the haystack is already stdout and stderr combined. A custom message
+        # here could only repeat it, or -- as this did -- narrow it to one
+        # stream and hide the line that explains the failure.
+        self.assertIn(REFUSAL, self.said)
         self.assertEqual(self.result.returncode, 1, self.said)
 
     def test_it_gets_as_far_as_the_price_branch(self) -> None:
         """Otherwise the refusal could be some earlier failure wearing its coat."""
 
-        self.assertIn(NO_SIGN_IN, self.said, self.result.stderr)
+        self.assertIn(NO_SIGN_IN, self.said)
 
     def test_no_browser_session_is_left_behind(self) -> None:
         playwright = self.home / ".stonksmith" / "playwright"
