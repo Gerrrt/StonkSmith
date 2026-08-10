@@ -1,178 +1,351 @@
 <!DOCTYPE html>
 <!--
-  A reconstruction of the DFAS enlisted basic pay page, not a saved response.
+  The DFAS enlisted basic pay page as served, trimmed to its two tables.
 
-  dfas.mil sits behind a CDN that refuses every non-interactive client, so this
-  file could not be fetched the way tests/tsp_prices.csv was sliced out of the
-  real TSP price file. What is reproduced here is the *structure* observed on
-  the live page on 2026-08-08 -- two tables splitting the columns at twenty
-  years, a "Cumulative Years of Service" spanning header, a "Pay Grade" column,
-  the exact band labels, and E-9's genuinely empty cells below "Over 10" -- with
-  the published January 2026 rates for the grades the tests exercise. Grades not
-  under test are trimmed rather than invented.
+  This file used to be a reconstruction: dfas.mil answered every attempt with a
+  403, so the parser was written against a shape read off the live page by eye.
+  That shape was close, and its rates were exact -- every cell it carried
+  matched this one -- but it was wrong in the two ways that mattered, and the
+  parser passed against it while reading nothing at all from the real page.
 
-  Replacing this with a browser-saved copy of the real page is the first step of
-  the live verification in docs/live-verification.md. Until that happens, the
-  parser is proven against this shape and not against DFAS's markup.
+  What the reconstruction got wrong, and what this file therefore protects:
+
+  * The band headings are stacked over a line break, "<b>Over</b><br/>10",
+    not written "Over 10" on one line. Read as text they come back "Over10",
+    which matched no band label, so no header row was found and the page
+    parsed to zero grades.
+  * E-9 and E-1 carry footnote markers in the Pay Grade column -- "E-9(Notes
+    2 & 3)" -- and were dropped from the parse without a word, which reads as
+    "DFAS publishes no rate for your grade" rather than as a parse error.
+
+  Fetched 2026-08-10. Everything outside the two tables is removed; the tables
+  themselves are byte-for-byte as served, inline styles and all. Do not reflow
+  or prettify this file -- the whitespace is the fixture. Rates are effective
+  1 January 2026; see docs/live-verification.md for what the run settled.
 -->
 <html>
   <head><title>Basic Pay - Enlisted Members</title></head>
   <body>
-    <h1>Basic Pay &ndash; Enlisted Members Effective January 1, 2026</h1>
+    <p>Basic Pay &#8211; Enlisted Effective January 1, 2026</p>
+<table class="MsoTableGrid" style="border-collapse:collapse;border:none;width:100%;" width="863">
+<tbody>
+<tr>
+<td colspan="12" style="border-width: 2px; border-style: solid solid double; border-color: black; width: 863px; padding: 0in 7px; text-align: center;" valign="top"><span style="tab-stops:13.5pt">Cumulative Years of Service <b>(Note 1)</b></span></td>
+</tr>
+<tr>
+<td style="border-bottom:2px double black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>Pay Grade</b></span></td>
+<td style="border-bottom:2px double black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><span style="tab-stops:13.5pt"><b>2 or less</b></span></td>
+<td style="border-bottom:2px double black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>2</b></span></td>
+<td style="border-bottom:2px double black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>3</b></span></td>
+<td style="border-bottom:2px double black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>4</b></span></td>
+<td style="border-bottom:2px double black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>6</b></span></td>
+<td style="border-bottom:2px double black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>8</b></span></td>
+<td style="border-bottom:2px double black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><span style="tab-stops:13.5pt"><b>Over</b></span><br/>
+<span style="tab-stops:13.5pt"><b>10</b></span></td>
+<td style="border-bottom:2px double black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>12</b></span></td>
+<td style="border-bottom:2px double black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>14</b></span></td>
+<td style="border-bottom:2px double black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>16</b></span></td>
+<td style="border-bottom:2px double black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>18</b></span></td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-9</b></span><br/>
+<span style="tab-stops:13.5pt"><b>(Notes 2 &amp; 3)</b></span></td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,910.20</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,066.50</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,263.60</td>
+<td style="border-bottom:1px solid black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,496.10</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">7,730.70</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-8</b></span></td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> </td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,656.50</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,907.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,061.80</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,247.20</td>
+<td style="border-bottom:1px solid black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,448.20</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">6,811.20</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-7</b></span></td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,932.10</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,291.50</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,456.20</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,673.10</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,843.80</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,135.70</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,300.40</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,591.70</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,835.00</td>
+<td style="border-bottom:1px solid black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,000.90</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">6,177.30</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-6</b></span></td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,401.10</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,743.10</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,908.10</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,068.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,235.70</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,612.80</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,759.50</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,043.30</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,130.30</td>
+<td style="border-bottom:1px solid black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,193.60</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">5,267.70</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-5</b></span></td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,342.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,598.20</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,775.80</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,946.80</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,110.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,299.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,395.30</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">4,421.70</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-4</b></span></td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,142.20</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,303.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,482.40</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,658.50</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">3,815.40</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-3</b></span></td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,836.80</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,015.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">3,198.00</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-2</b></span></td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">2,697.90</td>
+</tr>
+<tr>
+<td style="border-bottom:2px solid black; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-1</b></span><br/>
+<span style="tab-stops:13.5pt"><b>(Notes 4 &amp; 5)</b></span></td>
+<td style="border-bottom:2px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:67px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:77px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">2,407.20</td>
+</tr>
+</tbody>
+</table>
 
-    <table>
-      <tr>
-        <th colspan="12">Cumulative Years of Service (Note 1)</th>
-      </tr>
-      <tr>
-        <th>Pay Grade</th>
-        <th>2 or less</th>
-        <th>Over 2</th>
-        <th>Over 3</th>
-        <th>Over 4</th>
-        <th>Over 6</th>
-        <th>Over 8</th>
-        <th>Over 10</th>
-        <th>Over 12</th>
-        <th>Over 14</th>
-        <th>Over 16</th>
-        <th>Over 18</th>
-      </tr>
-      <tr>
-        <td>E-9</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>$6,910.20</td>
-        <td>$7,066.50</td>
-        <td>$7,263.60</td>
-        <td>$7,496.10</td>
-        <td>$7,730.70</td>
-      </tr>
-      <tr>
-        <td>E-7</td>
-        <td>$3,932.10</td>
-        <td>$4,291.50</td>
-        <td>$4,456.20</td>
-        <td>$4,673.10</td>
-        <td>$4,843.80</td>
-        <td>$5,135.70</td>
-        <td>$5,300.40</td>
-        <td>$5,591.70</td>
-        <td>$5,835.00</td>
-        <td>$6,000.90</td>
-        <td>$6,177.30</td>
-      </tr>
-      <tr>
-        <td>E-3</td>
-        <td>$2,836.80</td>
-        <td>$3,015.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-      </tr>
-      <tr>
-        <td>E-1</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-      </tr>
-    </table>
-
-    <table>
-      <tr>
-        <th colspan="12">Cumulative Years of Service (Note 1)</th>
-      </tr>
-      <tr>
-        <th>Pay Grade</th>
-        <th>Over 20</th>
-        <th>Over 22</th>
-        <th>Over 24</th>
-        <th>Over 26</th>
-        <th>Over 28</th>
-        <th>Over 30</th>
-        <th>Over 32</th>
-        <th>Over 34</th>
-        <th>Over 36</th>
-        <th>Over 38</th>
-        <th>Over 40</th>
-      </tr>
-      <tr>
-        <td>E-9</td>
-        <td>$8,105.10</td>
-        <td>$8,423.10</td>
-        <td>$8,756.70</td>
-        <td>$9,267.90</td>
-        <td>$9,267.90</td>
-        <td>$9,730.20</td>
-        <td>$9,730.20</td>
-        <td>$10,217.40</td>
-        <td>$10,217.40</td>
-        <td>$10,729.20</td>
-        <td>$10,729.20</td>
-      </tr>
-      <tr>
-        <td>E-7</td>
-        <td>$6,245.70</td>
-        <td>$6,475.20</td>
-        <td>$6,598.20</td>
-        <td>$7,067.40</td>
-        <td>$7,067.40</td>
-        <td>$7,067.40</td>
-        <td>$7,067.40</td>
-        <td>$7,067.40</td>
-        <td>$7,067.40</td>
-        <td>$7,067.40</td>
-        <td>$7,067.40</td>
-      </tr>
-      <tr>
-        <td>E-3</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-        <td>$3,198.00</td>
-      </tr>
-      <tr>
-        <td>E-1</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-        <td>$2,407.20</td>
-      </tr>
-    </table>
-
-    <p>NOTE 1. Basic pay is limited to the rate of basic pay for Level V of the
-    Executive Schedule during calendar year 2026, which is $15,408.30.</p>
+<table class="MsoTableGrid" style="border-collapse:collapse;border:none;width:100%;" width="863">
+<tbody>
+<tr>
+<td colspan="12" style="border-width: 2px; border-style: solid solid double; border-color: black; width: 863px; padding: 0in 7px; text-align: center;" valign="top"><span style="tab-stops:13.5pt">Cumulative Years of Service <b>(Note 1)</b></span></td>
+</tr>
+<tr>
+<td style="border-bottom:2px double black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>Pay Grade</b></span></td>
+<td style="border-bottom:2px double black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>20</b></span></td>
+<td style="border-bottom:2px double black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>22</b></span></td>
+<td style="border-bottom:2px double black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>24</b></span></td>
+<td style="border-bottom:2px double black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>26</b></span></td>
+<td style="border-bottom:2px double black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>28</b></span></td>
+<td style="border-bottom:2px double black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<b>30</b></td>
+<td style="border-bottom:2px double black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<b>32</b></td>
+<td style="border-bottom:2px double black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<b>34</b></td>
+<td style="border-bottom:2px double black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<b>36</b></td>
+<td style="border-bottom:2px double black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<b>38</b></td>
+<td style="border-bottom:2px double black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom"><b>Over</b><br/>
+<span style="tab-stops:13.5pt"><b>40</b></span></td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-9</b></span><br/>
+<span style="tab-stops:13.5pt"><b>(Notes 2 &amp; 3)</b></span></td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,105.10</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,423.10</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,756.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,267.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,267.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,730.20</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,730.20</td>
+<td style="border-bottom:1px solid black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">10,217.40</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">10,217.40</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">10,729.20</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">10,729.20</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-8</b></span></td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,995.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,308.30</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,481.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,908.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,908.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,067.30</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,067.30</td>
+<td style="border-bottom:1px solid black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,067.30</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,067.30</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,067.30</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">8,067.30</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-7</b></span></td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,245.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,475.20</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,598.20</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,067.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,067.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,067.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,067.40</td>
+<td style="border-bottom:1px solid black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,067.40</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,067.40</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,067.40</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">7,067.40</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-6</b></span></td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,267.70</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">5,267.70</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-5</b></span></td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">4,421.70</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">4,421.70</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-4</b></span></td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,815.40</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">3,815.40</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-3</b></span></td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">3,198.00</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">3,198.00</td>
+</tr>
+<tr>
+<td style="border-bottom:1px solid black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-2</b></span></td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,697.90</td>
+<td style="border-bottom:1px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">2,697.90</td>
+</tr>
+<tr>
+<td style="border-bottom:2px solid black; width:97px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:2px solid black" valign="bottom"><span style="tab-stops:13.5pt"><b>E-1</b></span><br/>
+<span style="tab-stops:13.5pt"><b>(Notes 4 &amp; 5)</b></span></td>
+<td style="border-bottom:2px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:66px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:73px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:72px; padding:0in 7px 0in 7px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">2,407.20</td>
+<td style="border-bottom:2px solid black; width:84px; padding:0in 7px 0in 7px; border-top:none; border-right:2px solid black; border-left:none" valign="bottom">2,407.20</td>
+</tr>
+</tbody>
+</table>
   </body>
 </html>
