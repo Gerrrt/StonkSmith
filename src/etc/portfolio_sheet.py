@@ -308,10 +308,12 @@ def _refusal(tab: str) -> str:
 
 
 #: Marks a case whose assertion has itself never met real Sheets. The structural
-#: cases compare strings and cannot be wrong about the API; these three rest on
-#: what a render option gives back, so a failure is ambiguous between "the tab is
-#: wrong" and "this check is". Kept visible rather than buried, because reporting
-#: an unconfirmed assumption as a confirmed defect is its own kind of wrong.
+#: cases compare strings and cannot be wrong about the API; the two that carry
+#: this rest on what a render option gives back, so a failure is ambiguous between
+#: "the tab is wrong" and "this check is". Kept visible rather than buried, because
+#: reporting an unconfirmed assumption as a confirmed defect is its own kind of
+#: wrong. Count it from the constant, not from memory: an earlier draft said three,
+#: having been written before the empty-cell check turned out to be impossible.
 UNCONFIRMED: str = " (assertion unconfirmed against real Sheets)"
 
 
@@ -330,12 +332,17 @@ def check_tabs(
     a RAW upload reports success through all of it. These are the checks that used
     to need somebody opening the spreadsheet.
 
-    Five of them compare strings and are certain: the banner, the column
+    Seven of the nine compare strings and are certain: the banner, three column
     contracts, the movement count against the databases, the date format, and the
-    ordering. Three read cell *values* -- money as a number, the dashboard's two
-    totals agreeing, an absent date arriving empty -- and those depend on what
-    gspread hands back for a rendered cell. Those are marked, because until this
-    has run once the marked ones test the assertion as much as the sheet.
+    ordering. Two read cell *values* -- money as a number and the dashboard's two
+    totals agreeing -- and those depend on what gspread hands back for a rendered
+    cell. Those two are marked, because until this has run once they test the
+    assertion as much as the sheet.
+
+    A third value check was intended and cannot exist: an absent date arriving as
+    an empty cell rather than as an empty string is invisible to a read, since
+    Sheets returns "" or a short row for either. See the note where it would have
+    gone.
 
     Opens with open_worksheet and not ensure_worksheet, deliberately: a missing
     tab means the sync was never run, and creating one here would manufacture the
@@ -484,17 +491,20 @@ def _count_case(worksheet: Any, expected: int) -> GuardCase:
     )
 
 
-def _column_at(worksheet: Any, letter: str) -> list[Any]:
+def _column_at(worksheet: Any, letter: str, rendered: bool = False) -> list[Any]:
     """
     One column by letter, from the first data row down.
     :param worksheet: The tab to read
     :param letter: The column letter
+    :param rendered: True to get values rather than their displayed text
     :return: The values
     :rtype: list[Any]
     """
 
     rows: list[list[Any]] = _values(
-        worksheet=worksheet, cells=f"{letter}{FIRST_DATA_ROW}:{letter}"
+        worksheet=worksheet,
+        cells=f"{letter}{FIRST_DATA_ROW}:{letter}",
+        rendered=rendered,
     )
 
     return [row[0] if row else "" for row in rows]
@@ -576,11 +586,16 @@ def _money_case(worksheet: Any) -> GuardCase:
     :rtype: GuardCase
     """
 
+    # Rendered, and the check does not work any other way: the formatted read
+    # returns display text for every cell, so a perfectly good 1234.5 comes back
+    # as "1,234.50" and this would report every sheet as broken. Unformatted is
+    # what distinguishes a number Sheets stored from a string it was handed.
     values: list[Any] = [
         value
         for value in _column_at(
             worksheet=worksheet,
             letter=column_of(columns=ACCOUNT_COLUMNS, name="Value"),
+            rendered=True,
         )
         if value != ""
     ]
@@ -647,12 +662,20 @@ def _summary_value(worksheet: Any, labels: list[Any], label: str) -> float:
     :return: The value beside it
     :rtype: float
     :raises LookupError: if the label is not there
+    :raises ValueError: if the cell beside it is empty or not a number
     """
 
     row: int = FIRST_DATA_ROW + [str(object=cell) for cell in labels].index(label)
     found: list[list[Any]] = _values(
         worksheet=worksheet, cells=f"B{row}:B{row}", rendered=True
     )
+
+    # Checked rather than indexed into. An empty cell comes back as an empty row
+    # or as no rows at all, and while the IndexError that would cause is a
+    # LookupError and so already caught by the caller, arriving there by accident
+    # of the exception hierarchy is not the same as saying what went wrong.
+    if not found or not found[0]:
+        raise ValueError(f"the cell beside '{label}' is empty")
 
     return float(found[0][0])
 

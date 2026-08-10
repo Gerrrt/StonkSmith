@@ -722,19 +722,21 @@ The five checks, and which of them `verify tabs` settles:
 refused tab means nothing is synced at all, so doing this first would leave the five
 checks above reading a sheet the run never wrote.
 
-Most of it no longer needs a deface. `verify` in the same shell asks `claim()` all three
-of its questions on a tab it creates and removes, so the guard meets real Sheets without a
-real tab being touched:
+Most of it no longer needs a deface. `verify guard` asks `claim()` all three of its
+questions on a tab it creates and removes, so the guard meets real Sheets without a real tab
+being touched:
 
 ```
-stonksmithdb (default) > verify
+stonksmithdb (default) > verify guard
 [*] Making the tab 'StonkSmith ownership check' in 'Investment Account Scrapes', asking the guard about it, and deleting it again. No other tab is opened.
 [+] A defaced first cell is refused
 [+] Text below a blank first cell is refused
 [+] A wholly empty tab is adopted
 [+] The throwaway tab was removed
-[*] The guard behaved on all 4 counts. That is claim() against real Sheets, not a stub -- but a refusal aborting the whole sync still needs the manual step in docs/live-verification.md.
+[*] All 4 checks behaved, against real Sheets rather than a stub. Two things they cannot cover are still in docs/live-verification.md: a refusal aborting the whole sync, and an absent value arriving as an empty cell.
 ```
+
+Bare `verify` runs this half *and* the tab read-back above it, tabs first.
 
 **That is not a session.** It is what the real function prints when driven over the fake
 spreadsheet the tests use, which is the closest thing obtainable without a Google account —

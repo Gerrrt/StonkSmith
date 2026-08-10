@@ -18,6 +18,8 @@ them apart. That one stays an eyeball check.
 import unittest
 from unittest.mock import MagicMock, patch
 
+from gspread.utils import ValueRenderOption
+
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
@@ -62,7 +64,14 @@ class Tab:
     def get_values(
         self, range_name: str, value_render_option: str | None = None
     ) -> list[list[object]]:
-        del value_render_option
+        # Honoured, not ignored, and this is the point. A formatted read gives
+        # display text for every cell, so a check that asked for formatted when it
+        # meant unformatted would see "1234.5" and call a good sheet broken. A
+        # fake that returned the grid regardless would pass that check and hide
+        # it -- which is what the first version of this file did.
+        as_text: bool = str(object=value_render_option) == str(
+            object=ValueRenderOption.formatted
+        )
         start, _, end = range_name.partition(":")
         first_col, first_row = start[0], int(start[1:])
         last_col = end[0] if end else first_col
@@ -78,6 +87,9 @@ class Tab:
                     ord(first_col) - ord("A"), ord(last_col) - ord("A") + 1
                 )
             ]
+
+            if as_text:
+                cells = ["" if cell == "" else str(object=cell) for cell in cells]
 
             # Sheets trims trailing empties, and a wholly empty row comes back
             # short. Reproducing that is the point: the checks have to cope.
