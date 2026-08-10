@@ -708,11 +708,12 @@ it. That message is about the sheet, not about the broker.
 
 The statement reader, the price parser and the arithmetic are all verified
 against real files, and the mark has been checked against what the site itself
-reports. The database write has not been run. The sheet has: on 2026-08-10 it was built
-from real databases, read back tab by tab, checked by eye where a read could not
-reach, and made to refuse a tab it did not own. What is left there is the one
-claim nine movements cannot put — that a tab holds every movement rather than
-the newest five hundred — and the tabs' creation, since they already existed.
+reports. The database write has not been run. The sheet has: on 2026-08-10 it was
+built from real databases, read back tab by tab, checked by eye where a read
+could not reach, made to refuse a tab it did not own, and rebuilt from nothing
+after its four tabs were deleted. What is left there is the one claim nine
+movements cannot put — that a tab holds every movement rather than the newest
+five hundred — which is tracked on its own as #141.
 `docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
 statement's fund is read and logged but not carried into the mark, so a
