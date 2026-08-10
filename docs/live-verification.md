@@ -691,7 +691,7 @@ The five checks, and which of them `verify tabs` settles:
    number computed by Sheets and by Python; a disagreement means the write was
    truncated, and it is the only signal that would say so.
 4. **An account with no date is surfaced, not silently counted at full value.**
-   ***Still open, and the only thing between this row and `Yes`.** One look at the
+   **Still open — the only thing between this row and `Yes`.** *One look at the
    Dashboard.* Find an account on `Accounts` whose `As Of` is blank — its source gave no
    date — and confirm it appears in the **staleness panel** on the dashboard, with that
    cell blank there too. If every account in the workspace has an `As Of`, this cannot be
