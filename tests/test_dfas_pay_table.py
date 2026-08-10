@@ -8,12 +8,21 @@ at least 4 years and 1 day)" -- so the anniversary itself is still the band
 below, which is exactly the sort of boundary that gets a member paid at the
 wrong rate for a month and never looks wrong.
 
-The enlisted fixture is the page as DFAS serves it, trimmed to its two tables.
-It used to be a reconstruction, and the swap is why two of the tests below
-exist: the reconstruction was right about every rate and wrong about the markup
-in two ways, and the parser passed against it while reading nothing whatever
-off the real page. The prior-service fixture is still a reconstruction and says
-so at the top. Nothing here touches the network or the real config file.
+All four fixtures are now the pages as DFAS serves them, trimmed to their two
+tables. None is a reconstruction any more, and the two swaps are why several of
+the tests below exist. The enlisted reconstruction was right about every rate
+and wrong about the markup in two ways, and the parser passed against it while
+reading nothing whatever off the real page. The prior-service one was weaker
+still: its dollar figures were invented outright, so nothing that quoted them
+was testing anything.
+
+Having all four also shows something one page cannot. DFAS does not mark up its
+own four pages alike -- the officer pages write "<b>Over 10</b>" and the
+enlisted and warrant pages stack it over a line break -- and only the officer
+page footnotes every grade rather than two of them. A parser checked against a
+single page is checked against one of two spellings and one of two habits.
+
+Nothing here touches the network or the real config file.
 """
 
 import datetime as dt
@@ -34,14 +43,29 @@ from helpers.dfas import (
     normalize_grade,
     table_for,
 )
+from helpers.tsp import to_number
 
 FIXTURES = Path(__file__).resolve().parent
 ENLISTED = FIXTURES / "dfas_basic_pay_em.html"
 PRIOR_SERVICE = FIXTURES / "dfas_basic_pay_co_fe.html"
+OFFICERS = FIXTURES / "dfas_basic_pay_co.html"
+WARRANTS = FIXTURES / "dfas_basic_pay_wo.html"
 
 
 def _enlisted() -> dict[str, dict[str, float]]:
     return basic_pay_table(html=ENLISTED.read_text(encoding="utf-8"))
+
+
+def _cell_texts(html: str) -> set[str]:
+    """Every table cell's text, as the parser reads it."""
+
+    soup = BeautifulSoup(markup=html, features="html.parser")
+
+    return {
+        cell.get_text(strip=True)
+        for table in soup.find_all(name="table")
+        for cell in table.find_all(name=["th", "td"])
+    }
 
 
 class GradeSpellingTests(unittest.TestCase):
@@ -213,14 +237,144 @@ class PayTableTests(unittest.TestCase):
         self.assertEqual(basic_pay_table(html=page), {})
 
     def test_does_not_depend_on_the_leading_header_cells(self) -> None:
-        # The two fixtures head their tables differently on purpose: a spanning
-        # row above the labels in one, a single row in the other, and a missing
-        # "Pay Grade" cell in the second half of the other. Columns are matched
+        # The four fixtures head their tables differently, because DFAS does:
+        # a spanning caption row above the labels on some, a "Pay Grade" cell
+        # that is present in one half and not the other. Columns are matched
         # from the right so none of that reaches the rates.
         prior = basic_pay_table(html=PRIOR_SERVICE.read_text(encoding="utf-8"))
-        self.assertEqual(prior["O-3E"]["Over 4"], 7100.00)
-        self.assertEqual(prior["O-3E"]["Over 40"], 7900.00)
+        self.assertEqual(prior["O-3E"]["Over 4"], 7382.70)
+        self.assertEqual(prior["O-3E"]["Over 40"], 9609.60)
+
+    def test_the_prior_service_rates_start_at_over_four(self) -> None:
+        # The columns are all there -- "2 or less" through "Over 18", as on
+        # every other page -- but no prior-service rate exists below "Over 4",
+        # because these rates protect a new officer who already has four years'
+        # enlisted or warrant service. So the bands are absent from the parse
+        # while the headings are present in the markup, and those are different
+        # facts. The fixture this replaced was invented and had neither.
+        prior = basic_pay_table(html=PRIOR_SERVICE.read_text(encoding="utf-8"))
+
         self.assertNotIn("2 or less", prior["O-3E"])
+        self.assertNotIn("Over 3", prior["O-3E"])
+        self.assertEqual(prior["O-3E"]["Over 4"], 7382.70)
+        self.assertEqual(sorted(prior, key=grade_order), ["O-1E", "O-2E", "O-3E"])
+
+    def test_the_word_blank_is_not_a_rate(self) -> None:
+        # This page writes the literal word "blank" into every cell with no
+        # rate; the other three leave the cell empty. It costs nothing today
+        # because to_number() returns None for it exactly as for "", so the
+        # band is absent either way -- but that is luck, not design, and it is
+        # the sort of thing only the served page could have taught. Pinned so
+        # that anything later treating a non-empty cell as a published figure
+        # fails here rather than storing the string where a rate belongs.
+        page = PRIOR_SERVICE.read_text(encoding="utf-8")
+
+        self.assertIn("blank", _cell_texts(html=page))
+        self.assertIsNone(to_number(text="blank"))
+
+        for band in ("2 or less", "Over 2", "Over 3"):
+            with self.subTest(band=band):
+                self.assertNotIn(band, basic_pay_table(html=page)["O-3E"])
+
+        # And only this page does it, so the others are not silently relying
+        # on the same accident. Asked of the cells rather than of the file,
+        # which also says the word in its header comment.
+        for other in (ENLISTED, OFFICERS, WARRANTS):
+            with self.subTest(page=other.name):
+                texts = _cell_texts(html=other.read_text(encoding="utf-8"))
+                self.assertNotIn("blank", texts)
+                self.assertIn("", texts)
+
+
+class OfficerAndWarrantPageTests(unittest.TestCase):
+    """
+    The three pages that are not the enlisted one, all served rather than made up.
+
+    Worth having separately from the enlisted tests because the four pages are
+    not marked up alike, and a parser checked against one of them is checked
+    against one of two spellings and one of two footnote habits.
+    """
+
+    def setUp(self) -> None:
+        self.officers = OFFICERS.read_text(encoding="utf-8")
+        self.warrants = WARRANTS.read_text(encoding="utf-8")
+
+    def test_every_officer_grade_is_carried(self) -> None:
+        # Ten of ten, and every one of them footnoted on the page -- "O-10
+        # (Note 4)", "O-3 (Notes 5 & 6)", "O-1 (Notes 5, 6 & 7)". Read
+        # literally this page yields no grades whatever, so unlike the
+        # enlisted page, where the same bug cost the top and bottom rows,
+        # here it would have cost all of them.
+        table = basic_pay_table(html=self.officers)
+
+        self.assertEqual(
+            sorted(table, key=grade_order),
+            ["O-1", "O-2", "O-3", "O-4", "O-5", "O-6", "O-7", "O-8", "O-9", "O-10"],
+        )
+
+    def test_every_warrant_grade_is_carried(self) -> None:
+        table = basic_pay_table(html=self.warrants)
+
+        self.assertEqual(
+            sorted(table, key=grade_order), ["W-1", "W-2", "W-3", "W-4", "W-5"]
+        )
+
+    def test_the_two_heading_spellings_are_both_the_same_column(self) -> None:
+        # DFAS does not mark up its own four pages the same way. The officer
+        # page writes "<b>Over 10</b>" on one line; the warrant page stacks it
+        # as "<b>Over</b><br/><b>10</b>", which reads as "Over10". Matching the
+        # label with its spacing removed is what makes both of them "Over 10",
+        # and testing only one page would leave the other spelling unguarded.
+        self.assertIn("<b>Over 10</b>", self.officers)
+        self.assertNotIn("<b>Over 10</b>", self.warrants)
+
+        self.assertEqual(basic_pay_table(html=self.officers)["O-4"]["Over 10"], 9420.00)
+        self.assertEqual(basic_pay_table(html=self.warrants)["W-3"]["Over 10"], 6910.50)
+
+    def test_a_grade_nobody_holds_early_is_blank_rather_than_zero(self) -> None:
+        # O-9, O-10 and W-5 are empty across the whole first table. That is the
+        # page being right rather than short: those grades do not exist under
+        # twenty years, and a zero would price a general's contribution at
+        # nothing and look like an answer.
+        officers = basic_pay_table(html=self.officers)
+        warrants = basic_pay_table(html=self.warrants)
+
+        for grade, table in (("O-9", officers), ("O-10", officers), ("W-5", warrants)):
+            with self.subTest(grade=grade):
+                self.assertNotIn("2 or less", table[grade])
+                self.assertNotIn("Over 18", table[grade])
+                self.assertIn("Over 20", table[grade])
+
+    def test_both_halves_arrived_on_every_page(self) -> None:
+        for name, html in (
+            ("officers", self.officers),
+            ("warrants", self.warrants),
+            ("prior service", PRIOR_SERVICE.read_text(encoding="utf-8")),
+        ):
+            with self.subTest(page=name):
+                table = basic_pay_table(html=html)
+                self.assertFalse(missing_upper_table(table=table))
+                self.assertEqual(alignment_faults(html=html), [])
+                self.assertEqual(effective_date(html=html), dt.date(2026, 1, 1))
+
+    def test_the_published_cap_is_taken_as_printed(self) -> None:
+        # O-8 upward tops out at the Level II limit, and the page has already
+        # applied it. Re-capping here would either double it or hardcode a
+        # dollar figure that goes stale every January.
+        table = basic_pay_table(html=self.officers)
+
+        self.assertEqual(table["O-8"]["Over 40"], 18999.90)
+        self.assertEqual(table["O-10"]["Over 40"], 18999.90)
+
+    def test_each_page_carries_only_its_own_family(self) -> None:
+        # table_for() sends a grade to one of four pages, so a page that also
+        # carried a neighbouring family would make that routing untestable.
+        self.assertEqual(
+            {grade[0] for grade in basic_pay_table(html=self.officers)}, {"O"}
+        )
+        self.assertEqual(
+            {grade[0] for grade in basic_pay_table(html=self.warrants)}, {"W"}
+        )
 
 
 class GradeOrderTests(unittest.TestCase):

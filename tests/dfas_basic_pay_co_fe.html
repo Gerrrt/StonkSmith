@@ -1,118 +1,169 @@
 <!DOCTYPE html>
 <!--
-  The prior-service officer page, reconstructed for shape rather than for
-  figures. The three grades and the band labels are the real ones, observed on
-  the live page on 2026-08-08; every dollar amount is invented, because the
-  published rates for these grades could not be read from a machine that
-  dfas.mil refuses. Nothing here should be quoted as pay.
+  The DFAS prior-service officer basic pay page as served, trimmed to its two
+  tables.
 
-  It exists for one thing the enlisted fixture cannot show: that "O-3E" is a
-  grade in its own right, that it lives on its own page, and that it survives
-  the round trip from a config line through normalize_grade() to a table row.
+  This file used to be a reconstruction, and an unusually weak one: the three
+  grades and the band labels were real, observed by eye on 2026-08-08, but
+  **every dollar amount in it was invented**, because dfas.mil refused the
+  machine that would have read them. Its own header said so and told the reader
+  not to quote it as pay.
 
-  The header here is deliberately shaped differently from the enlisted fixture
-  -- one header row rather than a spanning row above it, and no leading "Pay
-  Grade" cell in the second table -- because the parser must not depend on which
-  of those DFAS happens to emit.
+  It is the served page now, so the rates are the published rates. And what the
+  invented figures could not have caught is stranger than a missing column:
+  this page prints the **literal word "blank"** in every cell with no rate.
+
+      <td ...> blank</td>   <td ...> blank</td>   <td ...>7,382.70</td>
+
+  The columns themselves are all there -- "2 or less", "Over 2" and "Over 3"
+  are in the header like everywhere else -- but no prior-service rate exists
+  below "Over 4", because these rates protect a new officer who already has
+  four years' enlisted or warrant service. The other three pages leave such a
+  cell empty. This one writes a word in it.
+
+  Nothing downstream notices, because to_number() returns None for "blank" the
+  same as for "", and an absent band is what both mean. That is luck rather
+  than design, and it is why the test below pins it: a future reader who treats
+  a non-empty cell as a published figure would put the string "blank" where a
+  rate belongs, on the only page that does this.
+
+  Like the officer page and unlike the enlisted one, the band headings are
+  written on one line rather than stacked.
+
+  Fetched 2026-08-11 through the same client the run uses. Everything outside
+  the two tables is removed; the tables themselves are byte-for-byte as served,
+  inline styles and all. Do not reflow or prettify this file -- the whitespace
+  is the fixture. Rates are effective 1 January 2026.
 -->
 <html>
-  <head><title>Basic Pay - Commissioned Officers With Over 4 Years Service</title></head>
+  <head><title>Basic Pay - Officers with over 4 Years Enlisted or Warrant Service</title></head>
   <body>
-    <h1>Basic Pay &ndash; Commissioned Officers With Over 4 Years Active Duty
-    Service as an Enlisted Member or Warrant Officer Effective January 1, 2026</h1>
-
-    <table>
-      <tr>
-        <th>Cumulative Years of Service (Note 1)</th>
-        <th>2 or less</th>
-        <th>Over 2</th>
-        <th>Over 3</th>
-        <th>Over 4</th>
-        <th>Over 6</th>
-        <th>Over 8</th>
-        <th>Over 10</th>
-        <th>Over 12</th>
-        <th>Over 14</th>
-        <th>Over 16</th>
-        <th>Over 18</th>
-      </tr>
-      <tr>
-        <td>O-3E</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>$7,100.00</td>
-        <td>$7,200.00</td>
-        <td>$7,300.00</td>
-        <td>$7,400.00</td>
-        <td>$7,500.00</td>
-        <td>$7,600.00</td>
-        <td>$7,700.00</td>
-        <td>$7,800.00</td>
-      </tr>
-      <tr>
-        <td>O-1E</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>$5,100.00</td>
-        <td>$5,200.00</td>
-        <td>$5,300.00</td>
-        <td>$5,400.00</td>
-        <td>$5,500.00</td>
-        <td>$5,600.00</td>
-        <td>$5,700.00</td>
-        <td>$5,800.00</td>
-      </tr>
-    </table>
-
-    <table>
-      <tr>
-        <th>Over 20</th>
-        <th>Over 22</th>
-        <th>Over 24</th>
-        <th>Over 26</th>
-        <th>Over 28</th>
-        <th>Over 30</th>
-        <th>Over 32</th>
-        <th>Over 34</th>
-        <th>Over 36</th>
-        <th>Over 38</th>
-        <th>Over 40</th>
-      </tr>
-      <tr>
-        <td>O-3E</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-        <td>$7,900.00</td>
-      </tr>
-      <tr>
-        <td>O-1E</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-        <td>$5,900.00</td>
-      </tr>
-    </table>
-
-    <p>NOTE 4. These rates do not apply to Doctor of Medicine students of the
-    Uniformed Services University of the Health Sciences who do not have over 4
-    years (i.e., at least 4 years and 1 day) of active duty service as an
-    enlisted member or as a warrant officer or as both.</p>
+    <p>Basic Pay &#8211; Officers with over 4 Years Active Duty Enlisted and/or Warrant Officer Service Effective January 1, 2026</p>
+<table class="Table" style="border-collapse:collapse;width:100%;" width="920">
+<tbody>
+<tr>
+<td colspan="12" nowrap="nowrap" style="border-bottom:1px solid black; width:920px; padding:0in 7px 0in 7px; height:16px; border-top:1px solid black; border-right:1px solid black; border-left:1px solid black" valign="bottom">Cumulative Years of Service (Notes 1, 2, 3,&amp; 4)</td>
+</tr>
+<tr>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:147px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:1px solid black" valign="bottom"><b>Pay Grade</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>2 or less</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 2</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 3</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 4</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 6</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 8</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 10</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 12</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 14</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 16</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 18</b></td>
+</tr>
+<tr>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:147px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:1px solid black" valign="bottom"><b>O-3E</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> blank</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> blank</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> blank</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,382.70</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,737.00</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,125.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,375.70</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">8,788.20</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,137.10</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,336.90</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+</tr>
+<tr>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:147px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:1px solid black" valign="bottom"><b>O-2E</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> blank</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> blank</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> blank</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,617.70</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,828.00</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,183.80</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,458.90</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+</tr>
+<tr>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:147px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:1px solid black" valign="bottom"><b>O-1E</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> blank</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> blank</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"> blank</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,222.40</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,576.70</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,783.10</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">5,993.70</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,200.70</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+</tr>
+</tbody>
+</table>
+<table class="Table" style="border-collapse:collapse;width:100%;" width="920">
+<tbody>
+<tr>
+<td colspan="12" nowrap="nowrap" style="border-bottom:1px solid black; width:920px; padding:0in 7px 0in 7px; height:12px; border-top:1px solid black; border-right:1px solid black; border-left:1px solid black" valign="bottom">Cumulative Years of Service (Notes 1, 2, 3 &amp; 4)</td>
+</tr>
+<tr>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:147px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:1px solid black" valign="bottom"><b>Pay Grade</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 20</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 22</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 24</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 26</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 28</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 30</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 32</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 34</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 36</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 38</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom"><b>Over 40</b></td>
+</tr>
+<tr>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:147px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:1px solid black" valign="bottom"><b>O-3E</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">9,609.60</td>
+</tr>
+<tr>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:147px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:1px solid black" valign="bottom"><b>O-2E</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">7,663.50</td>
+</tr>
+<tr>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:147px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:1px solid black" valign="bottom"><b>O-1E</b></td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+<td nowrap="nowrap" style="border-bottom:1px solid black; width:70px; padding:0in 7px 0in 7px; height:21px; border-top:none; border-right:1px solid black; border-left:none" valign="bottom">6,484.50</td>
+</tr>
+</tbody>
+</table>
   </body>
 </html>
