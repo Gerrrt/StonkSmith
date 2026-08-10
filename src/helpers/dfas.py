@@ -115,7 +115,9 @@ BAND_ORDER: dict[str, int] = {
 SPLIT_BAND: str = "Over 18"
 
 #: A published rate, as the tables print it: dollars and cents, with or without
-#: the sign and the thousands separator.
+#: the dollar sign and the thousands separator. No leading +/- on purpose --
+#: basic pay is never negative, and accepting a sign here would let a negative
+#: number pass for a rate in the one place this is asked.
 #:
 #: Deliberately not to_number(), which is the statement reader's and finds the
 #: "-7" inside "E-7". That is right where every token it sees is already known to
