@@ -221,6 +221,28 @@ def normalize_grade(rank: str) -> str | None:
     return f"{family}-{number}{prior}"
 
 
+def grade_order(grade: str) -> tuple[str, int, str]:
+    """
+    Sort key putting the grades in the order the tables print them.
+
+    Sorting the strings themselves puts "O-10" between "O-1" and "O-2", because
+    "1" sorts before "2" a character at a time. The officer tables run to O-10,
+    so anything displaying a whole page has to take the number apart -- a grid
+    printed for checking a parser against the published page is worth nothing if
+    its rows are not in the page's order.
+    :param grade: A canonical grade, as normalize_grade() returns
+    :return: (family, number, prior-service suffix), ascending in each
+    :rtype: tuple[str, int, str]
+    """
+
+    found = GRADE.match(string=grade)
+
+    if found is None:
+        return (grade, 0, "")
+
+    return (found.group(1).upper(), int(found.group(2)), found.group(3).upper())
+
+
 def table_for(rank: str) -> str | None:
     """
     Which of the four published tables carries a grade.

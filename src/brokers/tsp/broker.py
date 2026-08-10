@@ -53,6 +53,7 @@ from helpers.dfas import (
     band_on,
     basic_pay_table,
     effective_date,
+    grade_order,
     missing_upper_table,
     normalize_grade,
     table_for,
@@ -376,7 +377,9 @@ class Tsp(ApiConnection):
 
         Laid out in the page's own two halves so the columns line up with what is
         on screen beside it, and a band with no published rate is blank here the
-        way it is blank there.
+        way it is blank there. Rows in the page's order too, which takes a key
+        rather than a plain sort: the officer tables run to O-10, and sorting the
+        grade strings puts that between O-1 and O-2.
         :param table: A parsed page, as basic_pay_table() returns
         :return: None
         :rtype: None
@@ -394,7 +397,7 @@ class Tsp(ApiConnection):
                 msg="Grade " + "".join(f"{label:>12}" for label in columns)
             )
 
-            for grade in sorted(table):
+            for grade in sorted(table, key=grade_order):
                 rates: dict[str, float] = table[grade]
                 cells: str = "".join(
                     f"{rates[label]:>12,.2f}" if label in rates else f"{'':>12}"

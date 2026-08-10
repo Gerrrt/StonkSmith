@@ -28,6 +28,7 @@ from helpers.dfas import (
     band_on,
     basic_pay_table,
     effective_date,
+    grade_order,
     missing_upper_table,
     monthly_basic_pay,
     normalize_grade,
@@ -220,6 +221,22 @@ class PayTableTests(unittest.TestCase):
         self.assertEqual(prior["O-3E"]["Over 4"], 7100.00)
         self.assertEqual(prior["O-3E"]["Over 40"], 7900.00)
         self.assertNotIn("2 or less", prior["O-3E"])
+
+
+class GradeOrderTests(unittest.TestCase):
+    def test_double_digit_grades_sort_after_single_digit_ones(self) -> None:
+        # "O-10" between "O-1" and "O-2" is what sorting the strings gives, and
+        # the officer tables go that high. A grid printed to be read against the
+        # published page has to be in the published page's order.
+        grades = ["O-10", "O-1", "O-2", "O-9", "E-9", "W-5", "O-3E"]
+
+        self.assertEqual(
+            sorted(grades, key=grade_order),
+            ["E-9", "O-1", "O-2", "O-3E", "O-9", "O-10", "W-5"],
+        )
+
+    def test_the_prior_service_rates_follow_the_plain_ones(self) -> None:
+        self.assertEqual(sorted(["O-3E", "O-3"], key=grade_order), ["O-3", "O-3E"])
 
 
 class AlignmentTests(unittest.TestCase):
