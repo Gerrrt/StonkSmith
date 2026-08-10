@@ -34,7 +34,8 @@ run are not the same evidence. A row can also be settled the other way: **Run, a
 cannot** is an observation, not a gap.
 
 *18 of 20 claims have been settled by a live run — 17 confirmed, 1 disproved. The
-remaining 2 rest on unit tests or on fixtures.*
+remaining 2 rest on evidence no run has produced yet: one needs a second price run on
+a later day, the other a broker with the transaction volume to put the question.*
 
 `tests/test_live_verification_tally.py` derives those five numbers from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
