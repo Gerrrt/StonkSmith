@@ -1123,6 +1123,40 @@ class BrokerDatabase:
             ") ORDER BY a.source, a.display_name"
         )
 
+    def get_account_history(self) -> list[tuple[Any, ...]]:
+        """
+        Every snapshot every account has, carrying its identity.
+
+        get_current_accounts above answers "what is each account worth now" by
+        restricting to one snapshot per account. This answers "what has each
+        account been worth", which is the same question with that restriction
+        taken off -- so it returns the *same nine columns in the same order*,
+        deliberately, and one projection loop in etc.portfolio serves both.
+
+        **Deliberately unlimited**, and for get_current_transactions's reason
+        rather than get_current_accounts's. Theirs is that a total which
+        silently drops its five-hundred-and-first row is worse than no total.
+        This is the second thing here that grows without bound -- a snapshot per
+        account per run, forever -- so a limit is the difference between a
+        history and the newest page of one, shown with nothing saying so.
+
+        Ordered by account and then oldest snapshot first. A series is read
+        forward, unlike a log, and the caller carrying values forward across
+        dates needs each account's snapshots in the order they happened.
+        ``s.id`` breaks a tie, because two runs inside the same second are a
+        thing that happens and ``scraped_at`` has one-second resolution.
+        :return: Rows of (account_key, source, display_name, beneficiary, kind,
+            value, currency, as_of, scraped_at), one per snapshot
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        return self._select(
+            "SELECT a.account_key, a.source, a.display_name, a.beneficiary, "
+            "a.kind, s.value, s.currency, s.as_of, s.scraped_at "
+            "FROM account_snapshots s JOIN accounts a ON a.id = s.account_id "
+            "ORDER BY a.source, a.display_name, s.scraped_at, s.id"
+        )
+
     def get_current_holdings(self) -> list[tuple[Any, ...]]:
         """
         The positions behind every account's newest snapshot.

@@ -125,9 +125,14 @@ class PortfolioDbProtocol(Protocol):
     the opposite of what the three protocols above did. They are layered because
     a module holds one database and asks how much of the contract it supports
     before deciding what to write, so a database that answers less is not broken.
-    This one is consumed by exactly one reader, which needs all three answers to
+    This one is consumed by exactly one reader, which needs every answer to
     render the sheet at all -- a "transactions optional" branch there would be a
     fallback into the silence etc.portfolio exists to prevent.
+
+    Widened again, on the same argument, when the account series gained a row
+    shape. get_account_history is what get_current_accounts would be with its
+    newest-snapshot restriction taken off, and a reader that could not ask for
+    it would render a net worth tab with today on it and nothing behind.
     """
 
     def get_current_accounts(self) -> list[tuple[Any, ...]]: ...
@@ -135,6 +140,8 @@ class PortfolioDbProtocol(Protocol):
     def get_current_holdings(self) -> list[tuple[Any, ...]]: ...
 
     def get_current_transactions(self) -> list[tuple[Any, ...]]: ...
+
+    def get_account_history(self) -> list[tuple[Any, ...]]: ...
 
 
 class Context:

@@ -33,8 +33,8 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*11 of 20 claims have been settled by a live run — 10 confirmed, 1 disproved. The
-remaining 9 rest on unit tests or on fixtures.*
+*11 of 21 claims have been settled by a live run — 10 confirmed, 1 disproved. The
+remaining 10 rest on unit tests or on fixtures.*
 
 `tests/test_live_verification_tally.py` derives those five numbers from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
@@ -60,9 +60,10 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — DFAS pay table download | Unit tests with a mocked session; dfas.mil refused two unrelated hosted environments, 2026-08-07 and 2026-08-09, and tsp.gov answered from both | No |
 | TSP — the contribution accrual | Unit tests over the parsed price file and pay table | No |
 | TSP — database write | Unit tests with a mocked DB | No |
-| The sheet — four machine-owned tabs | Unit tests with a faked spreadsheet | No |
+| The sheet — five machine-owned tabs | Unit tests with a faked spreadsheet | No |
 | The sheet — the whole transaction history reaching a tab | Unit tests with a faked spreadsheet | No |
 | The sheet — refusing a tab it does not own | Unit tests with a faked spreadsheet | No |
+| The sheet — the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py` | No |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
 *one account state*: one investment account, one holding, one deposit account. So the
@@ -459,8 +460,8 @@ while every individual number looks right.
 
 ### 4. The sheet
 
-No tab needs creating: StonkSmith makes `Accounts`, `Holdings`, `Transactions` and
-`Dashboard` on the first sync. Nor does this need a scrape any more — the sheet is a view of the
+No tab needs creating: StonkSmith makes `Accounts`, `Holdings`, `Transactions`,
+`Net Worth` and `Dashboard` on the first sync. Nor does this need a scrape any more — the sheet is a view of the
 databases, so it can be built from them alone:
 
 ```
@@ -469,7 +470,7 @@ stonksmithdb (default) > sheet
 [*] Refreshed: 6 accounts, 23 holdings, 412 movements from ally, fidelity, snaptrade, tsp.
 ```
 
-Five things to confirm on the tabs themselves, none of which a unit test can see:
+Seven things to confirm on the tabs themselves, none of which a unit test can see:
 
 1. **The first cell of each tab carries the machine-owned banner**, and row 2 is the
    column contract exactly as `src/etc/portfolio.py` spells it.
@@ -492,6 +493,20 @@ Five things to confirm on the tabs themselves, none of which a unit test can see
    sorted newest-first within each account. A `12/30/2025` reaching a cell means the
    normalization was skipped, and the tab's order is then wrong wherever a December
    row sits above a January one.
+6. **`Net Worth` totals the same set of accounts on every date.** Pivot `Value` by
+   `Date` on the tab, or read the dashboard's net worth band, and walk the account
+   count down the dates. It may only ever grow — an account joins the series at its
+   first reading and leaves it only after thirty days of silence, so a count that
+   drops and recovers between two adjacent dates means the carry-forward is not
+   running and the chart is drawing scrape timing rather than money. This is the one
+   check that would catch the failure the tab exists to prevent, and it needs a
+   workspace whose brokers genuinely did not all run on the same day.
+7. **Carried rows are visibly carried, and no row is a back-filled zero.** Every row
+   reads `observed` or `carried` in `Basis` and never blank; a `carried` row's
+   `Observed On` is older than its `Date` and an `observed` row's is equal to it.
+   Then check the earliest dates: an account whose first reading came later must have
+   *no row at all* before it, rather than a row worth `0`. A zero there would total
+   correctly and be a lie about an account that did not exist yet.
 
 Then the refusal, which is the point of the whole thing. Type something into a spare
 tab, rename it `Holdings`, and run `sheet` again:
@@ -511,7 +526,8 @@ differ — that is the whole reason this broker exists — and that `show holdin
 `stonksmithdb` shows the same date the tab does.
 
 The Holdings tab is sixteen columns wide as of that change. A tab still ending at `O`
-after a sync is a visible sign the sync did not run.
+after a sync is a visible sign the sync did not run. `Net Worth` is eleven columns,
+ending at `K`, and its absence altogether is the same signal one change later.
 
 One check only a real database can make: open an existing `tsp.db` once and confirm
 that marks written *before* that upgrade show a `Units As Of` too. Those dates were
