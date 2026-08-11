@@ -242,10 +242,6 @@ class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
         self.assertIn("dashboard was not updated", succeeded)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class NoSheetSkipsTheRefreshTests(unittest.TestCase):
     """`--no-sheet` exists so a batch rewrites the sheet once, not once a broker.
 
@@ -284,3 +280,7 @@ class NoSheetSkipsTheRefreshTests(unittest.TestCase):
         sync(context=context)
 
         mock_refresh.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()
