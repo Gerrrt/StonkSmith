@@ -427,7 +427,7 @@ class TspContributionsTests(unittest.TestCase):
         self.assertIsNone(member)
 
     def test_the_getter_does_not_require_all_four_keys(self) -> None:
-        # The README asks for all four or none, but that is the broker's rule to
+        # docs/brokers.md asks for all four or none, but that is the broker's rule to
         # report on: a getter that blanked a configured percentage because rank
         # was missing would hide what the file actually says.
         with config_of(section("TSP", member_contribution="5")):

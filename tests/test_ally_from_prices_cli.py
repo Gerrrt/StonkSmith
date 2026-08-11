@@ -37,7 +37,7 @@ from home_isolation import isolated_home_env
 
 REPO = Path(__file__).resolve().parents[1]
 
-#: Quoted verbatim in docs/live-verification.md and in the README. Both lines
+#: Quoted verbatim in docs/live-verification.md and in docs/brokers.md. Both lines
 #: are fixed strings; step 6's other three are templates, and pinning a format
 #: string against a rendered line is the kind of brittle guard that gets
 #: deleted the first time a label changes.

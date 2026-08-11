@@ -9,15 +9,16 @@ This file records which broker claims have been observed against a live account 
 which have not, and gives the procedure for closing the gap. It is meant to be worked
 through, not read.
 
-**This file is the record.** The README summarises it in two places — the paragraph
-under *Project Structure* and the end of the *Ally Invest* section — and both are
-derived from the table below rather than maintained alongside it. Change a row here
-and change those there in the same pass; do not edit them on their own.
+**This file is the record.** Three places summarise it — the paragraph under
+[*Project Structure*](../README.md#bricks-project-structure) in the README, the end of
+[*Ally Invest*](brokers.md#ally-invest) and the opening of [`sheet.md`](sheet.md) — and
+all three are derived from the table below rather than maintained alongside it. Change a
+row here and change those there in the same pass; do not edit them on their own.
 
 **A failed step here is information, not a defect.** Session persistence and an
 unattended price download are load-bearing for the claim that a broker runs daily
-without a human. If one does not hold, the right response is to say so in the README
-rather than to leave the claim standing. Each step below therefore says what *either*
+without a human. If one does not hold, the right response is to say so in the
+summaries named above rather than to leave the claim standing. Each step below therefore says what *either*
 outcome would mean.
 
 ---
@@ -197,7 +198,9 @@ nothing. Saving is generic and needs no per-broker wiring; arming is one call, a
 worth adding there only if Fidelity acquires a question of its own.
 
 **The outcome: the Ally scrape cannot run unattended.** `--manual-login` on every
-scrape is the correct description, and the README says so. This is not a defect to fix
+scrape is the correct description, and both the README's
+[*Brokers*](../README.md#package-brokers) table and
+[`brokers.md`](brokers.md#ally-invest) say so. This is not a defect to fix
 in StonkSmith; nothing StonkSmith stores reconstitutes a session Ally will honour.
 
 What does run unattended is `--from-prices`, which values the account from published
@@ -1547,9 +1550,11 @@ touched before closing the issue, and bring the count above the table into line 
 last part is now checked, so a row settled without it is a failing test rather than a
 sentence nobody re-reads.
 
-Then change the README in the same pass, whichever way it went. **That half is still
-yours**: no test can tell whether a paragraph of prose still summarises the table
-correctly, only whether the arithmetic above it does. A claim that has been
+Then change the three summaries named at the top of this file in the same pass,
+whichever way it went. **That half is still yours**: `tests/test_doc_cross_references.py`
+checks that the links between these files still resolve, but no test can tell whether a
+paragraph of prose still summarises the table correctly, only whether the arithmetic
+above it does. A claim that has been
 disproved and left standing is worse than one that was never checked, because the next
 reader has no way to tell them apart — and a claim that has been *proved* and left
 reading as unchecked sends them off to redo a run that has already been done.

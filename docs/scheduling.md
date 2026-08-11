@@ -12,8 +12,9 @@ is not loud once and then over. It is loud every night, and a cron job that erro
 night gets muted — after which the portfolio has stopped updating and nothing says so.
 The muting is the bug, and it is caused by the documentation rather than by the code.
 
-**This file is the record.** The README summarises it in one place — the *Scheduling*
-section under *Usage* — and that summary is derived from here rather than maintained
+**This file is the record.** The README summarises it in one place — the
+[*Scheduling*](../README.md#scheduling) section under *Usage* — and that summary is
+derived from here rather than maintained
 beside it. Change what a broker can do unattended here, and change it there in the same
 pass.
 
@@ -31,8 +32,8 @@ Three things, none of them added for this and all of them load-bearing:
 
 - **A failed run exits non-zero.** `1` when a module reported it did nothing, could not
   log in, or never reached the database; `130` for an interrupt, kept distinct so a
-  scheduler can page on a real failure and shrug at Ctrl-C. The *Exit codes* table in the
-  README is the reference.
+  scheduler can page on a real failure and shrug at Ctrl-C. The
+  [*Exit codes*](../README.md#exit-codes) table in the README is the reference.
 - **`--quiet` reports failures only.** Which is what an unattended run wants: cron mails
   on output, so a run that says nothing when it worked is a run that only mails when it
   did not.
@@ -134,8 +135,9 @@ scripted sign-in before the form renders, and 2FA sits behind that. `--manual-lo
 the documented way in, and it is a human at a browser by construction.
 
 The answer is not to schedule the scraper. It is to stop running it: SnapTrade covers
-Fidelity, and it is exactly what takes the account from attended to unattended. *When two
-brokers can reach the same account* in the README is the procedure.
+Fidelity, and it is exactly what takes the account from attended to unattended.
+[*When two brokers can reach the same account*](brokers.md#when-two-brokers-can-reach-the-same-account)
+is the procedure.
 
 One thing to get right while switching, because it is the failure that looks like success:
 if both the `fidelity` scraper and SnapTrade run, both write, and the `Accounts` tab holds
