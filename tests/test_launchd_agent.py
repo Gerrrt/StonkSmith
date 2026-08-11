@@ -10,33 +10,71 @@ cannot contain a double hyphen, and the comment in that file documents a runner
 whose output is prefixed with one. Editing the guidance broke the agent, the
 suite stayed green, and the only symptom would have been a schedule that quietly
 stopped running.
+
+Parsed once at import rather than per test, and the failure kept as a message
+rather than raised. A malformed plist is one fact about one file: it should read
+as a single failure saying so, not as the same traceback under every assertion
+that then could not run.
 """
 
 import plistlib
 import unittest
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "scripts" / "com.stonksmith.nightly.plist"
 RUNNER = REPO / "scripts" / "stonksmith-nightly.sh"
 
 
-class TheAgentParses(unittest.TestCase):
-    def setUp(self) -> None:
-        with open(AGENT, "rb") as handle:
-            self.plist = plistlib.load(handle)
+def _load() -> tuple[dict[str, Any] | None, str]:
+    """
+    Parse the agent, keeping any failure as text instead of raising it.
+    :return: (the plist, "") or (None, why it could not be read)
+    """
 
-    def test_it_is_well_formed(self) -> None:
-        # setUp already proved it; this names the reason so a failure here reads
-        # as "the plist is malformed" rather than as an error in another test.
-        self.assertIsInstance(self.plist, dict)
+    try:
+        with open(AGENT, "rb") as handle:
+            return plistlib.load(handle), ""
+
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
+AGENT_PLIST, PARSE_ERROR = _load()
+
+
+class TheAgentIsWellFormed(unittest.TestCase):
+    def test_it_parses(self) -> None:
+        self.assertEqual(
+            PARSE_ERROR,
+            "",
+            f"{AGENT.name} is not well-formed, so `launchctl bootstrap` will "
+            "refuse it and the schedule will silently never run. A double "
+            "hyphen inside the XML comment is the way this usually happens, "
+            "and the runner's own output is full of them.",
+        )
+
+
+class TheAgentMatchesTheSchedule(unittest.TestCase):
+    def setUp(self) -> None:
+        if PARSE_ERROR or AGENT_PLIST is None:
+            # One failure, above, rather than this one repeated five times.
+            self.skipTest(f"{AGENT.name} does not parse; see TheAgentIsWellFormed")
+
+        self.plist: dict[str, Any] = AGENT_PLIST
 
     def test_it_runs_the_committed_runner(self) -> None:
+        # By presence rather than by position: a plist that grows an argument
+        # after the script is still correct, and a test that reads argv[-1]
+        # would call it broken.
         argv: list[str] = self.plist["ProgramArguments"]
+        naming: list[str] = [arg for arg in argv if arg.endswith(RUNNER.name)]
 
-        self.assertTrue(
-            argv[-1].endswith(RUNNER.name),
-            f"the agent runs {argv[-1]}, which is not {RUNNER.name}",
+        self.assertEqual(
+            len(naming),
+            1,
+            f"expected exactly one argument naming {RUNNER.name}, got {argv}",
         )
         self.assertTrue(RUNNER.exists(), "the runner the agent names is missing")
 
