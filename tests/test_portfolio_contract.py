@@ -101,7 +101,7 @@ def account_tuple(**overrides: Any) -> tuple[Any, ...]:
         "account_key": "Beneficiary A",
         "source": "",
         "display_name": "Beneficiary A 529",
-        "beneficiary": "Beneficiary A A",
+        "beneficiary": "Beneficiary A Surname",
         "kind": "529",
         "value": 1234.56,
         "currency": "USD",

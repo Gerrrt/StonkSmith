@@ -33,7 +33,7 @@ from keyring_isolation import MemoryKeyringMixin
 BENEFICIARY_A = AccountIdentity(
     account_key="Beneficiary A",
     display_name="Beneficiary A",
-    beneficiary="Beneficiary A A",
+    beneficiary="Beneficiary A Surname",
     kind="529",
     external_id="ACC-1",
 )
@@ -170,7 +170,7 @@ class WriteTests(_SnapshotTestCase):
         )
 
         account = self.db.get_accounts()[0]
-        self.assertEqual(account[3], "Beneficiary A A", "beneficiary")
+        self.assertEqual(account[3], "Beneficiary A Surname", "beneficiary")
         self.assertEqual(account[4], "529", "kind")
 
 
