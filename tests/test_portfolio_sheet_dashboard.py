@@ -15,13 +15,18 @@ from unittest.mock import MagicMock
 
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
+    CARRIED,
     HOLDING_COLUMNS,
     ISO_DATE_PATTERN,
+    NET_WORTH_COLUMNS,
+    OBSERVED,
     AccountRow,
     HoldingRow,
+    NetWorthRow,
     Portfolio,
 )
 from etc.portfolio_sheet import (
+    ACCOUNTS_TAB,
     ALLOCATION_WIDTH,
     BANNER,
     BANNER_CELL,
@@ -32,6 +37,8 @@ from etc.portfolio_sheet import (
     DASHBOARD_MIN_ROWS,
     FIRST_DATA_ROW,
     HEADER_ROW,
+    HOLDINGS_TAB,
+    NET_WORTH_COL,
     STALE_DAYS,
     STALENESS_COL,
     SUMMARY_COL,
@@ -43,6 +50,7 @@ from etc.portfolio_sheet import (
     column_of,
     dashboard_cells,
     summary_cell,
+    tab_ref,
     write_dashboard,
 )
 from helpers.sheets import SheetNotOwned
@@ -79,6 +87,43 @@ def portfolio(**overrides: Any) -> Portfolio:
             ),
         ),
         "brokers_read": ("snaptrade", "tsp"),
+        "net_worth": (
+            NetWorthRow(
+                broker="tsp",
+                source="tsp",
+                account="C Fund",
+                account_key="c",
+                date="2026-08-07",
+                value=1000.0,
+                basis=OBSERVED,
+                observed_on="2026-08-07",
+                as_of="2026-08-07",
+                scraped_at="2026-08-08 09:00:00",
+            ),
+            NetWorthRow(
+                broker="tsp",
+                source="tsp",
+                account="C Fund",
+                account_key="c",
+                date="2026-08-08",
+                value=1000.0,
+                basis=CARRIED,
+                observed_on="2026-08-07",
+                as_of="2026-08-07",
+                scraped_at="2026-08-08 09:00:00",
+            ),
+            NetWorthRow(
+                broker="snaptrade",
+                source="Schwab",
+                account="IRA",
+                account_key="ira",
+                date="2026-08-08",
+                value=234.5,
+                basis=OBSERVED,
+                observed_on="2026-08-08",
+                scraped_at="2026-08-08 09:00:01",
+            ),
+        ),
     }
     base.update(overrides)
 
@@ -108,14 +153,14 @@ class FormulaTests(unittest.TestCase):
         # do quietly what the code declines to do loudly.
         self.assertEqual(
             self.by_range["B3"],
-            [['=SUMIF(Accounts!$H$3:$H,"USD",Accounts!$G$3:$G)']],
+            [["=SUMIF('Accounts'!$H$3:$H,\"USD\",'Accounts'!$G$3:$G)"]],
         )
 
     def test_accounts_are_counted_on_the_key_not_the_display_name(self) -> None:
         # account_key is written unwrapped and can never be blank; a display
         # name goes through _cell and can. Counting identity cannot undercount.
-        self.assertEqual(self.by_range["B5"], [["=COUNTA(Accounts!$D$3:$D)"]])
-        self.assertEqual(self.by_range["B6"], [["=COUNTA(Holdings!$D$3:$D)"]])
+        self.assertEqual(self.by_range["B5"], [["=COUNTA('Accounts'!$D$3:$D)"]])
+        self.assertEqual(self.by_range["B6"], [["=COUNTA('Holdings'!$D$3:$D)"]])
 
     def test_the_gap_between_balances_and_positions_is_shown(self) -> None:
         # Uninvested cash sits in a balance and in no position: the reason there
@@ -126,7 +171,7 @@ class FormulaTests(unittest.TestCase):
         # The one formula that refers to its own tab. Typed, it would keep
         # naming rows 3 and 7 after somebody reordered the summary -- and keep
         # producing a number while doing it. So the labels move it.
-        labels = [row[0] for row in cells(updates=self.literals)["A3:A14"]]
+        labels = [row[0] for row in cells(updates=self.literals)["A3:A16"]]
         total: int = labels.index("Total (USD)") + 3
         held: int = labels.index("Holdings total (USD)") + 3
 
@@ -136,7 +181,7 @@ class FormulaTests(unittest.TestCase):
         # Same reasoning as the two counts above: Account Key is written
         # unwrapped, while Type and Description are both routinely empty
         # depending on which source the movement came from.
-        self.assertEqual(self.by_range["B13"], [["=COUNTA(Transactions!$D$3:$D)"]])
+        self.assertEqual(self.by_range["B13"], [["=COUNTA('Transactions'!$D$3:$D)"]])
 
     def test_the_newest_movement_is_sorted_as_text_not_maxed(self) -> None:
         # Safe only because etc.portfolio normalizes Processed On to ISO on the
@@ -144,7 +189,7 @@ class FormulaTests(unittest.TestCase):
         # 529 scraper writes "12/30/2025", which sorts above "01/15/2026".
         newest: str = self.by_range["B14"][0][0]
 
-        self.assertIn("Transactions!$L$3:$L", newest)
+        self.assertIn("'Transactions'!$L$3:$L", newest)
         self.assertIn("SORT(", newest)
         self.assertNotIn("MAX(", newest)
         self.assertIn(",1,FALSE)", newest)
@@ -161,7 +206,7 @@ class FormulaTests(unittest.TestCase):
 
         self.assertIn("REGEXMATCH(", newest)
         self.assertIn(ISO_DATE_PATTERN, newest)
-        self.assertNotIn('Transactions!$L$3:$L<>""', newest)
+        self.assertNotIn("'Transactions'!$L$3:$L<>\"\"", newest)
 
     def test_scrape_times_are_sorted_as_text_not_maxed(self) -> None:
         # Scraped At is text under RAW, and MAX over text returns 0. The stored
@@ -181,13 +226,50 @@ class FormulaTests(unittest.TestCase):
             BY_SOURCE_COL,
             STALENESS_COL,
             UNREADABLE_COL,
+            NET_WORTH_COL,
         ]
         self.assertEqual(len(set(starts)), len(starts))
+
+    def test_the_net_worth_band_is_positional_and_matches_the_contract(self) -> None:
+        series: str = self.by_range[f"{NET_WORTH_COL}2"][0][0]
+
+        self.assertIn("'Net Worth'!$A$3:$K", series)
+        self.assertIn("select Col5, sum(Col6)", series)
+        self.assertIn("where Col7 = 'USD'", series)
+        self.assertIn("group by Col5", series)
+
+        # Those Col numbers are the contract's own indices, as everywhere else.
+        self.assertEqual(list(NET_WORTH_COLUMNS).index("Date") + 1, 5)
+        self.assertEqual(list(NET_WORTH_COLUMNS).index("Value") + 1, 6)
+        self.assertEqual(list(NET_WORTH_COLUMNS).index("Currency") + 1, 7)
+        self.assertEqual(list(NET_WORTH_COLUMNS).index("Basis") + 1, 8)
+
+    def test_the_net_worth_band_splits_carried_from_observed(self) -> None:
+        # The whole reason the tab can exist honestly. A point that is mostly
+        # carried is a weaker claim than one that was read, and a single summed
+        # column would render the two identically -- asserting a precision the
+        # data does not have, while looking exactly like data that does.
+        series: str = self.by_range[f"{NET_WORTH_COL}2"][0][0]
+
+        self.assertIn("pivot Col8", series)
+
+    def test_the_net_worth_band_quotes_a_tab_name_with_a_space(self) -> None:
+        # 'Net Worth'!A3 is a reference and Net Worth!A3 is a parse error, and
+        # the cost of getting it wrong is a panel that shows nothing at all.
+        series: str = self.by_range[f"{NET_WORTH_COL}2"][0][0]
+
+        self.assertIn("'Net Worth'!", series)
+        self.assertNotIn("(Net Worth!", series)
+
+    def test_the_carried_count_names_the_basis_the_rows_carry(self) -> None:
+        # Spelled from the constant rather than typed, so the cell cannot go on
+        # counting "carried" after the row shape starts writing something else.
+        self.assertIn(f'"{CARRIED}"', self.by_range["B16"][0][0])
 
     def test_the_query_bands_are_positional_and_match_the_contract(self) -> None:
         by_broker: str = self.by_range[f"{BY_BROKER_COL}2"][0][0]
 
-        self.assertIn("Accounts!$A$3:$J", by_broker)
+        self.assertIn("'Accounts'!$A$3:$J", by_broker)
         self.assertIn("select Col1, sum(Col7)", by_broker)
         self.assertIn("where Col8 = 'USD'", by_broker)
         self.assertIn("group by Col1", by_broker)
@@ -248,11 +330,17 @@ class LiteralTests(unittest.TestCase):
         self.assertEqual(self.by_range[BANNER_CELL], [[BANNER]])
 
     def test_the_labels_name_every_summary_row(self) -> None:
-        labels = [row[0] for row in self.by_range["A3:A14"]]
+        labels = [row[0] for row in self.by_range["A3:A16"]]
 
         self.assertEqual(labels[0], "Total (USD)")
         self.assertEqual(labels[1], "Total as read")
-        self.assertEqual(labels[-1], "Newest movement")
+
+        # Appended rather than slotted in, which is the rule the columns follow
+        # and the summary follows with them: a person comparing this dashboard
+        # to last sync's should find the rows they knew where they left them.
+        self.assertEqual(labels[-3], "Newest movement")
+        self.assertEqual(labels[-2], "Dates in the series")
+        self.assertEqual(labels[-1], "Carried values")
 
     def test_the_total_as_read_is_the_number_python_computed(self) -> None:
         # The cross-check: Python over the databases beside Sheets over the
@@ -350,6 +438,37 @@ class WriteDashboardTests(unittest.TestCase):
         )
 
         tab.add_rows.assert_called_once_with(52 - 10)
+
+    def test_the_dates_in_the_series_are_counted_in_the_height_too(self) -> None:
+        # The net worth band spills a row per *date*, which is the one of the
+        # bands that grows with the number of runs rather than the size of the
+        # portfolio. On any workspace with a history it is the tallest thing on
+        # the tab, and a grid too short takes it out with #REF! -- so a chart of
+        # a long history would be the first thing to vanish.
+        series = tuple(
+            NetWorthRow(
+                broker="tsp",
+                source="tsp",
+                account="C Fund",
+                account_key="c",
+                date=f"2026-08-{day:02d}",
+                value=1.0,
+            )
+            for day in range(1, 31)
+        )
+        tab = self._tab()
+        tab.row_count = 10
+
+        write_dashboard(
+            worksheet=tab, portfolio=portfolio(net_worth=series), today=TODAY
+        )
+
+        tab.add_rows.assert_called_once_with(DASHBOARD_MIN_ROWS - 10)
+
+        # Counted by date rather than by row: the same date carries a row per
+        # account, and one row per account per date would over-grow the grid by
+        # the size of the portfolio on every sync.
+        self.assertEqual(len({row.date for row in series}), 30)
 
     def test_a_dashboard_that_is_not_ours_is_refused_before_it_is_cleared(self) -> None:
         tab = self._tab()
@@ -493,6 +612,20 @@ class AllocationTests(unittest.TestCase):
         self.formulas = cells(updates=formulas)
         self.literals = cells(updates=literals)
 
+    def _summary_range(self) -> str:
+        """
+        The range the summary's label column was written to.
+
+        Derived from SUMMARY_LABELS rather than typed, for the reason the
+        formulas derive their own references: a row appended to the summary
+        moves this range, and a typed one would start failing here rather than
+        where the mistake was.
+        :return: A range such as "A3:A16"
+        :rtype: str
+        """
+
+        return f"A{FIRST_DATA_ROW}:A{FIRST_DATA_ROW + len(SUMMARY_LABELS) - 1}"
+
     def _column(self, block: str, offset: int) -> str:
         """
         A block's nth column letter.
@@ -528,7 +661,7 @@ class AllocationTests(unittest.TestCase):
         # The whole point. Holdings total is 1100 of a 1600 portfolio; dividing
         # by it would render a 31%-cash portfolio as fully invested, with every
         # slice overstated and the numbers still adding to 100%.
-        labels = [row[0] for row in self.literals["A3:A14"]]
+        labels = [row[0] for row in self.literals[self._summary_range()]]
         total: str = f"B{labels.index('Total (USD)') + FIRST_DATA_ROW}"
         held: str = f"B{labels.index('Holdings total (USD)') + FIRST_DATA_ROW}"
 
@@ -555,7 +688,7 @@ class AllocationTests(unittest.TestCase):
         # Pointed at, not recomputed. A second subtraction could drift from the
         # first, and two cells on one tab disagreeing about how much cash there
         # is would be worse than not drawing the slice.
-        labels = [row[0] for row in self.literals["A3:A14"]]
+        labels = [row[0] for row in self.literals[self._summary_range()]]
         gap: int = labels.index("In accounts, not in positions") + FIRST_DATA_ROW
         names = self._cells(block=BY_POSITION_COL, offset=0)
         values = self._cells(block=BY_POSITION_COL, offset=1)
@@ -580,21 +713,26 @@ class AllocationTests(unittest.TestCase):
         kind: str = column_of(columns=ACCOUNT_COLUMNS, name="Kind")
         value: str = column_of(columns=ACCOUNT_COLUMNS, name="Value")
         currency: str = column_of(columns=ACCOUNT_COLUMNS, name="Currency")
+        # Quoted through tab_ref rather than spelled "Accounts!", because that
+        # is the one way this module names a tab -- a bare name is a parse error
+        # for any tab whose name has a space in it.
+        accounts: str = tab_ref(tab=ACCOUNTS_TAB)
 
         self.assertEqual(
             self._cells(block=BY_KIND_COL, offset=1)[0],
-            f"=SUMIFS(Accounts!${value}$3:${value},Accounts!${kind}$3:${kind},"
-            f'"INVESTMENT",Accounts!${currency}$3:${currency},"USD")',
+            f"=SUMIFS({accounts}${value}$3:${value},{accounts}${kind}$3:${kind},"
+            f'"INVESTMENT",{accounts}${currency}$3:${currency},"USD")',
         )
 
         symbol: str = column_of(columns=HOLDING_COLUMNS, name="Symbol")
         held: str = column_of(columns=HOLDING_COLUMNS, name="Value")
         held_currency: str = column_of(columns=HOLDING_COLUMNS, name="Currency")
+        holdings: str = tab_ref(tab=HOLDINGS_TAB)
 
         self.assertEqual(
             self._cells(block=BY_POSITION_COL, offset=1)[0],
-            f"=SUMIFS(Holdings!${held}$3:${held},Holdings!${symbol}$3:${symbol},"
-            f'"C",Holdings!${held_currency}$3:${held_currency},"USD")',
+            f"=SUMIFS({holdings}${held}$3:${held},{holdings}${symbol}$3:${symbol},"
+            f'"C",{holdings}${held_currency}$3:${held_currency},"USD")',
         )
 
     def test_account_kinds_add_up_to_the_whole_portfolio(self) -> None:

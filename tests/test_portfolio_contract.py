@@ -28,14 +28,17 @@ from etc.infrastructure import create_db_engine
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
+    NET_WORTH_COLUMNS,
     TRANSACTION_COLUMNS,
     AccountRow,
     HoldingRow,
+    NetWorthRow,
     Portfolio,
     TransactionRow,
     _reason,
     read_broker,
     read_databases,
+    read_history,
     read_workspace,
 )
 from etc.records import AccountIdentity, Holding, Transaction
@@ -71,10 +74,12 @@ class _FakeDb:
         accounts: list[tuple[Any, ...]] | None = None,
         holdings: list[tuple[Any, ...]] | None = None,
         transactions: list[tuple[Any, ...]] | None = None,
+        history: list[tuple[Any, ...]] | None = None,
     ) -> None:
         self._accounts = accounts or []
         self._holdings = holdings or []
         self._transactions = transactions or []
+        self._history = history or []
 
     def get_current_accounts(self) -> list[tuple[Any, ...]]:
         return self._accounts
@@ -84,6 +89,9 @@ class _FakeDb:
 
     def get_current_transactions(self) -> list[tuple[Any, ...]]:
         return self._transactions
+
+    def get_account_history(self) -> list[tuple[Any, ...]]:
+        return self._history
 
 
 def account_tuple(**overrides: Any) -> tuple[Any, ...]:
@@ -218,16 +226,66 @@ class ColumnContractTests(unittest.TestCase):
             "columns are append-only: add to the end, never in the middle",
         )
 
+    def test_net_worth_columns_are_exactly_these_in_this_order(self) -> None:
+        self.assertEqual(
+            NET_WORTH_COLUMNS,
+            (
+                "Broker",
+                "Source",
+                "Account",
+                "Account Key",
+                "Date",
+                "Value",
+                "Currency",
+                "Basis",
+                "Observed On",
+                "As Of",
+                "Scraped At",
+            ),
+            "columns are append-only: add to the end, never in the middle",
+        )
+
     def test_every_view_shares_the_identity_prefix(self) -> None:
         # What lets a formula join them. If these ever diverge, holdings and
         # movements can no longer be attributed to the account they belong to.
         self.assertEqual(ACCOUNT_COLUMNS[:4], HOLDING_COLUMNS[:4])
         self.assertEqual(ACCOUNT_COLUMNS[:4], TRANSACTION_COLUMNS[:4])
+        self.assertEqual(ACCOUNT_COLUMNS[:4], NET_WORTH_COLUMNS[:4])
+
+    def test_the_series_date_is_not_as_of_wearing_a_different_hat(self) -> None:
+        # "As Of" means "the date the source says the value is for". On a
+        # carried row the source said nothing whatever about the date the row
+        # sits on -- that date is StonkSmith's, chosen because some *other*
+        # broker ran that day. Two meanings, so two names, and both are present
+        # because the difference between them is the whole honesty of the tab.
+        self.assertIn("Date", NET_WORTH_COLUMNS)
+        self.assertIn("As Of", NET_WORTH_COLUMNS)
+        self.assertIn("Observed On", NET_WORTH_COLUMNS)
+
+        # And "Date" stays off the movements view, where it was already refused
+        # once for the same reason.
+        self.assertNotIn("Date", TRANSACTION_COLUMNS)
+
+    def test_the_basis_column_is_not_the_cost_basis_column(self) -> None:
+        # Two different questions that share a word. "Cost Basis" is what was
+        # paid for a position; "Basis" is whether a number was read on its date
+        # or carried onto it. Neither name may appear in the other's tuple,
+        # because a formula addressing the wrong one still returns something.
+        self.assertIn("Basis", NET_WORTH_COLUMNS)
+        self.assertNotIn("Cost Basis", NET_WORTH_COLUMNS)
+
+        self.assertIn("Cost Basis", HOLDING_COLUMNS)
+        self.assertNotIn("Basis", HOLDING_COLUMNS)
 
     def test_one_name_per_meaning(self) -> None:
         # The whole point of the exercise: "Balance" and "Value" named the same
         # thing in different tabs, and three columns dated the same fact.
-        for columns in (ACCOUNT_COLUMNS, HOLDING_COLUMNS, TRANSACTION_COLUMNS):
+        for columns in (
+            ACCOUNT_COLUMNS,
+            HOLDING_COLUMNS,
+            TRANSACTION_COLUMNS,
+            NET_WORTH_COLUMNS,
+        ):
             self.assertIn("Value", columns)
             self.assertNotIn("Balance", columns)
             self.assertNotIn("Synced", columns)
@@ -300,6 +358,7 @@ class ColumnContractTests(unittest.TestCase):
         self.assertEqual(
             len(TransactionRow(**identity).cells()), len(TRANSACTION_COLUMNS)
         )
+        self.assertEqual(len(NetWorthRow(**identity).cells()), len(NET_WORTH_COLUMNS))
 
 
 class CellTypeTests(unittest.TestCase):
@@ -620,6 +679,35 @@ class ReadBrokerTests(unittest.TestCase):
 
         self.assertEqual(len(holdings), 1)
         self.assertEqual(holdings[0].account, "orphan")
+
+    def test_a_snapshot_is_read_the_same_way_the_newest_one_is(self) -> None:
+        # get_account_history returns the same nine columns as
+        # get_current_accounts deliberately, so one mapping serves both. If they
+        # ever drift, an account would appear under one name on the Accounts tab
+        # and another on the series -- and both would look right alone.
+        row: tuple[Any, ...] = account_tuple(source="Schwab")
+
+        accounts, _, _ = read_broker(broker="snaptrade", db=_FakeDb(accounts=[row]))
+        history = read_history(broker="snaptrade", db=_FakeDb(history=[row]))
+
+        self.assertEqual(accounts[0], history[0])
+
+    def test_every_snapshot_comes_back_not_just_the_newest(self) -> None:
+        # The bug this whole shape exists to fix: the reader used to ask only
+        # for the newest snapshot, so the sheet showed today and threw the rest
+        # away while the database held it.
+        history = read_history(
+            broker="tsp",
+            db=_FakeDb(
+                history=[
+                    account_tuple(value=100.0, as_of="2026-01-01"),
+                    account_tuple(value=110.0, as_of="2026-01-02"),
+                    account_tuple(value=120.0, as_of="2026-01-03"),
+                ]
+            ),
+        )
+
+        self.assertEqual([row.value for row in history], [100.0, 110.0, 120.0])
 
 
 class ReadTransactionsTests(unittest.TestCase):

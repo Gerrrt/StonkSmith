@@ -8,18 +8,28 @@ deliberately only one of these: five brokers each writing their own tab is the
 arrangement the column contract exists to end. A per-broker tab cannot show a
 total anyway, because no single broker's database has one.
 
-So one read of the workspace feeds four tabs. `Accounts`, `Holdings` and
-`Transactions` are the three row shapes, verbatim. `Dashboard` is formulas over
-them, which is what makes append-only matter in the spreadsheet and not only in
-the tests: a QUERY addresses a column by position, so a column added at the end
-costs nothing and a column inserted in the middle would silently repoint every
-one of them.
+So one read of the workspace feeds five tabs. `Accounts`, `Holdings`,
+`Transactions` and `Net Worth` are the four row shapes, verbatim. `Dashboard` is
+formulas over them, which is what makes append-only matter in the spreadsheet
+and not only in the tests: a QUERY addresses a column by position, so a column
+added at the end costs nothing and a column inserted in the middle would
+silently repoint every one of them.
 
-`Transactions` is the one that is a log rather than current state, and it
-carries the whole of it. Every other tab is bounded by the size of the
-portfolio; this one grows forever, which is exactly why it is written in full.
-A tab whose purpose is history, showing the newest few hundred rows with nothing
-saying so, would be worse than not having one.
+`Transactions` and `Net Worth` are the two that are not current state, and both
+carry the whole of what they hold. The other tabs are bounded by the size of the
+portfolio; these grow forever -- one with every movement, one with every run --
+which is exactly why they are written in full. A tab whose purpose is history,
+showing the newest few hundred rows with nothing saying so, would be worse than
+not having one.
+
+`Net Worth` is also the one tab whose rows no source ever stated. It is a series
+across brokers that do not report on the same day, so most of its points carry
+some account's older value forward -- see `etc.portfolio.net_worth_history` for
+why the alternative draws a portfolio that collapses and recovers on nothing but
+scrape timing. Every row says which of its numbers were read and which were
+carried, and the dashboard's band totals the two separately rather than
+flattening them, because a point that is mostly carried is a weaker claim than
+one that was read.
 
 **The tabs are machine-owned, and this is where that stops being a README
 paragraph.** A tab is cleared only if its first cell carries BANNER, or if the
@@ -40,16 +50,21 @@ exception text beginning with "=" is a formula.
 """
 
 import datetime as dt
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from gspread.utils import ValueRenderOption
+
 from etc.context import Context
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
+    CARRIED,
     HOLDING_COLUMNS,
     ISO_DATE_PATTERN,
+    NET_WORTH_COLUMNS,
     TRANSACTION_COLUMNS,
     Portfolio,
     read_workspace,
@@ -62,6 +77,9 @@ from helpers.sheets import (
     ensure_worksheet,
     fit,
     open_spreadsheet,
+    remove_tab,
+    require_worksheet,
+    tab_exists,
 )
 
 #: Written into the first cell of every tab this module owns, and the only thing
@@ -75,6 +93,7 @@ BANNER: str = (
 ACCOUNTS_TAB: str = "Accounts"
 HOLDINGS_TAB: str = "Holdings"
 TRANSACTIONS_TAB: str = "Transactions"
+NET_WORTH_TAB: str = "Net Worth"
 DASHBOARD_TAB: str = "Dashboard"
 
 #: Every tab StonkSmith opens. Nothing outside this tuple is ever touched, which
@@ -83,6 +102,11 @@ MACHINE_OWNED_TABS: tuple[str, ...] = (
     ACCOUNTS_TAB,
     HOLDINGS_TAB,
     TRANSACTIONS_TAB,
+    #: Appended ahead of the dashboard rather than after it, so the four data
+    #: tabs stay together and the one made of formulas over them stays last.
+    #: Nothing depends on the order -- claim() walks the whole tuple -- but the
+    #: tuple is also what a person reads to learn what this touches.
+    NET_WORTH_TAB,
     DASHBOARD_TAB,
 )
 
@@ -127,8 +151,8 @@ BY_BROKER_COL: str = "D"
 BY_SOURCE_COL: str = "G"
 STALENESS_COL: str = "J"
 UNREADABLE_COL: str = "O"
-BY_KIND_COL: str = "R"
-BY_POSITION_COL: str = "V"
+BY_KIND_COL: str = "V"
+BY_POSITION_COL: str = "Z"
 
 #: Columns an allocation block occupies: what the slice is, what it is worth,
 #: and what share of the portfolio that is.
@@ -170,6 +194,13 @@ SUMMARY_LABELS: tuple[str, ...] = (
     "Brokers read",
     "Movements",
     "Newest movement",
+    # Appended for the reason the two above were. These two belong together:
+    # the first says how long the series is, the second how much of it is
+    # not a reading. A series whose carried count approaches its length is
+    # a chart of one broker's runs with everything else held still, and the
+    # only place that is visible is here.
+    "Dates in the series",
+    "Carried values",
 )
 
 #: What the label column says in place of a slice whose name the source left
@@ -183,6 +214,10 @@ UNNAMED_SYMBOL: str = "(no symbol)"
 #: wrote, not Python's over the databases. A share sum that is not 1 is a wrong
 #: base, visible without anybody having to add the column up by hand.
 ALLOCATION_CHECK: str = "Slices sum to"
+
+#: The net worth band: one row per date, its USD total split into the part that
+#: was read that day and the part that was carried onto it.
+NET_WORTH_COL: str = "R"
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +235,11 @@ class SheetSync:
     brokers_read: tuple[str, ...] = ()
     unreadable: tuple[tuple[str, str], ...] = ()
     total: float = 0.0
+
+    #: Rows on the Net Worth tab: accounts times the dates they can be placed
+    #: on, not dates. Appended rather than slotted in beside the other three
+    #: counts, so a caller reading positionally keeps its meaning.
+    net_worth: int = 0
 
 
 def column_letter(index: int) -> str:
@@ -241,6 +281,24 @@ def column_index(letter: str) -> int:
         index = index * 26 + (ord(character) - ord("A") + 1)
 
     return index
+
+
+def tab_ref(tab: str) -> str:
+    """
+    How a formula names a tab.
+
+    Quoted, always. ``Accounts!$A$3:$J`` is valid and ``Net Worth!$A$3:$K`` is
+    not -- a tab name with a space in it has to be wrapped in single quotes or
+    the reference is a parse error, and the failure is a whole panel showing
+    nothing. Quoting unconditionally rather than only when the name needs it,
+    because a branch taken by one tab out of five is a branch nothing exercises
+    until the day a tab is renamed.
+    :param tab: The tab's name
+    :return: The reference prefix, e.g. "'Accounts'!"
+    :rtype: str
+    """
+
+    return f"'{tab}'!"
 
 
 def _is_formula(cell: Any) -> bool:
@@ -380,6 +438,580 @@ def _refusal(tab: str) -> str:
     )
 
 
+def check_tabs(
+    workspace: str | None = None,
+    root: Path | None = None,
+    spreadsheet: str = SPREADSHEET_NAME,
+    book: Any | None = None,
+) -> tuple[GuardCase, ...]:
+    """
+    Read the tabs back and check what a successful write cannot show.
+
+    write_rows() returning says the request was accepted, not that the values
+    arrived as the kind of thing they were meant to be. Money can land as text, a
+    column can drift, a date can reach a cell in the format its source used, and
+    a RAW upload reports success through all of it. These are the checks that used
+    to need somebody opening the spreadsheet.
+
+    Most compare strings and are certain: the banner, the column contract on
+    each tab that has one, the movement count against the databases, the date
+    format, and the ordering. Two read cell *values* -- money as a number and
+    the dashboard's two totals agreeing -- and those rested on what gspread hands
+    back for a rendered cell, which no test here could settle. They carried a
+    marker saying so, on the grounds that reporting an unconfirmed assumption as
+    a confirmed defect is its own kind of wrong.
+
+    The marker is gone because the run happened: 2026-08-10, against the real
+    spreadsheet, every check then defined passing. A pass settles both directions
+    at once -- had the unformatted read returned display text, every money cell
+    would have been rejected as text, and a formula arriving as its own source
+    would have failed float() into "could not read both". Restoring the marker
+    would mean a new assumption, not a rediscovered one.
+
+    The Net Worth contract check postdates that run and went through one of its
+    own: 2026-08-11, same spreadsheet, all ten passing, the two value checks
+    unmarked this time on a sheet written that morning.
+
+    A third value check was intended and cannot exist: an absent date arriving as
+    an empty cell rather than as an empty string is invisible to a read, since
+    Sheets returns "" or a short row for either. See the note where it would have
+    gone.
+
+    Opens with open_worksheet and not ensure_worksheet, deliberately: a missing
+    tab means the sync was never run, and creating one here would manufacture the
+    thing being checked.
+    :param workspace: The workspace whose databases the tabs are compared against
+    :param root: The directory workspaces live in, for tests
+    :param spreadsheet: The spreadsheet to read
+    :param book: An already-open spreadsheet, to save an authorization
+    :return: One GuardCase per check
+    :rtype: tuple[GuardCase, ...]
+    :raises SheetsUnavailable: if Sheets is unreachable or a tab is missing
+    """
+
+    portfolio: Portfolio = read_workspace(workspace=workspace, root=root)
+    opened: Any = (
+        book if book is not None else open_spreadsheet(spreadsheet=spreadsheet)
+    )
+    tabs: dict[str, Any] = {
+        name: require_worksheet(
+            book=opened, worksheet_name=name, spreadsheet=spreadsheet
+        )
+        for name in MACHINE_OWNED_TABS
+    }
+
+    cases: list[GuardCase] = [_banner_case(tabs=tabs)]
+
+    for tab, columns in (
+        (ACCOUNTS_TAB, ACCOUNT_COLUMNS),
+        (HOLDINGS_TAB, HOLDING_COLUMNS),
+        (TRANSACTIONS_TAB, TRANSACTION_COLUMNS),
+        # Every tab that carries columns, which is every machine-owned tab but
+        # the dashboard. The banner case above walks MACHINE_OWNED_TABS and so
+        # picked this one up for free; this loop is written out, so a tab added
+        # to the contract and not to here would be written every sync and never
+        # checked -- covered enough to look covered.
+        (NET_WORTH_TAB, NET_WORTH_COLUMNS),
+    ):
+        cases.append(_contract_case(worksheet=tabs[tab], tab=tab, columns=columns))
+
+    cases.append(
+        _count_case(
+            worksheet=tabs[TRANSACTIONS_TAB], expected=len(portfolio.transactions)
+        )
+    )
+    cases.extend(_date_cases(worksheet=tabs[TRANSACTIONS_TAB]))
+    cases.append(_money_case(worksheet=tabs[ACCOUNTS_TAB]))
+    cases.append(_totals_case(worksheet=tabs[DASHBOARD_TAB]))
+
+    # Check 4 -- an account with no date being surfaced rather than counted at
+    # face value -- is deliberately absent and cannot be added here. It is a
+    # question about a formula's behaviour, not a cell's contents, and read back an
+    # empty cell and an empty string are the same value: "" or a short row for
+    # both.
+    #
+    # Its absence costs less than it looks. The distinction only matters where a
+    # formula counts one and not the other, and no dashboard formula does: As Of
+    # reaches exactly one, the staleness QUERY in _bands, whose "is null or
+    # < cutoff" catches an undated account either way -- the column holds text, not
+    # dates, because the RAW write keeps it that way. Add a COUNTA or COUNTIF over
+    # As Of and that stops holding, at which point this check has to come back.
+    # docs/live-verification.md carries the reasoning.
+
+    return tuple(cases)
+
+
+def _values(worksheet: Any, cells: str, rendered: bool = False) -> list[list[Any]]:
+    """
+    A range, as text by default and as Sheets computed it when asked.
+
+    Unformatted is what turns a currency cell into a float and a formula into the
+    number it evaluated to -- which is the only way to ask whether money arrived
+    as money, and the only way to compare a SUMIF against a literal.
+    :param worksheet: The tab to read
+    :param cells: An A1 range
+    :param rendered: True to get values rather than their displayed text
+    :return: Rows of cell values
+    :rtype: list[list[Any]]
+    """
+
+    option: str = (
+        ValueRenderOption.unformatted if rendered else ValueRenderOption.formatted
+    )
+
+    return worksheet.get_values(cells, value_render_option=option) or []
+
+
+def _banner_case(tabs: dict[str, Any]) -> GuardCase:
+    """
+    The first cell of every tab, including the one with no columns.
+    :param tabs: The machine-owned tabs, by name
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    missing: list[str] = [
+        name
+        for name, worksheet in tabs.items()
+        if str(object=worksheet.acell(BANNER_CELL).value or "").strip() != BANNER
+    ]
+
+    return GuardCase(
+        name=f"All {len(tabs)} tabs carry the banner in {BANNER_CELL}",
+        expected="present",
+        passed=not missing,
+        detail="" if not missing else f"without it: {', '.join(missing)}",
+    )
+
+
+def _contract_case(worksheet: Any, tab: str, columns: Sequence[str]) -> GuardCase:
+    """
+    Row 2, against the contract as etc.portfolio spells it.
+
+    Exact and in order, not a subset: the dashboard addresses columns by
+    position, so a column that moved keeps every formula pointing somewhere
+    plausible and wrong.
+    :param worksheet: The tab to read
+    :param tab: Its name
+    :param columns: What row 2 must say
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    last: str = last_column(columns=columns)
+    found: list[list[Any]] = _values(
+        worksheet=worksheet, cells=f"A{HEADER_ROW}:{last}{HEADER_ROW}"
+    )
+    header: list[str] = [str(object=cell) for cell in (found[0] if found else [])]
+    want: list[str] = list(columns)
+
+    return GuardCase(
+        name=f"{tab} row {HEADER_ROW} is the column contract, ending at {last}",
+        expected="exact",
+        passed=header == want,
+        detail="" if header == want else f"found {header or 'nothing'}",
+    )
+
+
+def _count_case(worksheet: Any, expected: int) -> GuardCase:
+    """
+    Every movement the databases hold, against what the tab holds.
+
+    Counted against read_workspace rather than against the shell's reader, whose
+    limit of five hundred is the thing this check exists to see past.
+    :param worksheet: The Transactions tab
+    :param expected: How many movements the databases hold
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    key: str = column_of(columns=TRANSACTION_COLUMNS, name="Account Key")
+    found: int = len(
+        [value for value in _column_at(worksheet=worksheet, letter=key) if value]
+    )
+
+    return GuardCase(
+        name=f"Transactions holds all {expected} movements the databases have",
+        expected="all",
+        passed=found == expected,
+        detail="" if found == expected else f"the tab has {found}",
+    )
+
+
+def _column_at(worksheet: Any, letter: str, rendered: bool = False) -> list[Any]:
+    """
+    One column by letter, from the first data row down.
+    :param worksheet: The tab to read
+    :param letter: The column letter
+    :param rendered: True to get values rather than their displayed text
+    :return: The values
+    :rtype: list[Any]
+    """
+
+    rows: list[list[Any]] = _values(
+        worksheet=worksheet,
+        cells=f"{letter}{FIRST_DATA_ROW}:{letter}",
+        rendered=rendered,
+    )
+
+    return [row[0] if row else "" for row in rows]
+
+
+def _date_cases(worksheet: Any) -> tuple[GuardCase, GuardCase]:
+    """
+    Processed On, in one format and in one order.
+
+    The sources disagree -- the 529 scraper stores "12/30/2025" and SnapTrade
+    stores ISO -- so the tab is where they must agree, and a "12/30/2025" in a
+    cell means the normalization was skipped. The order follows from that: it
+    sorts above every January, so a tab whose dates were not normalized is also
+    a tab whose ordering is wrong.
+    :param worksheet: The Transactions tab
+    :return: The format case and the ordering case
+    :rtype: tuple[GuardCase, GuardCase]
+    """
+
+    keys: list[Any] = _column_at(
+        worksheet=worksheet,
+        letter=column_of(columns=TRANSACTION_COLUMNS, name="Account Key"),
+    )
+    dates: list[Any] = _column_at(
+        worksheet=worksheet,
+        letter=column_of(columns=TRANSACTION_COLUMNS, name="Processed On"),
+    )
+    pattern: re.Pattern[str] = re.compile(pattern=ISO_DATE_PATTERN)
+    odd: list[str] = [
+        str(object=value)
+        for value in dates
+        if str(object=value) and not pattern.match(string=str(object=value))
+    ]
+
+    unsorted: list[str] = []
+    seen: dict[str, str] = {}
+
+    # Not strict: Sheets trims trailing empties per column, so two columns off the
+    # same rows can come back different lengths. Pairing what overlaps is right --
+    # the count is checked separately, by _count_case.
+    for key, value in zip(keys, dates, strict=False):
+        account, date = str(object=key), str(object=value)
+
+        if not account or not date:
+            continue
+
+        if account in seen and date > seen[account]:
+            unsorted.append(account)
+
+        seen[account] = date
+
+    return (
+        GuardCase(
+            name="Every Processed On is YYYY-MM-DD",
+            expected="normalized",
+            passed=not odd,
+            detail="" if not odd else f"found {sorted(set(odd))[:5]}",
+        ),
+        GuardCase(
+            name="Processed On runs newest-first within each account",
+            expected="sorted",
+            passed=not unsorted,
+            detail=""
+            if not unsorted
+            else f"out of order under {sorted(set(unsorted))[:5]}",
+        ),
+    )
+
+
+def _money_case(worksheet: Any) -> GuardCase:
+    """
+    Value on Accounts, as a number rather than as text.
+
+    The failure this catches is a regression to writing strings: a currency cell
+    holding "1234.00" totals as zero in every formula that touches it, and looks
+    identical to one holding 1234.0 unless you notice which way it aligns.
+    :param worksheet: The Accounts tab
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    # Rendered, and the check does not work any other way: the formatted read
+    # returns display text for every cell, so a perfectly good 1234.5 comes back
+    # as "1,234.50" and this would report every sheet as broken. Unformatted is
+    # what distinguishes a number Sheets stored from a string it was handed.
+    values: list[Any] = [
+        value
+        for value in _column_at(
+            worksheet=worksheet,
+            letter=column_of(columns=ACCOUNT_COLUMNS, name="Value"),
+            rendered=True,
+        )
+        if value != ""
+    ]
+    text: list[Any] = [value for value in values if not isinstance(value, (int, float))]
+
+    return GuardCase(
+        name="Accounts Value is a number, not text",
+        expected="numeric",
+        passed=not text,
+        detail="" if not text else f"{len(text)} of {len(values)} came back as text",
+    )
+
+
+def _totals_case(worksheet: Any) -> GuardCase:
+    """
+    The dashboard's two totals, which are one number computed twice.
+
+    Sheets over the cells beside Python over the databases. They disagree only if
+    the write was truncated or a row failed to land, which is otherwise
+    invisible. Located by reading the labels back rather than by row number, so
+    a reordered summary is caught here instead of comparing the wrong two cells.
+    :param worksheet: The Dashboard tab
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    labels: list[Any] = _column_at(worksheet=worksheet, letter=SUMMARY_COL)
+    name: str = "The dashboard's two totals agree"
+
+    try:
+        computed = _summary_value(
+            worksheet=worksheet, labels=labels, label="Total (USD)"
+        )
+        as_read = _summary_value(
+            worksheet=worksheet, labels=labels, label="Total as read"
+        )
+
+    except (LookupError, TypeError, ValueError) as e:
+        return GuardCase(
+            name=name,
+            expected="equal",
+            passed=False,
+            detail=f"could not read both ({e})",
+        )
+
+    # Two floats that came from the same numbers by different routes, so this is
+    # a rounding tolerance and not a fuzzy match.
+    agree: bool = abs(computed - as_read) < 0.01
+
+    return GuardCase(
+        name=name,
+        expected="equal",
+        passed=agree,
+        detail="" if agree else f"Sheets says {computed}, Python says {as_read}",
+    )
+
+
+def _summary_value(worksheet: Any, labels: list[Any], label: str) -> float:
+    """
+    One summary row's value, found by its label.
+    :param worksheet: The Dashboard tab
+    :param labels: The label column, from the first data row down
+    :param label: The row to find
+    :return: The value beside it
+    :rtype: float
+    :raises LookupError: if the label is not there
+    :raises ValueError: if the cell beside it is empty or not a number
+    """
+
+    row: int = FIRST_DATA_ROW + [str(object=cell) for cell in labels].index(label)
+    found: list[list[Any]] = _values(
+        worksheet=worksheet, cells=f"B{row}:B{row}", rendered=True
+    )
+
+    # Checked rather than indexed into. An empty cell comes back as an empty row
+    # or as no rows at all, and while the IndexError that would cause is a
+    # LookupError and so already caught by the caller, arriving there by accident
+    # of the exception hierarchy is not the same as saying what went wrong.
+    if not found or not found[0]:
+        raise ValueError(f"the cell beside '{label}' is empty")
+
+    return float(found[0][0])
+
+
+#: The tab check_ownership_guard() makes and removes. Named to read as disposable
+#: and to be nothing a person would reach for, because the one thing this must
+#: never do is delete a tab somebody wanted.
+GUARD_CHECK_TAB: str = "StonkSmith ownership check"
+
+
+@dataclass(frozen=True)
+class GuardCase:
+    """
+    One outcome claim() was asked for, and what it did.
+
+    ``passed`` is whether claim() behaved, not whether it refused: two of the
+    three cases expect a refusal and the third expects an adoption, so the
+    refusal itself is not the signal. ``detail`` carries the refusal message, or
+    what came back instead when it did not.
+    """
+
+    name: str
+    expected: str
+    passed: bool
+    detail: str = ""
+
+
+def check_ownership_guard(
+    spreadsheet: str = SPREADSHEET_NAME,
+    book: Any | None = None,
+    tab: str = GUARD_CHECK_TAB,
+) -> tuple[GuardCase, ...]:
+    """
+    Put claim() in front of real Sheets, on a tab of its own.
+
+    The refusal is the one claim in this module whose failure cannot be undone by
+    running again -- a sync that ate a hand-written tab has already eaten it --
+    and until now the only way to observe it was to deface a live tab and hand it
+    back. That is a thing done once, nervously, if at all, which is a poor way to
+    hold up a safety property.
+
+    It does not need to be that. claim() decides on what a tab *holds*, not on
+    what it is called; MACHINE_OWNED_TABS only picks which tabs refresh() claims.
+    So the same function, over the same network, can be asked all three of its
+    questions on a tab created for the purpose and removed afterwards, with the
+    real tabs never opened.
+
+    What this does not cover: that a refusal stops the *whole* sync, leaving no
+    tab freshly written beside a stale one. That is refresh() claiming every tab
+    before clearing any, this tab is not one of them, and observing it still
+    means defacing a real one.
+
+    Deleting a tab is not something anything else here does, so the guards
+    matter more than the checks. A tab of this name that already exists is
+    somebody else's and stops the run; the only tab ever removed is the one this
+    call made; and a name that has found its way into MACHINE_OWNED_TABS is
+    refused before Sheets is touched at all.
+    :param spreadsheet: The spreadsheet to work in
+    :param book: An already-open spreadsheet, to save an authorization
+    :param tab: The throwaway tab's name
+    :return: One GuardCase per outcome, in the order they were tried
+    :rtype: tuple[GuardCase, ...]
+    :raises SheetsUnavailable: if Sheets is unreachable, or the tab is taken
+    """
+
+    if tab in MACHINE_OWNED_TABS:
+        raise SheetsUnavailable(
+            f"'{tab}' is one of the tabs StonkSmith writes, so it cannot be used "
+            "as the throwaway tab for this check. Pass a different name."
+        )
+
+    opened: Any = (
+        book if book is not None else open_spreadsheet(spreadsheet=spreadsheet)
+    )
+
+    if tab_exists(book=opened, worksheet_name=tab, spreadsheet=spreadsheet):
+        # Not ours, so not ours to clear and not ours to delete. The same answer
+        # claim() gives, for the same reason.
+        raise SheetsUnavailable(
+            f"Spreadsheet '{spreadsheet}' already has a tab named '{tab}'. This "
+            "check makes that tab and deletes it again, so it will not touch one "
+            "that is already there. Rename or remove it, or pass another name."
+        )
+
+    made: Any = opened.add_worksheet(title=tab, rows=100, cols=8)
+    cases: list[GuardCase] = []
+
+    try:
+        cases.append(
+            _guard_case(
+                book=opened,
+                tab=tab,
+                name="A defaced first cell is refused",
+                text_at=(BANNER_CELL, "Mine, not StonkSmith's"),
+                refusal_expected=True,
+            )
+        )
+        cases.append(
+            _guard_case(
+                book=opened,
+                tab=tab,
+                # The subtle one, and the shape both a leftover layout and a tab
+                # somebody started on row 3 have. A1 empty is not enough to adopt.
+                name="Text below a blank first cell is refused",
+                text_at=("A3", "Mine, further down"),
+                refusal_expected=True,
+            )
+        )
+        cases.append(
+            _guard_case(
+                book=opened,
+                tab=tab,
+                name="A wholly empty tab is adopted",
+                # Neither 2026-08-10 run reached this: both had the banner in A1,
+                # so claim() answered on the first read and never took the branch
+                # that decides whether an empty tab can be handed over.
+                text_at=None,
+                refusal_expected=False,
+            )
+        )
+
+    finally:
+        # Whatever happened above, including something unexpected. remove_tab
+        # reports rather than raises, so a scratch tab that would not go cannot
+        # replace the findings with the news that it is still there.
+        failure: str = remove_tab(book=opened, worksheet=made, worksheet_name=tab)
+        cases.append(
+            GuardCase(
+                name="The throwaway tab was removed",
+                expected="removed",
+                passed=not failure,
+                detail=failure,
+            )
+        )
+
+    return tuple(cases)
+
+
+def _guard_case(
+    book: Any,
+    tab: str,
+    name: str,
+    text_at: tuple[str, str] | None,
+    refusal_expected: bool,
+) -> GuardCase:
+    """
+    Set one tab state up and ask claim() about it.
+
+    A fresh handle for the question, deliberately. claim() remembers its answer
+    on the worksheet object, and while it only remembers an adoption, re-fetching
+    keeps every case a real round trip rather than a cached one.
+    :param book: The open spreadsheet
+    :param tab: The throwaway tab's name
+    :param name: What this case is called, for the report
+    :param text_at: A cell and the text to put in it, or None to leave it empty
+    :param refusal_expected: Whether claim() ought to refuse
+    :return: What happened
+    :rtype: GuardCase
+    """
+
+    staged: Any = book.worksheet(tab)
+    staged.clear()
+
+    if text_at is not None:
+        cell, text = text_at
+        staged.update_acell(cell, text)
+
+    expected: str = "refused" if refusal_expected else "adopted"
+    fresh: Any = book.worksheet(tab)
+
+    try:
+        claim(worksheet=fresh, tab=tab)
+
+    except SheetNotOwned as e:
+        return GuardCase(
+            name=name,
+            expected=expected,
+            passed=refusal_expected,
+            detail=str(object=e),
+        )
+
+    return GuardCase(
+        name=name,
+        expected=expected,
+        passed=not refusal_expected,
+        detail="" if not refusal_expected else "the tab was adopted instead",
+    )
+
+
 def _chunks(rows: Sequence[Sequence[Any]], size: int) -> list[list[Sequence[Any]]]:
     """
     Split rows into writes of at most ``size``.
@@ -458,13 +1090,13 @@ def down(tab: str, columns: Sequence[str], name: str) -> str:
     :param tab: The tab the column is on
     :param columns: The column contract that tab carries
     :param name: The column's name in that contract
-    :return: A range such as "Accounts!$G$3:$G"
+    :return: A range such as "'Accounts'!$G$3:$G"
     :rtype: str
     :raises KeyError: if the contract has no such column
     """
 
     letter: str = column_of(columns=columns, name=name)
-    return f"{tab}!${letter}${FIRST_DATA_ROW}:${letter}"
+    return f"{tab_ref(tab=tab)}${letter}${FIRST_DATA_ROW}:${letter}"
 
 
 def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
@@ -491,6 +1123,8 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
     processed: str = down(
         tab=TRANSACTIONS_TAB, columns=TRANSACTION_COLUMNS, name="Processed On"
     )
+    dated: str = down(tab=NET_WORTH_TAB, columns=NET_WORTH_COLUMNS, name="Date")
+    basis: str = down(tab=NET_WORTH_TAB, columns=NET_WORTH_COLUMNS, name="Basis")
 
     labels: list[list[Any]] = [[label] for label in SUMMARY_LABELS]
     at = summary_cell
@@ -549,6 +1183,14 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
             f"=IFERROR(INDEX(SORT(UNIQUE(FILTER({processed},"
             f'REGEXMATCH({processed}&"","{ISO_DATE_PATTERN}"))),1,FALSE),1,1),"")'
         ],
+        # COUNTUNIQUE over a column with trailing blanks counts the blank as a
+        # value, so the empty tail is filtered out rather than subtracted.
+        [f'=IFERROR(COUNTUNIQUE(FILTER({dated},{dated}<>"")),0)'],
+        # Counted rather than inferred from the band below it. The band is USD
+        # only, because a total has to be; this is a count, which does not, so
+        # it says how many carried values are on the tab rather than how many
+        # are in the total.
+        [f'=COUNTIF({basis},"{CARRIED}")'],
     ]
 
     return labels, values
@@ -556,7 +1198,7 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
 
 def _bands(today: dt.date) -> dict[str, str]:
     """
-    The dashboard's three QUERY bands, keyed by the column they start in.
+    The dashboard's four QUERY bands, keyed by the column they start in.
 
     Every reference is positional -- Col1..Col10 are exactly ACCOUNT_COLUMNS
     indices, because the range starts below the header and the query is told it
@@ -568,7 +1210,7 @@ def _bands(today: dt.date) -> dict[str, str]:
     """
 
     right: str = last_column(columns=ACCOUNT_COLUMNS)
-    span: str = f"{ACCOUNTS_TAB}!$A$3:${right}"
+    span: str = f"{tab_ref(tab=ACCOUNTS_TAB)}$A${FIRST_DATA_ROW}:${right}"
 
     broker: int = list(ACCOUNT_COLUMNS).index("Broker") + 1
     source: int = list(ACCOUNT_COLUMNS).index("Source") + 1
@@ -584,6 +1226,15 @@ def _bands(today: dt.date) -> dict[str, str]:
     # locale-dependent format string. It freezes between syncs, which costs
     # nothing -- the data it filters only changes at a sync anyway.
     cutoff: str = (today - dt.timedelta(days=STALE_DAYS)).isoformat()
+
+    series: str = (
+        f"{tab_ref(tab=NET_WORTH_TAB)}$A${FIRST_DATA_ROW}:"
+        f"${last_column(columns=NET_WORTH_COLUMNS)}"
+    )
+    on: int = list(NET_WORTH_COLUMNS).index("Date") + 1
+    worth: int = list(NET_WORTH_COLUMNS).index("Value") + 1
+    held_in: int = list(NET_WORTH_COLUMNS).index("Currency") + 1
+    basis: int = list(NET_WORTH_COLUMNS).index("Basis") + 1
 
     return {
         BY_BROKER_COL: (
@@ -610,6 +1261,24 @@ def _bands(today: dt.date) -> dict[str, str]:
             f"order by Col{scraped} "
             f"label Col{broker} 'Broker', Col{account} 'Account', "
             f"Col{as_of} 'As Of', Col{scraped} 'Scraped At'\","
+            '0),"")'
+        ),
+        # Net worth over time, which is the only thing on this dashboard that is
+        # a series rather than a state. Pivoted on Basis rather than totalled
+        # flat, so each date arrives as its carried part beside its observed
+        # part: a point that is mostly carried is a weaker claim than one that
+        # was read, and a single summed column would render the two identically.
+        # Charting the two as a stacked series is then the obvious thing to do
+        # rather than something the reader has to think to ask for.
+        #
+        # USD only, on the SUMIF-on-currency precedent above: adding a dollar to
+        # a euro produces a number that is not wrong so much as meaningless.
+        NET_WORTH_COL: (
+            f"=IFERROR(QUERY({series},"
+            f'"select Col{on}, sum(Col{worth}) '
+            f"where Col{held_in} = 'USD' "
+            f"group by Col{on} order by Col{on} pivot Col{basis} "
+            f"label Col{on} 'Date'\","
             '0),"")'
         ),
     }
@@ -1004,18 +1673,33 @@ def write_dashboard(
     # smallest slices still looks like a breakdown. The floor is only for the
     # empty case, where the summary block is the tallest thing on the tab.
     #
+    # The net worth band spills by a row per date in the series, which is the
+    # one of these that grows with the number of runs rather than with the size
+    # of the portfolio -- so on any workspace with a history it is the tallest
+    # thing on the tab, and the first to hit this.
+    #
     # Measured off the same grids that get written, not recounted from the
     # portfolio: a height derived a second way is a height that can be wrong.
     spill: int = max(
         len(portfolio.accounts),
         len(portfolio.unreadable),
+        len({row.date for row in portfolio.net_worth}),
         *(len(grid) - 1 for grid in _allocation(portfolio=portfolio).values()),
     )
 
     fit(
         worksheet=worksheet,
         rows=max(DASHBOARD_MIN_ROWS, HEADER_ROW + spill),
-        cols=column_index(letter=BY_POSITION_COL) + ALLOCATION_WIDTH - 1,
+        # The rightmost edge of the two bands that sit furthest right, rather
+        # than whichever one happens to be further today: the net worth band is
+        # three columns wide at most -- the date, and one each for the carried
+        # and observed halves of its total -- and the position allocation is
+        # ALLOCATION_WIDTH. A max means moving either band's start column cannot
+        # silently cut the other one off at the edge of the grid.
+        cols=max(
+            column_index(letter=NET_WORTH_COL) + 2,
+            column_index(letter=BY_POSITION_COL) + ALLOCATION_WIDTH - 1,
+        ),
     )
     worksheet.clear()
 
@@ -1033,7 +1717,7 @@ def refresh(
     """
     Put everything every broker in the workspace holds onto the sheet.
 
-    One read of the databases and one authorization, feeding four tabs. All of
+    One read of the databases and one authorization, feeding five tabs. All of
     them are claimed before any is cleared: a tab that is not ours then costs
     nothing rather than leaving Accounts rewritten beside a stale Holdings.
     :param workspace: The workspace name, or None for the configured one
@@ -1089,6 +1773,12 @@ def refresh(
         columns=TRANSACTION_COLUMNS,
         rows=[row.cells() for row in portfolio.transactions],
     )
+    net_worth: int = write_rows(
+        worksheet=tabs[NET_WORTH_TAB],
+        tab=NET_WORTH_TAB,
+        columns=NET_WORTH_COLUMNS,
+        rows=[row.cells() for row in portfolio.net_worth],
+    )
     write_dashboard(worksheet=tabs[DASHBOARD_TAB], portfolio=portfolio, today=today)
 
     return SheetSync(
@@ -1098,6 +1788,7 @@ def refresh(
         brokers_read=portfolio.brokers_read,
         unreadable=portfolio.unreadable,
         total=portfolio.total(),
+        net_worth=net_worth,
     )
 
 
@@ -1133,7 +1824,8 @@ def sync(context: Context, workspace: str | None = None) -> bool:
         context.log.success(
             msg=(
                 f"Sheet shows {result.accounts} accounts, {result.holdings} "
-                f"holdings and {result.transactions} movements from "
+                f"holdings, {result.transactions} movements and "
+                f"{result.net_worth} net worth rows from "
                 f"{', '.join(result.brokers_read) or 'no brokers'}."
             )
         )

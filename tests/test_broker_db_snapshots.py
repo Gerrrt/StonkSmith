@@ -478,6 +478,66 @@ class ReadTests(_SnapshotTestCase):
         self.assertEqual(self.count("account_snapshots"), 0)
 
 
+class AccountHistoryTests(_SnapshotTestCase):
+    """The unlimited read behind the Net Worth tab."""
+
+    def test_it_returns_every_snapshot_not_only_the_newest(self) -> None:
+        # The bug: get_current_accounts restricts to one snapshot per account,
+        # so a sheet built on it shows today and throws the history away while
+        # the database goes on holding it.
+        self.save(value=1000.0)
+        self.save(scraped_at="2026-01-02 00:00:00", value=1100.0)
+        self.save(scraped_at="2026-01-03 00:00:00", value=1200.0)
+
+        self.assertEqual(len(self.db.get_current_accounts()), 1)
+        self.assertEqual(
+            [row[5] for row in self.db.get_account_history()], [1000.0, 1100.0, 1200.0]
+        )
+
+    def test_it_returns_the_same_nine_columns_the_current_read_does(self) -> None:
+        # Deliberately identical, so one projection in etc.portfolio serves
+        # both and an account cannot end up named one thing on the Accounts tab
+        # and another on the series.
+        self.save(value=1000.0)
+
+        self.assertEqual(self.db.get_account_history(), self.db.get_current_accounts())
+
+    def test_a_snapshot_with_no_value_comes_back_as_null_not_zero(self) -> None:
+        # The distinction the column is nullable for. The series drops such a
+        # snapshot rather than carrying it, which it can only do if it arrives
+        # distinguishable from a real zero.
+        self.save(value=None)
+
+        self.assertIsNone(self.db.get_account_history()[0][5])
+
+    def test_it_returns_every_snapshot_however_many_there_are(self) -> None:
+        # Unlimited for get_current_transactions's reason: this is the second
+        # thing here that grows without bound, and a limit would be the
+        # difference between a history and the newest page of one -- shown with
+        # nothing whatever saying so.
+        for day in range(1, 32):
+            self.save(scraped_at=f"2026-01-{day:02d} 00:00:00", value=float(day))
+
+        for month in range(2, 21):
+            self.save(scraped_at=f"2026-{month:02d}-01 00:00:00", value=float(month))
+
+        history = self.db.get_account_history()
+
+        self.assertEqual(len(history), 50)
+        self.assertEqual(history[0][5], 1.0)
+
+    def test_snapshots_come_back_oldest_first_within_an_account(self) -> None:
+        # A series is carried forward, which needs each account's readings in
+        # the order they happened. Newest-first is the log's order, not this.
+        self.save(scraped_at="2026-01-03 00:00:00", value=3.0)
+        self.save(scraped_at="2026-01-01 00:00:00", value=1.0)
+        self.save(scraped_at="2026-01-02 00:00:00", value=2.0)
+
+        self.assertEqual(
+            [row[5] for row in self.db.get_account_history()], [1.0, 2.0, 3.0]
+        )
+
+
 class CurrentTransactionsTests(_SnapshotTestCase):
     """The unlimited read behind the Transactions tab."""
 

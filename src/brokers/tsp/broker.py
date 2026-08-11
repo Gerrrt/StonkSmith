@@ -28,6 +28,8 @@ import datetime as dt
 from pathlib import Path
 from typing import Any
 
+from httpx import Client, HTTPError
+from httpx import Response as HttpxResponse
 from requests import Response
 from requests.exceptions import RequestException
 
@@ -43,11 +45,16 @@ from etc.config import (
 from etc.logger import StonkSmithAdapter
 from etc.paths import stonksmith_path
 from helpers.dfas import (
+    BANDS,
+    SPLIT_BAND,
     TABLE_NAMES,
     TABLE_PATHS,
+    alignment_faults,
     band_on,
     basic_pay_table,
     effective_date,
+    grade_order,
+    missing_upper_table,
     normalize_grade,
     table_for,
 )
@@ -84,6 +91,71 @@ SETUP_HINT = (
 PRICE_USER_AGENT = (
     "Mozilla/5.0 (compatible; stonksmith/0.1.0; +https://github.com/Gerrrt/StonkSmith)"
 )
+
+#: dfas.mil wants three things at once, and it took a while to establish what.
+#: Measured against the live host on 2026-08-10, same URL, same minute. Read one
+#: client at a time -- the rows are three separate experiments, not one ladder,
+#: and comparing across clients is what makes this look like a protocol problem
+#: it is not:
+#:
+#:   requests, browser UA + navigation headers      -> 403
+#:   requests, defaults cleared, stock TLS context  -> 403
+#:
+#:   curl --http1.1, browser UA + nav headers       -> 403
+#:   curl --http2,   browser UA + nav headers       -> 200
+#:
+#:   httpx, honest UA, with or without nav headers  -> 403
+#:   httpx, no User-Agent at all                    -> 403
+#:   httpx, browser UA, no nav headers              -> 403
+#:   httpx, browser UA + nav headers                -> 200, the page
+#:
+#: So all three are load-bearing and none is sufficient: the client's TLS/ALPN
+#: fingerprint, a real browser's User-Agent, and a real browser's navigation
+#: headers. That is why every attempt to get in by changing the User-Agent
+#: failed, and why the record said for a time that dfas.mil refuses this
+#: network outright. It does not; it refuses a caller whose three layers do not
+#: agree with each other.
+#:
+#: The curl pair is the one that misleads, so: **HTTP/2 is not required.** Those
+#: two rows say curl's HTTP/1.1 handshake is refused, not that HTTP/1.1 is.
+#: httpx answers 200 over HTTP/1.1 with no h2 package installed at all, which is
+#: what the fetch below actually does. Enabling http2 here would pull in three
+#: packages to change a variable that was tested and found not to matter.
+#:
+#: The fingerprint is why the fetch below uses httpx rather than the requests
+#: session every other download here uses. urllib3 pins its own cipher list and
+#: cannot present a handshake DFAS accepts -- not with cleared headers, not with
+#: a stock ssl context, not over either protocol version.
+#:
+#: And it means this one cannot say truthfully who is calling, the way
+#: PRICE_USER_AGENT does. The difference is deliberate rather than overlooked:
+#: tsp.gov is asked by a User-Agent that names StonkSmith, and DFAS is not,
+#: because DFAS will not answer it. The data behind it is public,
+#: unauthenticated and paid for by the reader. Anyone tidying this back into the
+#: honest UA above, or back onto the shared session, will get a 403 and an
+#: accrual that silently stops -- so please do not.
+PAY_TABLE_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+)
+
+#: The navigation headers a browser sends with a top-level page load, which is
+#: what the request above claims to be. Sent as a set rather than the single
+#: header that happens to suffice today: any one of them worked when tested, so
+#: which one Akamai keys on is not something this code should encode.
+PAY_TABLE_HEADERS: dict[str, str] = {
+    "User-Agent": PAY_TABLE_USER_AGENT,
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+}
 
 #: What to say when the accrual keys are half filled in. Naming all four is the
 #: point: a run missing one of them cannot tell which, and "rank is set but basd
@@ -248,10 +320,90 @@ class Tsp(ApiConnection):
             )
             return
 
+        # Refused rather than reported, and the only failure here that takes the
+        # accrual down on purpose. Everything else that goes wrong leaves a rate
+        # unavailable, which the module says out loud. A page read one column out
+        # leaves a rate *available* and wrong by one band -- a real figure for a
+        # seniority the member does not have, which reads as an answer the whole
+        # way into a stored mark.
+        faults: list[str] = alignment_faults(html=html)
+
+        if faults:
+            self.logger.fail(
+                msg=(
+                    "The DFAS pay page does not line up with its own column "
+                    f"headings ({'; '.join(faults)}), so its rates would be read "
+                    "against the wrong years of service. That is a plausible "
+                    "number rather than an obvious error, so the accrual is "
+                    "dropped instead of priced on it. Pass --pay-table with a "
+                    "copy saved in a browser, or --no-accrual to value the unit "
+                    "count on its own."
+                )
+            )
+            return
+
+        # Short, not wrong: what was read is right as far as it goes, so this
+        # costs nothing until a member is past the split, and verify_pay_rate()
+        # already refuses that case by name. Said here so the page is diagnosed
+        # when it changes rather than when somebody's anniversary reaches it.
+        if missing_upper_table(table=table):
+            self.logger.highlight(
+                msg=(
+                    f"The DFAS pay page published no column past {SPLIT_BAND!r}. "
+                    "It splits its columns at twenty years and only the first "
+                    "table was read, so no rate is available past that."
+                )
+            )
+
         self.pay_table = table
         self.grade = grade
         self.basd = basd
         self.pay_effective = effective_date(html=html)
+
+        if getattr(self.args, "show_pay_table", False):
+            self.show_pay_table(table=table)
+
+    def show_pay_table(self, table: dict[str, dict[str, float]]) -> None:
+        """
+        Print the whole parsed grid, in the two halves the page prints it in.
+
+        A run already prints the one rate the configured member is paid, which is
+        enough to price a contribution and not enough to check the parser against
+        the published page: one cell agreeing does not show that the blanks are
+        where the blanks are, or that the half past twenty years arrived at all.
+        Checking a single rate is exactly what would have missed the footnote
+        bug -- E-7 read correctly throughout while E-9 and E-1 were absent
+        entirely, so a run configured for E-7 reported nothing wrong.
+
+        Laid out in the page's own two halves so the columns line up with what is
+        on screen beside it, and a band with no published rate is blank here the
+        way it is blank there. Rows in the page's order too, which takes a key
+        rather than a plain sort: the officer tables run to O-10, and sorting the
+        grade strings puts that between O-1 and O-2.
+        :param table: A parsed page, as basic_pay_table() returns
+        :return: None
+        :rtype: None
+        """
+
+        labels: list[str] = [label for label, _years in BANDS]
+        split: int = labels.index(SPLIT_BAND) + 1
+
+        self.logger.success(
+            msg=f"DFAS basic pay as parsed: {len(table)} grade(s), monthly"
+        )
+
+        for columns in (labels[:split], labels[split:]):
+            self.logger.display(
+                msg="Grade " + "".join(f"{label:>12}" for label in columns)
+            )
+
+            for grade in sorted(table, key=grade_order):
+                rates: dict[str, float] = table[grade]
+                cells: str = "".join(
+                    f"{rates[label]:>12,.2f}" if label in rates else f"{'':>12}"
+                    for label in columns
+                )
+                self.logger.display(msg=f"{grade:<6}{cells}")
 
     def pay_table_html(self, table_key: str) -> str | None:
         """
@@ -319,11 +471,17 @@ class Tsp(ApiConnection):
         """
         Download one published basic pay page.
 
-        Public data, no credential, and the same browser-shaped User-Agent the
-        share price download needs -- dfas.mil sits behind a CDN that answers
-        anything else with a 403 and an HTML block page. The header goes on the
-        request rather than on the shared session, so nothing here changes what
-        another broker's login server sees.
+        Public data and no credential, but a heavier disguise than the share
+        price download needs, and a different HTTP client to wear it. dfas.mil
+        wants a browser's TLS fingerprint, a browser's User-Agent and a
+        browser's navigation headers, and answers anything less with a 403 and
+        a block page; PAY_TABLE_HEADERS above records exactly what was measured.
+
+        Nothing here touches ``self.session``. That is the same rule the share
+        price download follows for its header, and it matters more now that the
+        difference is a whole client: tsp.gov and every other broker's login
+        server keep seeing requests, and keep being told truthfully who is
+        calling.
         :param table_key: Which grade family's page to fetch, a TABLE_PATHS key
         :return: The page's HTML, or None when it could not be fetched
         :rtype: str | None
@@ -332,11 +490,9 @@ class Tsp(ApiConnection):
         url: str = f"{get_tsp_pay_table_url().rstrip('/')}/{TABLE_PATHS[table_key]}"
 
         try:
-            response: Response = self.session.get(
-                url=url, headers={"User-Agent": PRICE_USER_AGENT}, timeout=30
-            )
+            response: HttpxResponse = self.pay_table_get(url=url)
 
-            if not response.ok:
+            if response.status_code >= 400:
                 detail: str = (
                     " dfas.mil refused the request rather than the page being missing."
                     if response.status_code == 403
@@ -354,9 +510,29 @@ class Tsp(ApiConnection):
 
             return response.text
 
-        except RequestException as e:
+        except HTTPError as e:
             self.logger.fail(msg=f"Could not fetch the basic pay table: {e}")
             return None
+
+    def pay_table_get(self, url: str) -> HttpxResponse:
+        """
+        Make the one request dfas.mil will answer.
+
+        Its own method so the client is built per call and closed again rather
+        than living on the broker: one page is fetched per run, at most four if
+        every grade family were wanted, so a pooled connection buys nothing and
+        a client left open outlives the run that needed it.
+
+        Redirects are followed because DFAS moved this path once already --
+        ``Military-Members`` to ``MilitaryMembers`` -- and the next move should
+        cost a round trip rather than the accrual.
+        :param url: The page to fetch
+        :return: The response, whatever its status
+        :rtype: HttpxResponse
+        """
+
+        with Client(follow_redirects=True, timeout=30) as client:
+            return client.get(url=url, headers=PAY_TABLE_HEADERS)
 
     def read_local(self, path: str, what: str = "share price file") -> str | None:
         """
