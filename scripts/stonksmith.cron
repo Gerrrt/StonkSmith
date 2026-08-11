@@ -20,8 +20,10 @@
 #   half a snapshot's key, so two runs landing in the same second collapse into
 #   one snapshot. TSP is fast enough for this to matter.
 #
-#   The sheet goes last, after every broker has written, because it renders
-#   what the databases hold at the moment it runs.
+#   The sheet goes after every broker has written, because it renders what the
+#   databases hold at the moment it runs. The freshness check goes after the
+#   sheet, for the same reason -- every entry above it changes what it reports
+#   on.
 #
 #   --quiet on every broker run. Cron mails on output, so a run that says
 #   nothing when it worked is a run that only mails when it did not.
@@ -59,6 +61,20 @@
 #   will not ask.
 #
 # ---------------------------------------------------------------------------
+# The last entry asks whether anything has quietly stopped updating
+#
+#   `stonksmithdb stale` reads the databases and nothing else -- no login, no
+#   Sheets, no network -- and exits 1 when an account's As Of is missing,
+#   unreadable, or older than seven days. A day count widens the window:
+#   `stonksmithdb stale 30` for a workspace whose brokers report monthly.
+#
+#   It will not catch the Ally problem described above, and it is worth being
+#   clear about that rather than assuming otherwise. It reads each account's
+#   As Of, and a repriced Ally mark carries the *price's* date -- today's. The
+#   staleness there is in the units, which live somewhere this check does not
+#   look. A broker that stops reporting altogether is what this entry finds.
+#
+# ---------------------------------------------------------------------------
 # Before the first night
 #
 #   Every line below is a no-op or a nightly failure until its broker is set
@@ -83,3 +99,4 @@ PATH=/usr/local/bin:/usr/bin:/bin
 40 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith schwab529plan -M schwab529plan -id 1 --quiet
 45 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith ally -M ally --from-prices --quiet
 50 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb sheet
+55 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb stale

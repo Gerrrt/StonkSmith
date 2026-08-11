@@ -124,17 +124,30 @@ class TheArtifactMatchesTheRecord(unittest.TestCase):
 
         self.assertEqual(len(minutes), len(set(minutes)))
 
-    def test_the_sheet_goes_last(self) -> None:
-        # It renders what the databases hold when it runs, so a sheet step
-        # before a broker step renders that broker's previous night.
+    def test_the_reading_steps_follow_the_writing_ones(self) -> None:
+        # Both read what the databases hold at the moment they run, so either
+        # one placed early reports on the previous night. The sheet renders
+        # them; the freshness check then asks about what the sheet just drew,
+        # which is why it comes after the sheet rather than merely after the
+        # brokers.
         entries = [
             line
             for line in schedule(self.artifact_text)
             if not line.startswith("PATH=")
         ]
 
-        self.assertIn("stonksmithdb sheet", entries[-1])
-        self.assertFalse(any("stonksmithdb sheet" in line for line in entries[:-1]))
+        def only(needle: str) -> int:
+            found = [i for i, line in enumerate(entries) if needle in line]
+            self.assertEqual(len(found), 1, f"expected exactly one {needle!r} entry")
+            return found[0]
+
+        sheet = only("stonksmithdb sheet")
+        stale = only("stonksmithdb stale")
+        brokers = [i for i, line in enumerate(entries) if " stonksmith " in line]
+
+        self.assertTrue(brokers, "no broker entries found")
+        self.assertLess(max(brokers), sheet)
+        self.assertLess(sheet, stale)
 
 
 if __name__ == "__main__":
