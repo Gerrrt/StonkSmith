@@ -171,11 +171,14 @@ template.
 > what it was written to do, which is not the same as saying the site still
 > looks the way it did when the parser was written. Ally and TSP have both been
 > run against the real thing, and the sheet has been read back off a real
-> spreadsheet; three claims are still open — whether the `Transactions` tab
-> holds every movement or only the newest five hundred, and whether the
-> `Net Worth` series carries across brokers that scraped on different days, both
-> waiting on data rather than on effort, and whether each allocation block's
-> slices add up on a real tab, which waits only on a run.
+> spreadsheet. **The other three brokers have not.** Fidelity, Schwab 529 and
+> SnapTrade rest entirely on unit tests, and every claim they make is written
+> down as unobserved rather than left unmentioned — which is most of the
+> eighteen open claims. Three more are open for their own reasons: whether the
+> `Transactions` tab holds every movement or only the newest five hundred, and
+> whether the `Net Worth` series carries across brokers that scraped on
+> different days, both waiting on data rather than on effort, and whether each
+> allocation block's slices add up on a real tab, which waits only on a run.
 > [`docs/live-verification.md`](docs/live-verification.md) is the record of
 > which is which, claim by claim, and this note summarises it rather than being
 > maintained beside it.
