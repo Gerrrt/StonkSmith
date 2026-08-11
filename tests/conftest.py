@@ -25,13 +25,17 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from unittest.mock import patch
 
+import keyring
 import pytest
 
+import etc.config
+
+# Only the helper below needs this. keyring and pytest are installed, and
+# etc.config is already importable via [tool.pytest.ini_options] pythonpath, so
+# they stay in the block above where their origin is obvious; putting them after
+# the insert would imply they depend on it.
 sys.path.insert(0, str(Path(__file__).parent))
 
-import keyring
-
-import etc.config
 from keyring_isolation import MemoryKeyring
 
 
