@@ -199,6 +199,15 @@ directory, written out in full, because cron does not expand `~` or `$HOME` in a
 assignment and a literal `$HOME/.local/bin` is simply a directory that is not there. A
 `PATH` without `uv` on it fails every entry the same way, on the first night.
 
+**And check the `cd`, because `~/StonkSmith` above is a guess.** This file cannot know
+where you keep the repository — the author of it does not keep it there — and a `cd` that
+fails takes its entry with it, through the `&&`. So a wrong path fails every entry the
+same way and on the same first night as a wrong `PATH`, while looking nothing like it in
+the mail. From inside the checkout,
+`sed -i '' "s|cd ~/StonkSmith|cd $PWD|g" scripts/stonksmith.cron` rewrites all six; drop
+the `''` on GNU sed. Both of these are loud failures rather than quiet ones, which is the
+good version of wrong — but neither is worth learning from a week of cron mail.
+
 That same schedule is committed as [`scripts/stonksmith.cron`](../scripts/stonksmith.cron),
 commented, so it can be pasted into `crontab -e` rather than retyped. Paste it; do not
 run `crontab scripts/stonksmith.cron` unless you mean to replace your whole crontab.
