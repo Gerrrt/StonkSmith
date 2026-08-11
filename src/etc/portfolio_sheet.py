@@ -382,9 +382,9 @@ def check_tabs(
     would have failed float() into "could not read both". Restoring the marker
     would mean a new assumption, not a rediscovered one.
 
-    The Net Worth contract check postdates that run and has not been through it.
-    It is one of the certain ones -- row 2 against a literal -- so it rests on
-    nothing that run settled.
+    The Net Worth contract check postdates that run and went through one of its
+    own: 2026-08-11, same spreadsheet, all ten passing, the two value checks
+    unmarked this time on a sheet written that morning.
 
     A third value check was intended and cannot exist: an absent date arriving as
     an empty cell rather than as an empty string is invisible to a read, since
