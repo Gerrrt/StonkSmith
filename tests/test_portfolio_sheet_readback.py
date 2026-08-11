@@ -20,6 +20,8 @@ from unittest.mock import MagicMock, patch
 
 from gspread.utils import ValueRenderOption
 
+import etc.config
+from config_isolation import UserConfigMixin
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
@@ -29,13 +31,20 @@ from etc.portfolio import (
 )
 from etc.portfolio_sheet import (
     ACCOUNTS_TAB,
+    ALLOCATION_CHECK,
+    ALLOCATION_REFUSED,
     BANNER,
+    BY_CLASS_COL,
+    BY_KIND_COL,
+    BY_POSITION_COL,
     DASHBOARD_TAB,
+    HEADER_ROW,
     HOLDINGS_TAB,
     MACHINE_OWNED_TABS,
     NET_WORTH_TAB,
     TRANSACTIONS_TAB,
     check_tabs,
+    column_index,
 )
 from helpers.sheets import SheetsUnavailable
 
@@ -44,6 +53,20 @@ MOVEMENTS: tuple[tuple[str, str], ...] = (
     ("ACC-1", "2026-02-01"),
     ("ACC-1", "2026-01-15"),
 )
+
+
+def _split(ref: str) -> tuple[str, str]:
+    """
+    An A1 reference as its letters and its digits, either of which may be empty.
+    :param ref: A reference such as "AD3", "A" or ""
+    :return: (column letters, row digits)
+    :rtype: tuple[str, str]
+    """
+
+    letters: str = "".join(char for char in ref if char.isalpha())
+    digits: str = "".join(char for char in ref if char.isdigit())
+
+    return letters, digits
 
 
 class Tab:
@@ -75,9 +98,17 @@ class Tab:
             object=ValueRenderOption.formatted
         )
         start, _, end = range_name.partition(":")
-        first_col, first_row = start[0], int(start[1:])
-        last_col = end[0] if end else first_col
-        last_row = int(end[1:]) if end and end[1:] else len(self.grid)
+        first_col, first_digits = _split(ref=start)
+        last_col, last_digits = _split(ref=end) if end else (first_col, "")
+        first_row = int(first_digits)
+        last_row = int(last_digits) if last_digits else len(self.grid)
+
+        # Via column_index rather than ord(), because the allocation blocks sit
+        # past Z: "AD" under an ord() subtraction is not a column at all, and the
+        # fake would answer an empty range for the block it was asked about --
+        # which reads exactly like a block that failed to write.
+        low: int = column_index(letter=first_col) - 1
+        high: int = column_index(letter=last_col) - 1
 
         rows: list[list[object]] = []
 
@@ -85,9 +116,7 @@ class Tab:
             line = self.grid[number - 1] if number - 1 < len(self.grid) else []
             cells = [
                 line[index] if index < len(line) else ""
-                for index in range(
-                    ord(first_col) - ord("A"), ord(last_col) - ord("A") + 1
-                )
+                for index in range(low, high + 1)
             ]
 
             if as_text:
@@ -148,16 +177,83 @@ def net_worth_tab() -> Tab:
     return Tab(grid=[[BANNER], list(NET_WORTH_COLUMNS)])
 
 
-def dashboard_tab(computed: object = 1234.5, as_read: object = 1234.5) -> Tab:
-    return Tab(
-        grid=[
-            [BANNER],
-            ["Summary", "Value"],
-            ["Total (USD)", computed],
-            ["Total as read", as_read],
-            ["Accounts", 1],
-        ]
-    )
+def allocation_block(
+    heading: str,
+    slices: tuple[tuple[object, object, object], ...] = (("INVESTMENT", 1234.5, 1.0),),
+    summed: object = 1234.5,
+    share: object = 1.0,
+) -> list[list[object]]:
+    """
+    One block's grid, header row first, closing on its check row.
+
+    Defaults to a block that is right: one slice worth the whole portfolio, and a
+    check row agreeing with it. Every argument exists so a test can make exactly
+    one thing wrong, because a read-back checked only against a correct sheet
+    proves the reader runs rather than that it looks.
+    :param heading: What the name column is called
+    :param slices: (name, value, share) per slice
+    :param summed: What the check row says the values come to
+    :param share: What the check row says the shares come to
+    :return: The block's rows
+    :rtype: list[list[object]]
+    """
+
+    rows: list[list[object]] = [[heading, "Value (USD)", "Share of total (USD)"]]
+    rows += [list(entry) for entry in slices]
+    rows.append([ALLOCATION_CHECK, summed, share])
+
+    return rows
+
+
+def _place(grid: list[list[object]], start: str, rows: list[list[object]]) -> None:
+    """
+    Write a block into the grid at its start column, from the header row down.
+    :param grid: The tab's grid, extended as needed
+    :param start: The block's first column letter
+    :param rows: The block's rows, header first
+    :return: None
+    """
+
+    column: int = column_index(letter=start) - 1
+
+    for offset, cells in enumerate(rows):
+        number: int = HEADER_ROW - 1 + offset
+
+        while len(grid) <= number:
+            grid.append([])
+
+        line: list[object] = grid[number]
+
+        for index, cell in enumerate(cells):
+            while len(line) <= column + index:
+                line.append("")
+
+            line[column + index] = cell
+
+
+def dashboard_tab(
+    computed: object = 1234.5,
+    as_read: object = 1234.5,
+    blocks: dict[str, list[list[object]]] | None = None,
+) -> Tab:
+    grid: list[list[object]] = [
+        [BANNER],
+        ["Summary", "Value"],
+        ["Total (USD)", computed],
+        ["Total as read", as_read],
+        ["Accounts", 1],
+    ]
+
+    if blocks is None:
+        blocks = {
+            BY_KIND_COL: allocation_block(heading="Account kind"),
+            BY_POSITION_COL: allocation_block(heading="Position"),
+        }
+
+    for start, rows in blocks.items():
+        _place(grid=grid, start=start, rows=rows)
+
+    return Tab(grid=grid)
 
 
 def book(**overrides: Tab) -> MagicMock:
@@ -176,11 +272,20 @@ def book(**overrides: Tab) -> MagicMock:
     return fake
 
 
-def run(fake: MagicMock, movements: int = len(MOVEMENTS)) -> dict[str, bool]:
+def run(
+    fake: MagicMock,
+    movements: int = len(MOVEMENTS),
+    classes: dict[str, str] | None = None,
+) -> dict[str, bool]:
     """
     Run the read-back over a fake book and return each case by name.
+
+    ``classes`` is passed rather than left to default, so nothing here reads the
+    developer's own config -- and so the asset class block, which is drawn only
+    when a mapping exists, is present or absent because the test said so.
     :param fake: The fake spreadsheet
     :param movements: How many movements the databases are said to hold
+    :param classes: The asset class mapping to check against
     :return: Case name to whether it passed
     :rtype: dict[str, bool]
     """
@@ -191,7 +296,7 @@ def run(fake: MagicMock, movements: int = len(MOVEMENTS)) -> dict[str, bool]:
         "etc.portfolio_sheet.read_workspace",
         return_value=Portfolio(transactions=transactions),
     ):
-        cases = check_tabs(book=fake)
+        cases = check_tabs(book=fake, classes=classes or {})
 
     return {case.name: case.passed for case in cases}
 
@@ -319,6 +424,159 @@ class ReadBackTests(unittest.TestCase):
             run(fake=fake)
 
         fake.add_worksheet.assert_not_called()
+
+
+class AllocationReadBackTests(UserConfigMixin, unittest.TestCase):
+    """
+    The closing row every allocation block writes, and nothing used to read.
+
+    The block puts "Slices sum to" at its foot so that a wrong base "shows up as
+    a share column that does not come to 1, visible without anybody having to add
+    the column up by hand". Visible to a person, and to nothing else: the row was
+    written and never read back, so a block whose shares came to 0.8 was written,
+    reported as a success, and agreed with by every other check in this file.
+
+    So each case here makes exactly one number wrong and asks whether the check
+    notices, and one asks whether a correct block still passes -- because a check
+    that fails on everything is no more use than one that passes on everything.
+    """
+
+    def _dashboard(self, **blocks: list[list[object]]) -> MagicMock:
+        """A book whose dashboard carries exactly the blocks named."""
+
+        return book(**{DASHBOARD_TAB: dashboard_tab(blocks=dict(blocks))})
+
+    def test_slices_that_do_not_come_to_the_total_are_caught(self) -> None:
+        # The whole point. 1200 of a 1234.50 portfolio is a slice that failed to
+        # land, and every other check on the tab agrees with it.
+        fake = self._dashboard(
+            **{
+                BY_KIND_COL: allocation_block(heading="Account kind", summed=1200.0),
+                BY_POSITION_COL: allocation_block(heading="Position"),
+            }
+        )
+        cases = run(fake=fake)
+
+        self.assertFalse(cases["The account kind allocation adds up"])
+        self.assertTrue(cases["The position allocation adds up"])
+
+    def test_shares_that_do_not_come_to_one_are_caught(self) -> None:
+        # A wrong base: the values are right and the percentages are of the
+        # wrong thing, which is exactly the failure that looks like a breakdown.
+        fake = self._dashboard(
+            **{
+                BY_KIND_COL: allocation_block(heading="Account kind"),
+                BY_POSITION_COL: allocation_block(heading="Position", share=0.8),
+            }
+        )
+        cases = run(fake=fake)
+
+        self.assertTrue(cases["The account kind allocation adds up"])
+        self.assertFalse(cases["The position allocation adds up"])
+
+    def test_a_block_with_no_check_row_is_caught(self) -> None:
+        # Not silently skipped. A block missing its own closing row is a block
+        # that did not finish writing, and "nothing to check" must not read as
+        # "checked and fine".
+        headless: list[list[object]] = [
+            ["Position", "Value (USD)", "Share of total (USD)"],
+            ["VTI", 1234.5, 1.0],
+        ]
+        fake = self._dashboard(
+            **{
+                BY_KIND_COL: allocation_block(heading="Account kind"),
+                BY_POSITION_COL: headless,
+            }
+        )
+
+        self.assertFalse(run(fake=fake)["The position allocation adds up"])
+
+    def test_a_refusal_passes_because_it_is_the_block_working(self) -> None:
+        # A block that refuses to draw is the safety mechanism firing, not a
+        # defect. Reading it as one would report the guard as the fault.
+        refused: list[list[object]] = [
+            ["Position", "Value (USD)", "Share of total (USD)"],
+            [ALLOCATION_REFUSED, "positions exceed account balances by 5.00 USD", ""],
+        ]
+        fake = self._dashboard(
+            **{
+                BY_KIND_COL: allocation_block(heading="Account kind"),
+                BY_POSITION_COL: refused,
+            }
+        )
+
+        self.assertTrue(run(fake=fake)["The position allocation adds up"])
+
+    def test_the_class_block_is_checked_only_when_one_was_asked_for(self) -> None:
+        # Absent is correct with no mapping, and a failure with one. Inferring
+        # which from the tab cannot tell those apart.
+        both = {
+            BY_KIND_COL: allocation_block(heading="Account kind"),
+            BY_POSITION_COL: allocation_block(heading="Position"),
+        }
+        name = "The asset class allocation adds up"
+
+        self.assertNotIn(name, run(fake=self._dashboard(**both)))
+        self.assertFalse(
+            run(fake=self._dashboard(**both), classes={"VTI": "US Stock"})[name]
+        )
+
+    def test_a_drawn_class_block_passes_when_it_adds_up(self) -> None:
+        fake = self._dashboard(
+            **{
+                BY_KIND_COL: allocation_block(heading="Account kind"),
+                BY_POSITION_COL: allocation_block(heading="Position"),
+                BY_CLASS_COL: allocation_block(heading="Asset class"),
+            }
+        )
+        cases = run(fake=fake, classes={"VTI": "US Stock"})
+
+        self.assertTrue(cases["The asset class allocation adds up"], cases)
+
+    def test_an_empty_workspace_does_not_fail_on_shares_of_nothing(self) -> None:
+        # Every share is IFERROR'd to "" when the total is zero, so the column
+        # sums to nothing. There is no base to be wrong about, so the question
+        # is not asked rather than answered no.
+        empty = allocation_block(heading="Account kind", slices=(), summed=0, share=0)
+        fake = book(
+            **{
+                DASHBOARD_TAB: dashboard_tab(
+                    computed=0,
+                    as_read=0,
+                    blocks={
+                        BY_KIND_COL: empty,
+                        BY_POSITION_COL: allocation_block(
+                            heading="Position", slices=(), summed=0, share=0
+                        ),
+                    },
+                )
+            }
+        )
+        cases = run(fake=fake)
+
+        self.assertTrue(cases["The account kind allocation adds up"], cases)
+        self.assertTrue(cases["The position allocation adds up"], cases)
+
+    def test_the_mapping_comes_from_config_when_it_is_not_passed(self) -> None:
+        # The default path, which the rest of this file bypasses. check_tabs has
+        # to consult the same config the sync did, or verify would check for a
+        # block the run never drew -- or miss the one it did.
+        etc.config.user_cfg_path.write_text(
+            data="[ALLOCATION]\nasset_classes =\n    VTI = US Stock\n"
+        )
+        etc.config.reset_config_cache()
+
+        transactions = tuple(MagicMock() for _ in range(len(MOVEMENTS)))
+
+        with patch(
+            "etc.portfolio_sheet.read_workspace",
+            return_value=Portfolio(transactions=transactions),
+        ):
+            cases = check_tabs(book=book())
+
+        self.assertIn(
+            "The asset class allocation adds up", {case.name for case in cases}
+        )
 
 
 if __name__ == "__main__":

@@ -229,6 +229,13 @@ UNCLASSIFIED: str = "(unclassified)"
 #: base, visible without anybody having to add the column up by hand.
 ALLOCATION_CHECK: str = "Slices sum to"
 
+#: What a holdings block's name column says in place of its slices when the cash
+#: gap has gone negative. Named because two things now depend on the wording: the
+#: block that writes it, and the read-back that has to tell a refusal apart from
+#: a block that failed to write. Those agreeing by having the string typed twice
+#: is how a check comes to pass on a tab it never looked at properly.
+ALLOCATION_REFUSED: str = "Allocation not drawn"
+
 #: The net worth band: one row per date, its USD total split into the part that
 #: was read that day and the part that was carried onto it.
 NET_WORTH_COL: str = "R"
@@ -461,6 +468,7 @@ def check_tabs(
     root: Path | None = None,
     spreadsheet: str = SPREADSHEET_NAME,
     book: Any | None = None,
+    classes: dict[str, str] | None = None,
 ) -> tuple[GuardCase, ...]:
     """
     Read the tabs back and check what a successful write cannot show.
@@ -473,11 +481,12 @@ def check_tabs(
 
     Most compare strings and are certain: the banner, the column contract on
     each tab that has one, the movement count against the databases, the date
-    format, and the ordering. Two read cell *values* -- money as a number and
-    the dashboard's two totals agreeing -- and those rested on what gspread hands
-    back for a rendered cell, which no test here could settle. They carried a
-    marker saying so, on the grounds that reporting an unconfirmed assumption as
-    a confirmed defect is its own kind of wrong.
+    format, and the ordering. The rest read cell *values* -- money as a number,
+    the dashboard's two totals agreeing, and each allocation block's slices
+    coming to that total with its shares coming to 1 -- and those rested on what
+    gspread hands back for a rendered cell, which no test here could settle. They
+    carried a marker saying so, on the grounds that reporting an unconfirmed
+    assumption as a confirmed defect is its own kind of wrong.
 
     The marker is gone because the run happened: 2026-08-10, against the real
     spreadsheet, every check then defined passing. A pass settles both directions
@@ -489,6 +498,12 @@ def check_tabs(
     The Net Worth contract check postdates that run and went through one of its
     own: 2026-08-11, same spreadsheet, all ten passing, the two value checks
     unmarked this time on a sheet written that morning.
+
+    The allocation checks postdate both and have been through neither. Every
+    block was already closing on a row stating what its slices came to, and
+    nothing read it -- so a wrong base was visible on the tab and invisible to
+    this function, which is the gap they close. Whether they hold against a real
+    spreadsheet is an open row in docs/live-verification.md.
 
     A third value check was intended and cannot exist: an absent date arriving as
     an empty cell rather than as an empty string is invisible to a read, since
@@ -502,12 +517,14 @@ def check_tabs(
     :param root: The directory workspaces live in, for tests
     :param spreadsheet: The spreadsheet to read
     :param book: An already-open spreadsheet, to save an authorization
+    :param classes: Symbol to asset class, or None for the configured mapping
     :return: One GuardCase per check
     :rtype: tuple[GuardCase, ...]
     :raises SheetsUnavailable: if Sheets is unreachable or a tab is missing
     """
 
     portfolio: Portfolio = read_workspace(workspace=workspace, root=root)
+    mapping: dict[str, str] = get_asset_classes() if classes is None else classes
     opened: Any = (
         book if book is not None else open_spreadsheet(spreadsheet=spreadsheet)
     )
@@ -541,6 +558,7 @@ def check_tabs(
     cases.extend(_date_cases(worksheet=tabs[TRANSACTIONS_TAB]))
     cases.append(_money_case(worksheet=tabs[ACCOUNTS_TAB]))
     cases.append(_totals_case(worksheet=tabs[DASHBOARD_TAB]))
+    cases += _allocation_cases(worksheet=tabs[DASHBOARD_TAB], classes=mapping)
 
     # Check 4 -- an account with no date being surfaced rather than counted at
     # face value -- is deliberately absent and cannot be added here. It is a
@@ -843,6 +861,156 @@ def _summary_value(worksheet: Any, labels: list[Any], label: str) -> float:
         raise ValueError(f"the cell beside '{label}' is empty")
 
     return float(found[0][0])
+
+
+def _slices_case(worksheet: Any, start: str, heading: str, total: float) -> GuardCase:
+    """
+    One allocation block's closing row, read back off the tab.
+
+    Every block ends with ALLOCATION_CHECK, whose two cells are what the slices
+    above it actually came to -- the sheet's own arithmetic over the cells it
+    wrote. The module says of that row that a wrong base "shows up as a share
+    column that does not come to 1, visible without anybody having to add the
+    column up by hand". It was visible and nothing looked: the row was written
+    and never read, so a block whose shares summed to 0.8 would have been written,
+    reported as a success, and agreed with by every other check here.
+
+    That is the failure this project keeps finding -- the run reporting success
+    because from its side nothing went wrong -- sitting inside the row built to
+    prevent it. This is the thing that looks.
+    :param worksheet: The Dashboard tab
+    :param start: The block's first column letter
+    :param heading: What the block is called, for the case name
+    :param total: Total (USD), which the values must come to
+    :return: What was found
+    :rtype: GuardCase
+    """
+
+    name: str = f"The {heading.lower()} allocation adds up"
+    labels: list[str] = [
+        str(object=cell) for cell in _column_at(worksheet=worksheet, letter=start)
+    ]
+
+    if ALLOCATION_REFUSED in labels:
+        # A refusal is the block working, not failing. It draws nothing precisely
+        # because the arithmetic it would render is wrong, and a check that read
+        # that as a defect would report the safety mechanism as the fault.
+        return GuardCase(
+            name=name,
+            expected="equal",
+            passed=True,
+            detail="not drawn: positions exceed account balances, which the "
+            "block says in place of rendering a negative wedge",
+        )
+
+    if ALLOCATION_CHECK not in labels:
+        return GuardCase(
+            name=name,
+            expected="equal",
+            passed=False,
+            detail=f"no '{ALLOCATION_CHECK}' row in column {start}",
+        )
+
+    row: int = FIRST_DATA_ROW + labels.index(ALLOCATION_CHECK)
+    values: str = column_letter(index=column_index(letter=start) + 1)
+    shares: str = column_letter(index=column_index(letter=start) + 2)
+    found: list[list[Any]] = _values(
+        worksheet=worksheet, cells=f"{values}{row}:{shares}{row}", rendered=True
+    )
+
+    try:
+        summed = float(found[0][0])
+        share = float(found[0][1])
+
+    except (IndexError, TypeError, ValueError) as e:
+        return GuardCase(
+            name=name,
+            expected="equal",
+            passed=False,
+            detail=f"could not read the '{ALLOCATION_CHECK}' row ({e})",
+        )
+
+    # Money to the cent, as _totals_case compares its two totals: both sides came
+    # from the same numbers by different routes, so this is rounding and not a
+    # fuzzy match.
+    adds_up: bool = abs(summed - total) < 0.01
+
+    if not adds_up:
+        return GuardCase(
+            name=name,
+            expected="equal",
+            passed=False,
+            detail=f"the slices come to {summed}, the total is {total}",
+        )
+
+    if abs(total) < 0.01:
+        # An empty workspace divides by zero, so every share is IFERROR'd to ""
+        # and the column sums to nothing. There is no base for a share to be
+        # wrong about, so the question is not asked rather than answered no.
+        return GuardCase(
+            name=name,
+            expected="equal",
+            passed=True,
+            detail="no money in the workspace, so the shares have no base",
+        )
+
+    whole: bool = abs(share - 1.0) < ALLOCATION_TOLERANCE
+
+    return GuardCase(
+        name=name,
+        expected="equal",
+        passed=whole,
+        detail="" if whole else f"the shares come to {share} rather than 1",
+    )
+
+
+def _allocation_cases(worksheet: Any, classes: dict[str, str]) -> list[GuardCase]:
+    """
+    Every allocation block that should be on the tab, checked against the total.
+
+    The two that are always drawn, plus the asset class block when a mapping is
+    configured -- which is why the mapping has to reach this function rather than
+    being inferred from the tab. Inferring it would make an absent block
+    indistinguishable from a block that failed to write, and the absent one is
+    correct only when nobody asked for it.
+    :param worksheet: The Dashboard tab
+    :param classes: Symbol to asset class, as configured
+    :return: One case per block expected to be drawn
+    :rtype: list[GuardCase]
+    """
+
+    blocks: list[tuple[str, str]] = [
+        (BY_KIND_COL, "Account kind"),
+        (BY_POSITION_COL, "Position"),
+    ]
+
+    if classes:
+        blocks.append((BY_CLASS_COL, "Asset class"))
+
+    labels: list[Any] = _column_at(worksheet=worksheet, letter=SUMMARY_COL)
+
+    try:
+        total: float = _summary_value(
+            worksheet=worksheet, labels=labels, label="Total (USD)"
+        )
+
+    except (LookupError, TypeError, ValueError) as e:
+        # One failure rather than one per block: they would all be the same
+        # failure, and a reader counting three red lines would go looking for
+        # three problems.
+        return [
+            GuardCase(
+                name="The allocation blocks add up",
+                expected="equal",
+                passed=False,
+                detail=f"could not read the total they are shares of ({e})",
+            )
+        ]
+
+    return [
+        _slices_case(worksheet=worksheet, start=start, heading=heading, total=total)
+        for start, heading in blocks
+    ]
 
 
 #: The tab check_ownership_guard() makes and removes. Named to read as disposable
@@ -1565,7 +1733,7 @@ def _refused(heading: str, cash: float) -> list[list[Any]]:
     return [
         [heading, f"Value ({USD})", f"Share of total ({USD})"],
         [
-            "Allocation not drawn",
+            ALLOCATION_REFUSED,
             f"positions exceed account balances by {-cash:,.2f} {USD}, "
             "so something is counted twice",
             "",
