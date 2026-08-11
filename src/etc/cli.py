@@ -11,11 +11,51 @@ from argparse import (
     _ArgumentGroup,  # pyright: ignore
     _SubParsersAction,  # pyright: ignore
 )
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as installed_version
 from types import ModuleType
 
 from etc.logger import stonksmith_logger
 from helpers.logger import highlight
 from loaders.brokerloader import BrokerLoader
+
+#: What --version says when the version cannot be established. Not a number:
+#: every number this could fall back to would be a guess presented as a fact,
+#: and a version is only worth printing if it is the one actually running.
+UNKNOWN_VERSION: str = "unknown"
+
+#: The release's name, and the one part of the banner still written by hand.
+#: A codename is not derivable from anything -- there is nothing to read it out
+#: of -- so it stays here, where it is the only thing to keep in step.
+CODENAME: str = "Forrest Gump"
+
+
+def get_version() -> str:
+    """
+    The running version, read from the installed distribution.
+
+    Read rather than written, because it used to be written twice: a literal in
+    this file beside the one in pyproject.toml, agreeing by luck and checked by
+    nothing. Two copies of one fact is the shape of bug this project keeps
+    finding, and this one was quiet in the worst way -- a --version that is wrong
+    reports it confidently, and the number is what somebody correlates a strange
+    database or sheet against.
+
+    pyproject.toml is now the single source, and this is a read of what was built
+    from it. That makes a stale install visible rather than invisible: the two
+    disagreeing means the venv is behind the file, which is worth knowing and is
+    what tests/test_version_single_source.py checks.
+    :return: The installed version, or UNKNOWN_VERSION when there is none
+    :rtype: str
+    """
+
+    try:
+        return installed_version(distribution_name="stonksmith")
+
+    except PackageNotFoundError:
+        # Running from a source tree that was never installed -- python src/main.py
+        # rather than uv run. There is no metadata to read and nothing to guess.
+        return UNKNOWN_VERSION
 
 
 def gen_cli_args() -> Namespace:
@@ -25,8 +65,8 @@ def gen_cli_args() -> Namespace:
     :rtype: argparse.Namespace
     """
 
-    version: str = "0.1.0"
-    codename: str = "Forrest Gump"
+    version: str = get_version()
+    codename: str = CODENAME
 
     parser = ArgumentParser(
         description=rf"""

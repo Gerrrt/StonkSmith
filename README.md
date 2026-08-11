@@ -471,6 +471,12 @@ future.
 5. Push to the branch (`git push origin some-amazing-feature`)
 6. Open a Pull Request
 
+The version lives in `pyproject.toml` and nowhere else. `--version` and the
+banner read it off the installed distribution, so bumping it is one edit
+followed by `uv sync` — and `tests/test_version_single_source.py` fails if the
+two ever part company. The codename beside it in `src/etc/cli.py` is the one
+piece still written by hand, because nothing can derive one.
+
 A change to anything under `docs/` carries one extra obligation: those files are
 records, and each names the section that summarises it. Change a claim in one
 and change its summary here in the same pass —
