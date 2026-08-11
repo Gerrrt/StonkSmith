@@ -82,7 +82,13 @@ def broker_args(
     group.add_argument(
         "--no-positions",
         action="store_true",
-        help="Skip the per-account positions call, syncing balances only",
+        help=(
+            "Skip the per-account positions call, syncing balances only. The "
+            "snapshot this writes therefore holds no positions, and the "
+            "Holdings tab renders the newest snapshot -- so this empties the "
+            "tab of everything SnapTrade contributes until a full run follows. "
+            "Fine once; not a flag to put in a crontab"
+        ),
     )
 
     group.add_argument(
