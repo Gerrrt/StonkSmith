@@ -145,10 +145,10 @@ StonkSmith/
 Each broker is one package. `brokers/<name>/broker.py` holds the login class and
 publishes it as `Broker`, alongside `database.py`, `db_navigator.py`,
 `broker_args.py` and any `parser.py`. A directory containing
-`broker.py` *is* a broker — that is how `BrokerLoader` discovers them, scanning
+`broker.py` _is_ a broker — that is how `BrokerLoader` discovers them, scanning
 `src/brokers/` first and then `~/.stonksmith/brokers/`. Everything except
 `broker.py` is optional; a broker without `database.py` and `db_navigator.py` is
-listed as "incomplete" by `stonksmithdb`. A broker that *raises* while loading is
+listed as "incomplete" by `stonksmithdb`. A broker that _raises_ while loading is
 reported by name and skipped — it registers no subparser and is simply
 unavailable for that run, so a half-finished broker under
 `~/.stonksmith/brokers/` never takes the rest of the tool down with it.
@@ -251,13 +251,13 @@ Five brokers, and they do not work alike — one needs you to sign in by hand
 every time, one needs no credential at all. What each needs and what a run of it
 does is [`docs/brokers.md`](docs/brokers.md); this table is the index into it.
 
-| Broker | Shape | What it needs from you |
-| --- | --- | --- |
-| [Fidelity](docs/brokers.md#fidelity) | Browser | A manual sign-in once; the session is reused until it expires. Or link it through SnapTrade and skip the browser |
-| [Ally Invest](docs/brokers.md#ally-invest) | Browser | A manual sign-in **every** scrape — Ally honours no restored session. `--from-prices` revalues between scrapes with no browser at all |
-| [SnapTrade](docs/brokers.md#snaptrade) | API | A free Personal API key, and one browser step per brokerage every few weeks. Covers Schwab, Fidelity, Vanguard and the rest through one key |
-| [Schwab 529](docs/brokers.md#schwab-529) | Scraper | A stored credential. A form post and two page reads — no browser, nothing to expire |
-| [TSP](docs/brokers.md#tsp) | API | Nothing daily. Share prices are published; units come from a quarterly statement or a config line |
+| Broker                                     | Shape   | What it needs from you                                                                                                                      |
+| ------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Fidelity](docs/brokers.md#fidelity)       | Browser | A manual sign-in once; the session is reused until it expires. Or link it through SnapTrade and skip the browser                            |
+| [Ally Invest](docs/brokers.md#ally-invest) | Browser | A manual sign-in **every** scrape — Ally honours no restored session. `--from-prices` revalues between scrapes with no browser at all       |
+| [SnapTrade](docs/brokers.md#snaptrade)     | API     | A free Personal API key, and one browser step per brokerage every few weeks. Covers Schwab, Fidelity, Vanguard and the rest through one key |
+| [Schwab 529](docs/brokers.md#schwab-529)   | Scraper | A stored credential. A form post and two page reads — no browser, nothing to expire                                                         |
+| [TSP](docs/brokers.md#tsp)                 | API     | Nothing daily. Share prices are published; units come from a quarterly statement or a config line                                           |
 
 **Adding a brokerage SnapTrade covers is an operator action, not a code change**
 — no new broker, module, database or tab. Vanguard is the standing example.
@@ -270,12 +270,12 @@ default level was `ERROR`, so a sync could read a statement, write the snapshot
 to the database and update the Google Sheet while printing nothing but a
 progress bar. Success and doing nothing at all looked identical.
 
-| Flag | Shows |
-| --- | --- |
-| *(none)* | What the run did, and anything that went wrong. |
-| `--quiet` | Failures only. This is what an unattended run wants. |
+| Flag        | Shows                                                                                                       |
+| ----------- | ----------------------------------------------------------------------------------------------------------- |
+| _(none)_    | What the run did, and anything that went wrong.                                                             |
+| `--quiet`   | Failures only. This is what an unattended run wants.                                                        |
 | `--verbose` | Same as the default, but wins over `--quiet` — useful for seeing inside a wrapper script that hardcodes it. |
-| `--debug` | Everything, including internals. |
+| `--debug`   | Everything, including internals.                                                                            |
 
 All four work on either side of the broker name.
 
@@ -284,11 +284,11 @@ All four work on either side of the broker name.
 The exit status reflects what the run actually did, so a cron entry, systemd
 timer or CI step can tell whether the sync worked.
 
-| Code | Meaning |
-| --- | --- |
-| `0` | The run did its work. A Google Sheets failure *after* the balances reached the database is still a success — the data is saved, and the log says the dashboard was not updated. |
-| `1` | The run did not complete: unknown broker or module, could not connect or log in, a module reported it did nothing, only some of the requested modules loaded, or nothing reached the database. |
-| `130` | Interrupted (128 + SIGINT). Distinct from `1` so a scheduler can page on a real failure and shrug at a human pressing Ctrl-C. |
+| Code  | Meaning                                                                                                                                                                                        |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`   | The run did its work. A Google Sheets failure _after_ the balances reached the database is still a success — the data is saved, and the log says the dashboard was not updated.                |
+| `1`   | The run did not complete: unknown broker or module, could not connect or log in, a module reported it did nothing, only some of the requested modules loaded, or nothing reached the database. |
+| `130` | Interrupted (128 + SIGINT). Distinct from `1` so a scheduler can page on a real failure and shrug at a human pressing Ctrl-C.                                                                  |
 
 `stonksmithdb <command>` reports the same way: `0` when the command did its work,
 `1` when it did not. For `stale` that means `1` when any account has gone stale
@@ -323,7 +323,7 @@ uv run stonksmithdb stale
 
 It exits `1` when any account's as-of date is missing, unreadable or more than a
 week old. That is the one question a schedule cannot otherwise ask: every other
-step reports when it *breaks*, and none reports when it stops happening.
+step reports when it _breaks_, and none reports when it stops happening.
 
 ### The sheet
 
@@ -355,13 +355,13 @@ all.** That is the part a crontab cannot tell you, and getting it wrong is
 expensive in a specific way: a cron job that errors every night gets muted, and
 after that the portfolio has stopped updating with nothing to say so.
 
-| Broker | On a schedule |
-| --- | --- |
-| `tsp` | Yes. No credential in the daily path |
-| `snaptrade` | Yes, until the connection expires — a browser step every few weeks |
-| `schwab529plan` | Yes. A form post with a stored credential |
-| `ally` | `--from-prices` only, which reprices a stale unit count rather than scraping |
-| `fidelity` | No. Link it through SnapTrade instead |
+| Broker          | On a schedule                                                                |
+| --------------- | ---------------------------------------------------------------------------- |
+| `tsp`           | Yes. No credential in the daily path                                         |
+| `snaptrade`     | Yes, until the connection expires — a browser step every few weeks           |
+| `schwab529plan` | Yes. A form post with a stored credential                                    |
+| `ally`          | `--from-prices` only, which reprices a stale unit count rather than scraping |
+| `fidelity`      | No. Link it through SnapTrade instead                                        |
 
 Weekdays after the close, one process per broker — `broker` is a positional
 subcommand, so there is no `--all` — staggered, because two runs inside the same
@@ -380,7 +380,7 @@ PATH=/usr/local/bin:/usr/bin:/bin
 > [!WARNING]
 > **There is no `fidelity` line, and the `ally` line is not a scrape.** Ally
 > honours no restored session, so `--from-prices` values the account from
-> today's published close and *the units the last signed-in run recorded* —
+> today's published close and _the units the last signed-in run recorded_ —
 > exact arithmetic on a number that goes quietly wrong the moment a deposit
 > lands. It says so on every account it values, and a schedule that mails only
 > on failure will never show anybody that line. Re-run `--manual-login` after a
@@ -395,7 +395,7 @@ That schedule is committed as
 [`scripts/stonksmith.cron`](scripts/stonksmith.cron), commented and ready to
 paste into `crontab -e`. Every line in it is a no-op or a nightly failure until
 its broker is set up — Ally in particular refuses and exits `1` until a
-`--manual-login` run has recorded some units — so read *Before the first night*
+`--manual-login` run has recorded some units — so read _Before the first night_
 before installing it.
 
 [`docs/scheduling.md`](docs/scheduling.md) is the record: what each broker can

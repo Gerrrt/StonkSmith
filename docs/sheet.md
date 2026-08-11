@@ -95,7 +95,7 @@ database" means.
 
 TSP's `Units as of` was the other one, and it came back — as `Units As Of`,
 column 16, backed by a `holdings.units_as_of` of its own. It went in the first
-place because it *was* stored, only in `holdings.raw_value`, which means "the
+place because it _was_ stored, only in `holdings.raw_value`, which means "the
 value exactly as the source wrote it" for every other broker. That was two
 meanings in one column, and a column nothing read back, so the date was kept and
 invisible at the same time. The contrast with the Ally columns is the point: a
@@ -155,7 +155,7 @@ not behave, and `1` when a half could not be run at all. Not reaching the sheet
 says nothing about the guard, and "nothing known" must not exit the way "checked
 and clean" does.
 
-Two things neither half covers: that a refusal aborts the *whole* sync, and that an
+Two things neither half covers: that a refusal aborts the _whole_ sync, and that an
 absent value arrived as an empty cell rather than an empty string — read back, those
 two are the same value, so only a formula's behaviour tells them apart.
 [`live-verification.md`](live-verification.md) has both steps.
@@ -172,46 +172,46 @@ workspace and produces four row shapes, shared across all brokers:
 
 **Accounts** — one row per account. Summing `Value` gives the portfolio total.
 
-| # | Column | |
-| --- | --- | --- |
-| 1 | `Broker` | which StonkSmith broker produced it |
-| 2 | `Source` | the brokerage behind it, for an aggregator; the broker otherwise |
-| 3 | `Account` | the display name — free to change, and not identity |
-| 4 | `Account Key` | the stable identity. Key formulas on this |
-| 5 | `Kind` | `529`, `INVESTMENT`, `LOC`, whatever the source calls it |
-| 6 | `Beneficiary` | 529 plans have one; most accounts do not |
-| 7 | `Value` | |
-| 8 | `Currency` | |
-| 9 | `As Of` | the date **the source** says the value is for |
-| 10 | `Scraped At` | when the run happened |
+| #   | Column        |                                                                  |
+| --- | ------------- | ---------------------------------------------------------------- |
+| 1   | `Broker`      | which StonkSmith broker produced it                              |
+| 2   | `Source`      | the brokerage behind it, for an aggregator; the broker otherwise |
+| 3   | `Account`     | the display name — free to change, and not identity              |
+| 4   | `Account Key` | the stable identity. Key formulas on this                        |
+| 5   | `Kind`        | `529`, `INVESTMENT`, `LOC`, whatever the source calls it         |
+| 6   | `Beneficiary` | 529 plans have one; most accounts do not                         |
+| 7   | `Value`       |                                                                  |
+| 8   | `Currency`    |                                                                  |
+| 9   | `As Of`       | the date **the source** says the value is for                    |
+| 10  | `Scraped At`  | when the run happened                                            |
 
 **Holdings** — one row per position behind each account's newest snapshot. The
 first four columns are the same, so the two join on `Broker` + `Account Key`.
 
-| # | Column | |
-| --- | --- | --- |
-| 1-4 | `Broker`, `Source`, `Account`, `Account Key` | as above |
-| 5 | `Symbol` | the ticker, or the fund code for sources without tickers |
-| 6 | `Name` | |
-| 7-10 | `Units`, `Price`, `Value`, `Cost Basis` | |
-| 11-12 | `Principal`, `Earnings` | 529 plans report growth separately |
-| 13-15 | `Currency`, `As Of`, `Scraped At` | `As Of` is the account's — when the position's *value* is true |
-| 16 | `Units As Of` | when the *unit count* was true, for a source that dates the two apart |
+| #     | Column                                       |                                                                       |
+| ----- | -------------------------------------------- | --------------------------------------------------------------------- |
+| 1-4   | `Broker`, `Source`, `Account`, `Account Key` | as above                                                              |
+| 5     | `Symbol`                                     | the ticker, or the fund code for sources without tickers              |
+| 6     | `Name`                                       |                                                                       |
+| 7-10  | `Units`, `Price`, `Value`, `Cost Basis`      |                                                                       |
+| 11-12 | `Principal`, `Earnings`                      | 529 plans report growth separately                                    |
+| 13-15 | `Currency`, `As Of`, `Scraped At`            | `As Of` is the account's — when the position's _value_ is true        |
+| 16    | `Units As Of`                                | when the _unit count_ was true, for a source that dates the two apart |
 
 **Transactions** — one row per movement, across every broker. Not per snapshot:
 a movement is recorded once, keyed so a re-scrape of an overlapping window
 contributes only what is new, and kept. Same first four columns again.
 
-| # | Column | |
-| --- | --- | --- |
-| 1-4 | `Broker`, `Source`, `Account`, `Account Key` | as above |
-| 5 | `Type` | `Contribution`, `BUY`, `DIVIDEND` — whatever the source calls it |
-| 6-7 | `Symbol`, `Description` | filled by sources that have them; a scraped 529 table has neither |
-| 8-11 | `Units`, `Price`, `Value`, `Currency` | |
-| 12 | `Processed On` | the settlement date |
-| 13 | `Traded On` | the trade date — a different fact, routinely days apart |
-| 14 | `First Seen` | when StonkSmith first observed this movement |
-| 15 | `External Id` | the source's own transaction id, where it has one |
+| #    | Column                                       |                                                                   |
+| ---- | -------------------------------------------- | ----------------------------------------------------------------- |
+| 1-4  | `Broker`, `Source`, `Account`, `Account Key` | as above                                                          |
+| 5    | `Type`                                       | `Contribution`, `BUY`, `DIVIDEND` — whatever the source calls it  |
+| 6-7  | `Symbol`, `Description`                      | filled by sources that have them; a scraped 529 table has neither |
+| 8-11 | `Units`, `Price`, `Value`, `Currency`        |                                                                   |
+| 12   | `Processed On`                               | the settlement date                                               |
+| 13   | `Traded On`                                  | the trade date — a different fact, routinely days apart           |
+| 14   | `First Seen`                                 | when StonkSmith first observed this movement                      |
+| 15   | `External Id`                                | the source's own transaction id, where it has one                 |
 
 **This tab carries the whole history, deliberately.** Every other tab is bounded
 by the size of your portfolio; this one grows forever, which is exactly why it
@@ -223,15 +223,15 @@ having one. The read behind it takes no `limit` for that reason, and
 **Net Worth** — one row per account per date, which is what a chart of your net
 worth over time is made of. Same first four columns again.
 
-| # | Column | |
-| --- | --- | --- |
-| 1-4 | `Broker`, `Source`, `Account`, `Account Key` | as above |
-| 5 | `Date` | the date this row stands on — not a claim by any source |
-| 6-7 | `Value`, `Currency` | |
-| 8 | `Basis` | `observed` if the value was read on that date, `carried` if it was carried onto it |
-| 9 | `Observed On` | the date the value *was* read for. Equal to `Date` when observed |
-| 10 | `As Of` | what the source itself said, blank when it said nothing |
-| 11 | `Scraped At` | the run that took that reading |
+| #   | Column                                       |                                                                                    |
+| --- | -------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 1-4 | `Broker`, `Source`, `Account`, `Account Key` | as above                                                                           |
+| 5   | `Date`                                       | the date this row stands on — not a claim by any source                            |
+| 6-7 | `Value`, `Currency`                          |                                                                                    |
+| 8   | `Basis`                                      | `observed` if the value was read on that date, `carried` if it was carried onto it |
+| 9   | `Observed On`                                | the date the value _was_ read for. Equal to `Date` when observed                   |
+| 10  | `As Of`                                      | what the source itself said, blank when it said nothing                            |
+| 11  | `Scraped At`                                 | the run that took that reading                                                     |
 
 ### Why this tab has to be constructed rather than read
 
@@ -292,7 +292,7 @@ Three rules make that a contract rather than a list:
   two different facts, and a source that never says the first is common.
 
   `Units As Of` reads like a fourth answer to that question and is not. `Synced`
-  and `Price date` were other brokers' *names* for the fact `As Of` already
+  and `Price date` were other brokers' _names_ for the fact `As Of` already
   carries, so they stay abolished. A TSP position is a quarterly unit count times
   today's share price: its value is as of one date and its quantity as of
   another, weeks apart, and no single column can say both. Two meanings, so two
@@ -300,20 +300,21 @@ Three rules make that a contract rather than a list:
 
   A movement's two dates are the same argument one view along. `Processed On`
   and `Traded On` are settlement and trade, and neither is "the date the source
-  says the *value* is for", so neither borrows `As Of`. `First Seen` is its own
+  says the _value_ is for", so neither borrows `As Of`. `First Seen` is its own
   name for the same reason rather than a third `Scraped At`: that one moves
   every sync, because those rows are rewritten every run, while the run that
   first saw a movement never changes.
 
   The series makes the same distinction a third time, and needs three columns to
   do it. `Date` is the date a row stands on, which on a carried row is a date the
-  source said nothing whatever about — it belongs to whichever *other* broker ran
+  source said nothing whatever about — it belongs to whichever _other_ broker ran
   that day. `Observed On` is the date the value was actually read for. `As Of` is
   still what the source itself claimed, and stays blank when it claimed nothing,
   which is how you tell `Observed On` falling back to the run clock from
   `Observed On` repeating a real source date. And `Basis` is not `Cost Basis`
   with a word dropped: one is what was paid for a position, the other is whether
   a number is a reading or a carry. Neither name appears in the other's tuple.
+
 - **Money and quantities are numbers, not text.** No `"$1,234.56"` in a cell
   you then cannot add up. Formatting is the cell's job. A value the source never
   gave stays empty rather than becoming `0`, because an account that reported no
@@ -323,7 +324,7 @@ Three rules make that a contract rather than a list:
 the sum of its positions are different numbers — uninvested cash sits in the
 balance and in no holding. One table doing both would understate every account
 holding cash while looking like it totalled correctly. Movements are the third
-because they are a *log* rather than current state: the other two are "what is
+because they are a _log_ rather than current state: the other two are "what is
 true now" and are replaced every run, while a movement happened once and stays.
 The series is the fourth because it is neither — it is the only one of them no
 source ever stated, assembled across brokers that do not report together.
@@ -334,7 +335,7 @@ text is what its deduplication key is built from — so rewriting it at the
 scraper would make every already-stored row look new. Two formats in one column
 sort wrong, `12/30/2025` landing above `01/15/2026`, which is a tab that looks
 ordered and is not. So the stored text stays exactly as the source wrote it and
-the *view* renders `YYYY-MM-DD`. A date nothing can parse is passed through
+the _view_ renders `YYYY-MM-DD`. A date nothing can parse is passed through
 unchanged rather than blanked.
 
 **A movement the source gives no id is keyed on its own content**, and identical
@@ -344,7 +345,7 @@ rather than position, so a window that comes back reversed or newest-first
 stores exactly what an in-order one would — sorting it first would buy nothing
 and would shift every key already written.
 
-What it does need is that a same-content group arrives *whole* in one window.
+What it does need is that a same-content group arrives _whole_ in one window.
 Fetched one per window, the second $50 contribution is byte-identical to a
 re-scrape of the first, and gets skipped. Nothing keyed on content alone can
 separate those two cases, so the rule is to never duplicate and the split window
@@ -430,4 +431,3 @@ derived from the tuples above, so the letters cannot drift away from the contrac
 
 If every database fails to read, nothing is written at all. Clearing the tabs
 there would replace a correct sheet with a blank one and report success for it.
-

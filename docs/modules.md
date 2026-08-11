@@ -39,7 +39,7 @@ def on_login(self, context, connection):
 ```
 
 Secrets themselves live in the OS keyring rather than in the database — see
-*Security* in [the README](../README.md#security) for what is stored where.
+_Security_ in [the README](../README.md#security) for what is stored where.
 
 ---
 

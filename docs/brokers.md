@@ -11,9 +11,9 @@ broker can do unattended, and
 [`ally-transactions.md`](ally-transactions.md) for why Ally stores no
 transactions. Where this file summarises one of them, it says so and links.
 
-The *Brokers* table in [the README](../README.md#brokers) is the index
+The _Brokers_ table in [the README](../README.md#brokers) is the index
 into this file, and
-[*Project structure*](../README.md#project-structure) there explains the
+[_Project structure_](../README.md#project-structure) there explains the
 three shapes a broker comes in — scraper, browser-backed, API-backed — and which
 base class each one gets.
 
@@ -68,8 +68,8 @@ command if nothing is listening.
 ## Other browser modes
 
 Fidelity's bot protection may refuse to render the login form to Playwright's
-bundled Firefox at all. If the browser shows *"Sorry, we can't complete this
-action right now"*, try a Chromium-family browser with a persistent profile:
+bundled Firefox at all. If the browser shows _"Sorry, we can't complete this
+action right now"_, try a Chromium-family browser with a persistent profile:
 
 ```bash
 uv run playwright install chrome
@@ -83,7 +83,7 @@ and history accumulate between runs. `--profile-dir` points elsewhere.
 
 ## Ally Invest
 
-**Ally Invest has no login of its own.** ally.com signs you in to Ally *Bank* at
+**Ally Invest has no login of its own.** ally.com signs you in to Ally _Bank_ at
 `secure.ally.com`, and the investing site is reached by clicking through from
 the bank dashboard — `live.invest.ally.com` is handed a session, it never asks
 for one. So there is no way to point StonkSmith at an Ally Invest login page,
@@ -110,7 +110,7 @@ run either the investing site or the bank answers `401`, the app calls
 `storage_state`, Firefox with IndexedDB included, and a persistent Chrome
 profile were all tried, and all three were refused.
 
-So the *scrape* cannot run unattended, and no amount of stored state changes
+So the _scrape_ cannot run unattended, and no amount of stored state changes
 that. The scrape itself is proven — sign-in, holdings, the account rail, the
 bank/brokerage split and the database write all work on every one of those
 runs. [`live-verification.md`](live-verification.md) has the full evidence.
@@ -138,7 +138,7 @@ valuing the account at nothing:
 [-] No holdings on record to value. Run with --manual-login once so a signed-in run can record the units.
 ```
 
-The mark is dated by the *price*, not by the run — and by the oldest price
+The mark is dated by the _price_, not by the run — and by the oldest price
 across the account, since one fund priced this morning and another not since
 Thursday makes a Thursday total. That date lands in `as_of`, which no other Ally
 path fills. The units' own age is the half that goes quietly wrong: a deposit
@@ -155,7 +155,7 @@ Two things it does not do. It does not touch the sheet — only a scrape syncs, 
 `stonksmithdb`'s `sheet` command is what refreshes the tabs afterwards. And it
 does not notice new accounts, since it values what is already on record.
 
-This is the Ally path a schedule can run, and the only one — see *Scheduling*
+This is the Ally path a schedule can run, and the only one — see _Scheduling_
 above, and [`scheduling.md`](scheduling.md) for what it means to run it nightly.
 
 ### What an Ally run writes down
@@ -185,7 +185,7 @@ matters, because "a log shows an activity endpoint" is the first of the three
 conditions that would reopen the question of Ally transactions, and this page's
 own example must not be mistakable for the thing that fires it.
 
-**Endpoints and parameter *names*; never values, bodies or headers.** A route
+**Endpoints and parameter _names_; never values, bodies or headers.** A route
 called `activity` says nothing on its own. The same route taking `startDate` and
 `endDate` says it is a windowed history feed — which is the question worth
 answering, and answering it costs nothing, because a parameter name is a fact
@@ -193,7 +193,7 @@ about the endpoint while its value is a fact about you. Long path segments stay
 masked as `<id>` and query values never appear, so the lines paste into an issue
 as they are.
 
-It used to record only on failure, and only when *not* attached — so the
+It used to record only on failure, and only when _not_ attached — so the
 `--browser cdp` path recommended above wrote nothing at all, and a run that
 worked threw away everything it had seen. One live session was observed making
 twenty-five successful data calls and all that survives of it is the number.
@@ -237,7 +237,7 @@ Ally shows one account's positions at a time. StonkSmith reads the sidebar as
 well as the table, so every investment account gets a balance, but only the
 account currently selected gets its holdings — it says so per account when
 there is more than one. Select another account in the browser and re-run to
-store its positions too. Ally *Bank* deposit accounts appear in the same
+store its positions too. Ally _Bank_ deposit accounts appear in the same
 sidebar; they are reported as skipped rather than filed under a brokerage.
 
 All of that has met a real page. The parse, the account rail, the reconciliation
@@ -272,10 +272,10 @@ uv run python scripts/snaptrade_register.py store
 ```
 
 A personal key is those two values and nothing else. There is no `userId` or
-`userSecret` to find: SnapTrade's docs say to *"omit userId and userSecret when
-making API requests; SnapTrade resolves the user from the Personal API key"*,
-and *"do not call Register user for Personal API key authentication"*. Trying
-anyway returns a 403 reading *"Authentication credentials were not provided"*,
+`userSecret` to find: SnapTrade's docs say to _"omit userId and userSecret when
+making API requests; SnapTrade resolves the user from the Personal API key"_,
+and _"do not call Register user for Personal API key authentication"_. Trying
+anyway returns a 403 reading _"Authentication credentials were not provided"_,
 because `registerUser` and `listUsers` accept only commercial keys and the SDK
 sends no auth at all for a mode an endpoint does not offer.
 
@@ -376,7 +376,7 @@ account is reported, like every other skip.
 **This setting is permanent, not a workaround.** The reasonable-sounding hope is
 that a single reader over all the databases would make it unnecessary — that it
 could recognise the duplicate and drop one. It cannot, and the reason is
-structural rather than a missing feature. `account_key` is unique *within* one
+structural rather than a missing feature. `account_key` is unique _within_ one
 broker's database and means nothing outside it: the same Schwab-held 529 is
 `Schwab - Beneficiary A 529 Plan` to SnapTrade and `Beneficiary A` to the
 `schwab529plan` scraper. Different key, different external id, different
@@ -432,15 +432,15 @@ for movements. Three things about that parse are worth knowing:
 
 **Columns are found by their headers, not by position.** `TRANSACTION_COLUMNS`
 in `src/helpers/schwab529plan.py` maps each of the six canonical fields to the
-spellings a page might print — `Processed` also answers to *process date* and
-*settlement date*. A page that grows a seventh column shifts nothing, which is
+spellings a page might print — `Processed` also answers to _process date_ and
+_settlement date_. A page that grows a seventh column shifts nothing, which is
 the failure a positional read has and does not report.
 
 **A movement is attributed to an account or to nothing.** `match_account()`
 tries three rules in order: an exact match on normalised text, a shared trailing
 run of digits — Schwab masks its numbers, so `...4321` has to reconcile against
-`XXXX4321` — and finally a candidate name inside the hint, as in *Contributions
-for Beneficiary A*. A hint matching two accounts is a collision rather than an
+`XXXX4321` — and finally a candidate name inside the hint, as in _Contributions
+for Beneficiary A_. A hint matching two accounts is a collision rather than an
 attribution and returns nothing, because a wrong answer here is
 indistinguishable from a right one afterwards.
 
@@ -501,7 +501,7 @@ page served with a `200` parses to no rows and is reported as such, rather than
 valuing the account at nothing.
 
 **You do not have to wait for a statement.** The TSP site states a balance and
-the date it is true for, and never states a unit count — but a balance *is*
+the date it is true for, and never states a unit count — but a balance _is_
 units × that day's price, so the division inverts it exactly:
 
 ```bash
@@ -547,7 +547,7 @@ agency_contribution = 5
 
 `rank` is the pay grade, not the title — `E-7`, `O-3`, `W-2`, or `O-3E` for an
 officer with over four years of enlisted or warrant service. `basd` is the Basic
-Active Service Date, and time in service is counted from it *to the day*, which
+Active Service Date, and time in service is counted from it _to the day_, which
 matters because the pay bands are crossed on an anniversary and a member who
 crosses one mid-quarter is paid at two rates over it. Both percentages are of
 monthly basic pay. Fill in all four or none.

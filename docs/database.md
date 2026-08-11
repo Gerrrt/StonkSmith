@@ -30,7 +30,7 @@ At the top level, three commands read the workspace rather than a broker:
 reads it back, and `stale [days]` reports accounts nothing has refreshed lately
 and exits `1` if any turn up. All three also run as `stonksmithdb <command>`
 without entering the shell, which is what a crontab calls — see
-[*The freshness step*](scheduling.md#the-freshness-step-is-the-one-that-catches-silence)
+[_The freshness step_](scheduling.md#the-freshness-step-is-the-one-that-catches-silence)
 for why the last one exists.
 
 ## What is stored
@@ -38,12 +38,12 @@ for why the last one exists.
 Each broker gets its own SQLite file at
 `~/.stonksmith/workspaces/<workspace>/<broker>.db`, holding four tables:
 
-| Table | One row per | Holds |
-| --- | --- | --- |
-| `accounts` | account, ever | broker, brokerage, display name, beneficiary, kind |
-| `account_snapshots` | account per run | a **numeric** value, its currency, the source's own as-of date, and the text the source printed |
-| `holdings` | position per snapshot | fund code or ticker, name, units, price, value, principal, earnings, cost basis, and the unit count's own as-of date where a source dates its quantity apart from its value |
-| `transactions` | movement | processed and traded dates, type, symbol, description, units, price, value, currency, the source's own id where it has one, when StonkSmith first saw it, the key it is deduplicated on, and the value's original text |
+| Table               | One row per           | Holds                                                                                                                                                                                                                  |
+| ------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accounts`          | account, ever         | broker, brokerage, display name, beneficiary, kind                                                                                                                                                                     |
+| `account_snapshots` | account per run       | a **numeric** value, its currency, the source's own as-of date, and the text the source printed                                                                                                                        |
+| `holdings`          | position per snapshot | fund code or ticker, name, units, price, value, principal, earnings, cost basis, and the unit count's own as-of date where a source dates its quantity apart from its value                                            |
+| `transactions`      | movement              | processed and traded dates, type, symbol, description, units, price, value, currency, the source's own id where it has one, when StonkSmith first saw it, the key it is deduplicated on, and the value's original text |
 
 Two things about that shape are deliberate:
 
@@ -110,7 +110,7 @@ exactly this, and that choice only pays for itself if something can show it to
 you.
 
 `delete snapshot` is there because a wrong mark does not correct itself. The
-next sync writes a row *beside* it, not over it — snapshots record what was
+next sync writes a row _beside_ it, not over it — snapshots record what was
 observed when — so a placeholder run verbatim off a command line, or a value
 computed from mismatched inputs, stays a data point in every chart until it is
 removed. It takes one id at a time, and it leaves the account alone: deleting
@@ -146,4 +146,3 @@ actually moved something.
 Adding the column is not optional on the writing side: a snapshot write names
 every column it has, so a database that missed the migration would fail its next
 sync outright rather than quietly storing less.
-

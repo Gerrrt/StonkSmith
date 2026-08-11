@@ -2,12 +2,12 @@
 
 A feature that was built leaves a trace of itself everywhere — a function that can carry a
 docstring, a column that explains itself, a flag with a help string. A feature that was
-*not* built leaves nothing at all, so the reasoning either lives somewhere on purpose or it
+_not_ built leaves nothing at all, so the reasoning either lives somewhere on purpose or it
 gets re-derived by the next person to notice the gap. #89 assumed Ally writes transactions;
 it does not, and after investigation it should stay that way for now.
 
 **This file is the record.** One place summarises it — the end of
-[*What an Ally run writes down*](brokers.md#what-an-ally-run-writes-down) — and
+[_What an Ally run writes down_](brokers.md#what-an-ally-run-writes-down) — and
 that paragraph is derived from here rather than maintained
 beside it. Unlike the summaries `docs/live-verification.md` governs, this one is not
 continuous: it states a decision that either stands or is reopened, so it changes exactly
@@ -45,7 +45,7 @@ The reasons are all upstream, and there are four of them.
 `/brokerages` endpoint what SnapTrade actually covers, and the 2026-08-05 run recorded in its
 docstring found **no Ally Invest at all**. That matters more than it looks: SnapTrade is
 exactly what takes Fidelity from attended to unattended, as
-[*When two brokers can reach the same account*](brokers.md#when-two-brokers-can-reach-the-same-account)
+[_When two brokers can reach the same account_](brokers.md#when-two-brokers-can-reach-the-same-account)
 describes. For Ally that route does not exist, so there is no
 aggregator to fall back to and no path to transactions that does not go through the scraper.
 
@@ -63,7 +63,7 @@ this; the expensive half is finding out what to parse.
 **It could never run unattended.** Settled across nine live runs, both browsers, both
 persistence models: Ally honours no restored session. `docs/live-verification.md` has the
 evidence and records the conclusion as a property of Ally's auth rather than a defect here —
-*"nothing StonkSmith stores reconstitutes a session Ally will honour."* Any transactions
+_"nothing StonkSmith stores reconstitutes a session Ally will honour."_ Any transactions
 fetch rides the same cookie jar as the holdings scrape, so it inherits that whole. A human
 signs in, every time, or nothing is fetched.
 
@@ -126,14 +126,14 @@ A hit settles the whole discovery question at once — that a feed exists, wheth
 per-account, and whether it takes a date window are all readable off the one line.
 
 **Match against your log, not against the documented one.** The sample line in
-[*What an Ally run writes down*](brokers.md#what-an-ally-run-writes-down) is an illustration
+[_What an Ally run writes down_](brokers.md#what-an-ally-run-writes-down) is an illustration
 of the format, written out so a real one can be recognised.
 It is not a capture, and mistaking it for one would fire this condition on evidence that
 does not exist.
 
 **What would remain.** A parser over the response shape, a flag or an unconditional fetch in
-`ally_module.py`, and `Transaction` rows — plus the keying question in *What it would
-inherit* below, which is not optional.
+`ally_module.py`, and `Transaction` rows — plus the keying question in _What it would
+inherit_ below, which is not optional.
 
 ### 2. SnapTrade adds Ally Invest
 
@@ -152,12 +152,12 @@ block. Today the `ally` row prints `NOT SUPPORTED -- needs a scraper`.
 transactions, and SnapTrade supplies the source's own ids, so this is a link in the
 Connection Portal rather than code — and it is strictly better than scraping on both of the
 counts that matter here: it runs unattended, and it is keyed on a real id rather than on
-content. It would also make the Ally scraper the redundant one for those accounts; see *When
-two brokers can reach the same account* for how to pick an owner.
+content. It would also make the Ally scraper the redundant one for those accounts; see _When
+two brokers can reach the same account_ for how to pick an owner.
 
 ### 3. Ally starts honouring a restored session
 
-**The check.** `docs/live-verification.md`, the *Ally* section, step 2 — re-run the procedure
+**The check.** `docs/live-verification.md`, the _Ally_ section, step 2 — re-run the procedure
 that file records as settled, and attach the data-calls log rather than a count.
 
 **What would remain.** More than transactions. That row is the unattended answer for the

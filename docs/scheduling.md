@@ -13,7 +13,7 @@ night gets muted — after which the portfolio has stopped updating and nothing 
 The muting is the bug, and it is caused by the documentation rather than by the code.
 
 **This file is the record.** The README summarises it in one place — the
-[*Scheduling*](../README.md#scheduling) section under *Usage* — and that summary is
+[_Scheduling_](../README.md#scheduling) section under _Usage_ — and that summary is
 derived from here rather than maintained
 beside it. Change what a broker can do unattended here, and change it there in the same
 pass.
@@ -33,7 +33,7 @@ Three things, none of them added for this and all of them load-bearing:
 - **A failed run exits non-zero.** `1` when a module reported it did nothing, could not
   log in, or never reached the database; `130` for an interrupt, kept distinct so a
   scheduler can page on a real failure and shrug at Ctrl-C. The
-  [*Exit codes*](../README.md#exit-codes) table in the README is the reference.
+  [_Exit codes_](../README.md#exit-codes) table in the README is the reference.
 - **`--quiet` reports failures only.** Which is what an unattended run wants: cron mails
   on output, so a run that says nothing when it worked is a run that only mails when it
   did not.
@@ -47,13 +47,13 @@ What no amount of that settles is which brokers can run with nobody watching.
 
 ## The five, and what each can do unattended
 
-| Broker | On a schedule | Why |
-| --- | --- | --- |
-| `tsp` | Yes | No credential in the daily path. Units are config, prices are a public file |
-| `snaptrade` | Yes, until the connection expires | An API key, and a browser step every few weeks to renew it |
-| `schwab529plan` | Yes | Posts a form with a stored credential. No browser, no bot detection, no session to keep |
-| `ally` | `--from-prices` only, and it is not a scrape | Ally honours no restored session, so a scrape needs a human every time |
-| `fidelity` | No — replace it with SnapTrade | Browser-backed behind bot detection and 2FA |
+| Broker          | On a schedule                                | Why                                                                                     |
+| --------------- | -------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `tsp`           | Yes                                          | No credential in the daily path. Units are config, prices are a public file             |
+| `snaptrade`     | Yes, until the connection expires            | An API key, and a browser step every few weeks to renew it                              |
+| `schwab529plan` | Yes                                          | Posts a form with a stored credential. No browser, no bot detection, no session to keep |
+| `ally`          | `--from-prices` only, and it is not a scrape | Ally honours no restored session, so a scrape needs a human every time                  |
+| `fidelity`      | No — replace it with SnapTrade               | Browser-backed behind bot detection and 2FA                                             |
 
 The first three are the uninteresting rows, and they are uninteresting on purpose: put
 them in a crontab and they work. The last two are the reason this file is longer than the
@@ -91,7 +91,7 @@ future commit fixes.
 
 **What can be scheduled is `--from-prices`, and it is a repriced stale unit count rather
 than a fresh scrape.** It opens no browser and signs in to nothing. It multiplies the
-units *the last signed-in run recorded* by today's published close:
+units _the last signed-in run recorded_ by today's published close:
 
 ```bash
 uv run stonksmith ally -M ally --from-prices --quiet
@@ -136,7 +136,7 @@ the documented way in, and it is a human at a browser by construction.
 
 The answer is not to schedule the scraper. It is to stop running it: SnapTrade covers
 Fidelity, and it is exactly what takes the account from attended to unattended.
-[*When two brokers can reach the same account*](brokers.md#when-two-brokers-can-reach-the-same-account)
+[_When two brokers can reach the same account_](brokers.md#when-two-brokers-can-reach-the-same-account)
 is the procedure.
 
 One thing to get right while switching, because it is the failure that looks like success:
@@ -216,8 +216,8 @@ run that would have told you is the one `--quiet` silenced.
 And two standing facts a schedule cannot state for itself. Where one account is
 reachable by two brokers — a Schwab-held 529 that `schwab529plan` scrapes and SnapTrade
 also reports — `exclude_accounts` has to name it, or the `Accounts` tab holds the money
-twice; see [*When two brokers can reach the same
-account*](brokers.md#when-two-brokers-can-reach-the-same-account). And a SnapTrade
+twice; see [_When two brokers can reach the same
+account_](brokers.md#when-two-brokers-can-reach-the-same-account). And a SnapTrade
 connection expires every few weeks, which surfaces as accounts quietly going missing
 from a run rather than as an error.
 
@@ -234,7 +234,7 @@ it.
 
 ### The freshness step is the one that catches silence
 
-Every line above reports when it *breaks*. None of them reports when it stops
+Every line above reports when it _breaks_. None of them reports when it stops
 happening, and this file opens by saying why that matters: a job that errors every night
 gets muted, and a muted job looks exactly like a job that is fine.
 
@@ -268,13 +268,13 @@ Three things it counts as stale, and the third is the one worth knowing about:
   day.
 - **An `As Of` older than the window.** The ordinary case.
 - **An `As Of` nothing could parse.** A parser that stopped matching its source can leave
-  text where a date belongs, and text sorts *above* every real date — so the broken
+  text where a date belongs, and text sorts _above_ every real date — so the broken
   account would otherwise read as the freshest one you own. The dashboard's staleness
   panel has this hole, because a Sheets `QUERY` compares strings; the check does not.
 
-  This covers dates that merely *look* right as well as obvious rubbish. `2026-13-45` is
+  This covers dates that merely _look_ right as well as obvious rubbish. `2026-13-45` is
   the right shape and is not a day, and comparing it as text puts it above any cutoff —
-  so a check that only matched the pattern would call it fresh. A padded ` 2026-08-10 `
+  so a check that only matched the pattern would call it fresh. A padded `2026-08-10`
   is reported too rather than quietly trimmed: nothing trims it on the tab either, so
   accepting it here would have the panel call that account stale while this called it
   fresh, and the two agreeing is the point.
@@ -317,7 +317,7 @@ What that file already says, and what it means here:
   real, does not drift younger as the snapshots accumulate, and is reported by nothing
   except the line the run prints on every account it values.
 - **TSP's whole unattended path is confirmed live.** The share price download, the DFAS
-  pay table's download *and* its parse, the contribution accrual and the database write
+  pay table's download _and_ its parse, the contribution accrual and the database write
   were all run without a human on 2026-08-10, and every one of those rows now reads `Yes`.
   This is the row a crontab can lean on hardest. One thing to carry into it anyway: DFAS
   fingerprints its callers, and that file says plainly that what works today is not a
