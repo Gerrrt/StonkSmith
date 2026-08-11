@@ -289,7 +289,7 @@ class Parser:
                 heading: str | None = self._heading_text(row=row)
 
                 if heading is not None:
-                    # A "Ezekiel -- Account 1234" banner above the rows it
+                    # A "Beneficiary A -- Account 1234" banner above the rows it
                     # applies to. Carried down rather than stored as a movement
                     # of zero dollars, which is what it became before.
                     section = heading or None

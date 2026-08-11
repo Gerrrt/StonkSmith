@@ -357,16 +357,16 @@ name the account in the `[SNAPTRADE]` section of `~/.stonksmith/stonksmith.conf`
 ```ini
 [SNAPTRADE]
 exclude_accounts =
-    Schwab / Ezekiel 529 Plan
+    Schwab / Beneficiary A 529 Plan
 ```
 
 One `Brokerage / Account` label per line, indented, as the sync prints them.
 Case, extra spaces and the spacing around the `/` do not matter, so
-`Schwab/Ezekiel 529 Plan` works too. The rest of the punctuation does, and so
-does the brokerage half — excluding one brokerage's account never silently
-drops another's of the same name. Exclusions are per account rather than per brokerage: only one of five
-Schwab accounts overlaps here, and dropping the other four to fix it would be
-worse than the double count.
+`Schwab/Beneficiary A 529 Plan` works too. The rest of the punctuation does,
+and so does the brokerage half — excluding one brokerage's account never
+silently drops another's of the same name. Exclusions are per account rather
+than per brokerage: only one of five Schwab accounts overlaps here, and
+dropping the other four to fix it would be worse than the double count.
 
 `--exclude 'Brokerage / Account'` does the same for one run and adds to the
 config rather than replacing it. The config is the right home for a standing
@@ -378,10 +378,11 @@ that a single reader over all the databases would make it unnecessary — that i
 could recognise the duplicate and drop one. It cannot, and the reason is
 structural rather than a missing feature. `account_key` is unique *within* one
 broker's database and means nothing outside it: the same Schwab-held 529 is
-`Schwab - Ezekiel 529 Plan` to SnapTrade and `Ezekiel` to the `schwab529plan`
-scraper. Different key, different external id, different display name, and
-nothing stored anywhere links the two. Any reader opening both files sees two
-unrelated accounts and would total them exactly as two tabs do.
+`Schwab - Beneficiary A 529 Plan` to SnapTrade and `Beneficiary A` to the
+`schwab529plan` scraper. Different key, different external id, different
+display name, and nothing stored anywhere links the two. Any reader opening
+both files sees two unrelated accounts and would total them exactly as two
+tabs do.
 
 Which broker owns which account is a fact about **your** setup that no amount of
 scraped data contains. This config is where you state it, and it stays.
@@ -439,7 +440,7 @@ the failure a positional read has and does not report.
 tries three rules in order: an exact match on normalised text, a shared trailing
 run of digits — Schwab masks its numbers, so `...4321` has to reconcile against
 `XXXX4321` — and finally a candidate name inside the hint, as in *Contributions
-for Ezekiel*. A hint matching two accounts is a collision rather than an
+for Beneficiary A*. A hint matching two accounts is a collision rather than an
 attribution and returns nothing, because a wrong answer here is
 indistinguishable from a right one afterwards.
 

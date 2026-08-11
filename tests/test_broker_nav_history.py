@@ -184,21 +184,21 @@ class RenderTests(unittest.TestCase):
     """Numbers are shown the way the rest of StonkSmith shows them."""
 
     def test_money_columns_are_formatted_as_currency(self) -> None:
-        rows = [(1, "Ezekiel", "2025-12-31", "2026-01-01", 1234.56, "USD")]
+        rows = [(1, "Beneficiary A", "2025-12-31", "2026-01-01", 1234.56, "USD")]
 
         cells = BrokerNavigator.render(category="snapshots", rows=rows)
 
         self.assertEqual(cells[0][4], "$1,234.56")
 
     def test_a_non_usd_value_does_not_get_a_dollar_sign(self) -> None:
-        rows = [(1, "Ezekiel", "2025-12-31", "2026-01-01", 1234.56, "CAD")]
+        rows = [(1, "Beneficiary A", "2025-12-31", "2026-01-01", 1234.56, "CAD")]
 
         cells = BrokerNavigator.render(category="snapshots", rows=rows)
 
         self.assertEqual(cells[0][4], "1,234.56 CAD")
 
     def test_a_missing_value_is_blank_rather_than_the_word_none(self) -> None:
-        rows = [(1, "Ezekiel", None, "2026-01-01", None, "USD")]
+        rows = [(1, "Beneficiary A", None, "2026-01-01", None, "USD")]
 
         cells = BrokerNavigator.render(category="snapshots", rows=rows)
 
@@ -206,7 +206,7 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(cells[0][4], "")
 
     def test_a_negative_delta_keeps_its_sign(self) -> None:
-        rows = [("Ezekiel", None, "2026-01-02", 900.0, 1000.0, -100.0, "USD")]
+        rows = [("Beneficiary A", None, "2026-01-02", 900.0, 1000.0, -100.0, "USD")]
 
         cells = BrokerNavigator.render(category="deltas", rows=rows)
 
@@ -215,7 +215,7 @@ class RenderTests(unittest.TestCase):
     def test_non_money_columns_are_left_alone(self) -> None:
         rows = [
             (
-                "Ezekiel",
+                "Beneficiary A",
                 "VTI",
                 "Vanguard",
                 3.0,
@@ -239,7 +239,7 @@ class RenderTests(unittest.TestCase):
     def test_a_holding_with_no_units_date_renders_an_empty_cell(self) -> None:
         rows = [
             (
-                "Ezekiel",
+                "Beneficiary A",
                 "VTI",
                 "Vanguard",
                 3.0,
@@ -268,7 +268,9 @@ class HistoryRowsTests(MemoryKeyringMixin, unittest.TestCase):
             create_db_engine(db_path=Path(self._dir.name) / "b.db"), "schwab529plan"
         )
         self.db.save_snapshot(
-            account=AccountIdentity(account_key="Ezekiel", display_name="Ezekiel"),
+            account=AccountIdentity(
+                account_key="Beneficiary A", display_name="Beneficiary A"
+            ),
             scraped_at="2026-01-01 00:00:00",
             value=1000.0,
             holdings=[Holding(fund_code="SWX", units=1.0, value=1000.0)],
@@ -300,7 +302,7 @@ class HistoryRowsTests(MemoryKeyringMixin, unittest.TestCase):
     def test_a_non_numeric_argument_is_refused_rather_than_ignored(self) -> None:
         # Silently showing everything would look like the filter worked.
         self.assertIsNone(
-            self.nav.history_rows(category="snapshots", argument="Ezekiel")
+            self.nav.history_rows(category="snapshots", argument="Beneficiary A")
         )
 
     def test_show_accounts_with_an_id_is_refused_rather_than_crashing(self) -> None:
@@ -463,7 +465,9 @@ class ExportWritesEverythingTests(MemoryKeyringMixin, unittest.TestCase):
         self.db = BrokerDatabase(
             create_db_engine(db_path=self.root / "b.db"), "schwab529plan"
         )
-        self.account = AccountIdentity(account_key="Ezekiel", display_name="Ezekiel")
+        self.account = AccountIdentity(
+            account_key="Beneficiary A", display_name="Beneficiary A"
+        )
         self.nav = BrokerNavigator(object(), self.db, "schwab529plan")
 
     def tearDown(self) -> None:
@@ -678,7 +682,9 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
         self.db = BrokerDatabase(
             create_db_engine(db_path=Path(self._dir.name) / "b.db"), "schwab529plan"
         )
-        self.account = AccountIdentity(account_key="Ezekiel", display_name="Ezekiel")
+        self.account = AccountIdentity(
+            account_key="Beneficiary A", display_name="Beneficiary A"
+        )
         self.nav = BrokerNavigator(object(), self.db, "schwab529plan")
 
     def tearDown(self) -> None:

@@ -94,7 +94,7 @@ class MatchAccountTests(unittest.TestCase):
     """A marker on a row resolves to one account, or to none."""
 
     CANDIDATES: ClassVar[list[list[str]]] = [
-        ["Ezekiel", "Ezekiel", "1000-1234"],
+        ["Beneficiary A", "Beneficiary A", "1000-1234"],
         ["Naomi", "Naomi", "1000-5678"],
     ]
 
@@ -103,7 +103,7 @@ class MatchAccountTests(unittest.TestCase):
 
     def test_case_and_punctuation_do_not_matter(self) -> None:
         self.assertEqual(
-            match_account(hint="  EZEKIEL:  ", candidates=self.CANDIDATES), 0
+            match_account(hint="  BENEFICIARY A:  ", candidates=self.CANDIDATES), 0
         )
 
     def test_a_masked_number_matches_on_its_tail(self) -> None:
@@ -124,7 +124,7 @@ class MatchAccountTests(unittest.TestCase):
 
     def test_a_name_is_matched_whole_not_as_a_fragment(self) -> None:
         self.assertIsNone(
-            match_account(hint="Naomiah", candidates=[["Naomi"], ["Ezekiel"]])
+            match_account(hint="Naomiah", candidates=[["Naomi"], ["Beneficiary A"]])
         )
 
     def test_a_marker_matching_two_accounts_matches_neither(self) -> None:
@@ -149,18 +149,22 @@ class AccountHintTests(unittest.TestCase):
     def test_the_row_beats_the_section_which_beats_the_caption(self) -> None:
         row: dict[str, Any] = {
             "Account": "ACC-1",
-            "Section": "Ezekiel",
+            "Section": "Beneficiary A",
             "Title": "History",
         }
 
         self.assertEqual(account_hint(row=row), "ACC-1")
-        self.assertEqual(account_hint(row={**row, "Account": None}), "Ezekiel")
+        self.assertEqual(account_hint(row={**row, "Account": None}), "Beneficiary A")
         self.assertEqual(
             account_hint(row={**row, "Account": None, "Section": None}), "History"
         )
 
     def test_the_caller_can_refuse_to_trust_the_caption(self) -> None:
-        row: dict[str, Any] = {"Account": None, "Section": None, "Title": "Ezekiel"}
+        row: dict[str, Any] = {
+            "Account": None,
+            "Section": None,
+            "Title": "Beneficiary A",
+        }
 
         self.assertIsNone(account_hint(row=row, keys=("Account", "Section")))
 
@@ -257,7 +261,7 @@ class OnLoginTransactionRoutingTests(unittest.TestCase):
 
     def _run(self, tx_div: str) -> tuple[_SnapshotDb, MagicMock]:
         panels: str = _account_panel(
-            "Ezekiel", "1000-1234", "$1,234.56"
+            "Beneficiary A", "1000-1234", "$1,234.56"
         ) + _account_panel("Naomi", "1000-5678", "$2,000.00")
 
         response = MagicMock()
@@ -298,12 +302,12 @@ class OnLoginTransactionRoutingTests(unittest.TestCase):
 
         self.assertEqual(len(db.snapshots), 2)
 
-        ezekiel, naomi = db.snapshots
-        self.assertEqual(ezekiel["account"].display_name, "Ezekiel")
+        beneficiary_a, naomi = db.snapshots
+        self.assertEqual(beneficiary_a["account"].display_name, "Beneficiary A")
         self.assertEqual(naomi["account"].display_name, "Naomi")
 
         self.assertEqual(
-            [tx.raw for tx in ezekiel["transactions"]], ["$10.00", "$11.00"]
+            [tx.raw for tx in beneficiary_a["transactions"]], ["$10.00", "$11.00"]
         )
         self.assertEqual([tx.raw for tx in naomi["transactions"]], ["$20.00"])
 
@@ -312,7 +316,9 @@ class OnLoginTransactionRoutingTests(unittest.TestCase):
             '<div id="txHistDiv"><table><thead><tr>'
             "<th>Account</th><th>Processed</th><th>Traded</th><th>Type</th>"
             "<th>Units</th><th>Price</th><th>Value</th>"
-            "</tr></thead><tbody>" + _tx_row("Ezekiel", "$10.00") + "</tbody></table>"
+            "</tr></thead><tbody>"
+            + _tx_row("Beneficiary A", "$10.00")
+            + "</tbody></table>"
             "</div>"
         )
 
@@ -393,7 +399,7 @@ class SingleAccountRegressionTests(unittest.TestCase):
     """A single-beneficiary 529 stored its transactions before and still does."""
 
     def test_the_one_account_takes_them_all(self) -> None:
-        panels: str = _account_panel("Ezekiel", "1000-1234", "$1,234.56")
+        panels: str = _account_panel("Beneficiary A", "1000-1234", "$1,234.56")
         tx_div: str = (
             '<div id="txHistDiv"><table><tbody>'
             + _tx_row(None, "$10.00")

@@ -213,12 +213,12 @@ class Schwab529InvestmentParsingTests(unittest.TestCase):
         return Parser(response=response).investment_data()
 
     def test_every_row_becomes_a_holding(self) -> None:
-        holdings = self.parse(_dashboard(_fund_table("Ezekiel", self.ROWS)))
+        holdings = self.parse(_dashboard(_fund_table("Beneficiary A", self.ROWS)))
 
         self.assertEqual(len(holdings), 3)
 
     def test_each_holding_keeps_its_own_fund(self) -> None:
-        holdings = self.parse(_dashboard(_fund_table("Ezekiel", self.ROWS)))
+        holdings = self.parse(_dashboard(_fund_table("Beneficiary A", self.ROWS)))
 
         self.assertEqual(
             [item["Fund Code"] for item in holdings], ["SWX01", "SWX02", "SWX03"]
@@ -229,18 +229,18 @@ class Schwab529InvestmentParsingTests(unittest.TestCase):
         )
 
     def test_table_level_totals_are_repeated_onto_every_row(self) -> None:
-        holdings = self.parse(_dashboard(_fund_table("Ezekiel", self.ROWS)))
+        holdings = self.parse(_dashboard(_fund_table("Beneficiary A", self.ROWS)))
 
         for holding in holdings:
             self.assertEqual(holding["Total Assets"], "$3,000.00")
             self.assertEqual(holding["Principal"], "$2,500.00")
             self.assertEqual(holding["Earnings"], "$500.00")
-            self.assertEqual(holding["Title"], "Ezekiel")
+            self.assertEqual(holding["Title"], "Beneficiary A")
 
     def test_holdings_carry_the_index_of_the_table_they_came_from(self) -> None:
         # This is what pairs a holding with its account: the page renders one
         # fund table per beneficiary, in the same order as the balance headings.
-        markup: str = _fund_table("Ezekiel", self.ROWS[:2]) + _fund_table(
+        markup: str = _fund_table("Beneficiary A", self.ROWS[:2]) + _fund_table(
             "Naomi", self.ROWS[2:]
         )
 
@@ -250,7 +250,7 @@ class Schwab529InvestmentParsingTests(unittest.TestCase):
         self.assertEqual(holdings[2]["Title"], "Naomi")
 
     def test_a_single_row_table_still_works(self) -> None:
-        holdings = self.parse(_dashboard(_fund_table("Ezekiel", self.ROWS[:1])))
+        holdings = self.parse(_dashboard(_fund_table("Beneficiary A", self.ROWS[:1])))
 
         self.assertEqual(len(holdings), 1)
         self.assertEqual(holdings[0]["Fund Code"], "SWX01")
@@ -260,7 +260,7 @@ class Schwab529InvestmentParsingTests(unittest.TestCase):
 
     def test_a_row_with_no_cells_is_skipped(self) -> None:
         markup: str = (
-            "<table><caption>Ezekiel</caption><tbody>"
+            "<table><caption>Beneficiary A</caption><tbody>"
             "<tr><th>Fund</th></tr>"
             "<tr><td>SWX01</td><td>Index 2030</td><td>1</td><td>$1.00</td>"
             "<td>$1.00</td></tr>"
@@ -379,10 +379,10 @@ class Schwab529TransactionParsingTests(unittest.TestCase):
 
     def test_a_caption_is_read_as_the_tables_title(self) -> None:
         rows = self.parse(
-            _tx_div(_tx_table(_tx_row(_TX_ROW), caption="Ezekiel 529 Plan"))
+            _tx_div(_tx_table(_tx_row(_TX_ROW), caption="Beneficiary A 529 Plan"))
         )
 
-        self.assertEqual(rows[0]["Title"], "Ezekiel 529 Plan")
+        self.assertEqual(rows[0]["Title"], "Beneficiary A 529 Plan")
 
     def test_an_account_column_is_read_by_its_header(self) -> None:
         headers = ("Account", "Processed", "Traded", "Type", "Units", "Price", "Value")
@@ -419,7 +419,7 @@ class Schwab529TransactionParsingTests(unittest.TestCase):
 
     def test_a_section_heading_is_carried_onto_the_rows_beneath_it(self) -> None:
         body: str = (
-            '<tr><td colspan="6">Ezekiel -- Account 1234</td></tr>'
+            '<tr><td colspan="6">Beneficiary A -- Account 1234</td></tr>'
             + _tx_row(_TX_ROW)
             + '<tr><td colspan="6">Naomi -- Account 5678</td></tr>'
             + _tx_row(_TX_ROW)
@@ -428,7 +428,7 @@ class Schwab529TransactionParsingTests(unittest.TestCase):
         rows = self.parse(_tx_div(_tx_table(body)))
 
         self.assertEqual(len(rows), 2, "a heading is not itself a movement")
-        self.assertEqual(rows[0]["Section"], "Ezekiel -- Account 1234")
+        self.assertEqual(rows[0]["Section"], "Beneficiary A -- Account 1234")
         self.assertEqual(rows[1]["Section"], "Naomi -- Account 5678")
 
     def test_an_account_attribute_on_the_row_is_read(self) -> None:

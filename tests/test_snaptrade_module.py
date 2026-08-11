@@ -606,8 +606,8 @@ class ExcludedAccountTests(unittest.TestCase):
 
     def test_an_excluded_account_is_skipped(self) -> None:
         rows, skipped = select(
-            [self.account_at("Schwab", "Ezekiel 529 Plan")],
-            excluded=frozenset({"schwab / ezekiel 529 plan"}),
+            [self.account_at("Schwab", "Beneficiary A 529 Plan")],
+            excluded=frozenset({"schwab / beneficiary a 529 plan"}),
         )
 
         self.assertEqual(rows, [])
@@ -620,10 +620,10 @@ class ExcludedAccountTests(unittest.TestCase):
         # than the double count.
         rows, _ = select(
             [
-                self.account_at("Schwab", "Ezekiel 529 Plan"),
+                self.account_at("Schwab", "Beneficiary A 529 Plan"),
                 self.account_at("Schwab", "Garrett IRA"),
             ],
-            excluded=frozenset({"schwab / ezekiel 529 plan"}),
+            excluded=frozenset({"schwab / beneficiary a 529 plan"}),
         )
 
         self.assertEqual([row["Account"] for row in rows], ["Garrett IRA"])
@@ -631,7 +631,7 @@ class ExcludedAccountTests(unittest.TestCase):
     def test_exclusion_is_reported_before_any_other_reason(self) -> None:
         # An excluded account is not broken, it belongs to somebody else.
         # Reporting it as stale first sends the operator hunting a non-problem.
-        stale = self.account_at("Schwab", "Ezekiel 529 Plan")
+        stale = self.account_at("Schwab", "Beneficiary A 529 Plan")
         stale["sync_status"] = {
             "holdings": {
                 "last_successful_sync": "2026-07-01T11:00:00+00:00",
@@ -639,7 +639,9 @@ class ExcludedAccountTests(unittest.TestCase):
             }
         }
 
-        _, skipped = select([stale], excluded=frozenset({"schwab / ezekiel 529 plan"}))
+        _, skipped = select(
+            [stale], excluded=frozenset({"schwab / beneficiary a 529 plan"})
+        )
 
         self.assertIn("another broker covers it", skipped[0])
         self.assertNotIn("last synced", skipped[0])
@@ -648,27 +650,31 @@ class ExcludedAccountTests(unittest.TestCase):
         # One side is typed into a config file by hand. A capital letter
         # silently restoring the double count is the failure to avoid.
         rows, _ = select(
-            [self.account_at("Schwab", "Ezekiel 529 Plan")],
-            excluded=frozenset({normalize_label("  SCHWAB  /  ezekiel 529 PLAN ")}),
+            [self.account_at("Schwab", "Beneficiary A 529 Plan")],
+            excluded=frozenset(
+                {normalize_label("  SCHWAB  /  beneficiary a 529 PLAN ")}
+            ),
         )
 
         self.assertEqual(rows, [])
 
     def test_the_separator_may_be_written_without_spaces(self) -> None:
         # The one piece of punctuation this format demands is the one a person
-        # retypes, so "Schwab/Ezekiel 529 Plan" has to match the spaced form
+        # retypes, so "Schwab/Beneficiary A 529 Plan" has to match the spaced form
         # the sync prints. Collapsing whitespace alone leaves them different.
         rows, _ = select(
-            [self.account_at("Schwab", "Ezekiel 529 Plan")],
-            excluded=frozenset({normalize_label("Schwab/Ezekiel 529 Plan")}),
+            [self.account_at("Schwab", "Beneficiary A 529 Plan")],
+            excluded=frozenset({normalize_label("Schwab/Beneficiary A 529 Plan")}),
         )
 
         self.assertEqual(rows, [])
 
     def test_the_separator_may_be_written_with_extra_spaces(self) -> None:
         rows, _ = select(
-            [self.account_at("Schwab", "Ezekiel 529 Plan")],
-            excluded=frozenset({normalize_label("Schwab   /   Ezekiel 529 Plan")}),
+            [self.account_at("Schwab", "Beneficiary A 529 Plan")],
+            excluded=frozenset(
+                {normalize_label("Schwab   /   Beneficiary A 529 Plan")}
+            ),
         )
 
         self.assertEqual(rows, [])
@@ -687,8 +693,8 @@ class ExcludedAccountTests(unittest.TestCase):
         # The label carries the brokerage precisely so excluding one
         # brokerage's account cannot silently drop another's.
         rows, _ = select(
-            [self.account_at("Fidelity", "Ezekiel 529 Plan")],
-            excluded=frozenset({"schwab / ezekiel 529 plan"}),
+            [self.account_at("Fidelity", "Beneficiary A 529 Plan")],
+            excluded=frozenset({"schwab / beneficiary a 529 plan"}),
         )
 
         self.assertEqual(len(rows), 1)
@@ -709,11 +715,11 @@ class ExclusionSourcesTests(unittest.TestCase):
     def test_the_config_alone_is_used(self) -> None:
         with patch(
             "etc.config.get_snaptrade_excluded_accounts",
-            return_value=["Schwab / Ezekiel 529 Plan"],
+            return_value=["Schwab / Beneficiary A 529 Plan"],
         ):
             self.assertEqual(
                 SnapTradeModule.excluded(context=self.context(exclude=None)),
-                frozenset({"schwab / ezekiel 529 plan"}),
+                frozenset({"schwab / beneficiary a 529 plan"}),
             )
 
     def test_the_flag_adds_to_the_config_rather_than_replacing_it(self) -> None:
@@ -721,13 +727,15 @@ class ExclusionSourcesTests(unittest.TestCase):
         # the one-off. Replacing would silently drop the standing one.
         with patch(
             "etc.config.get_snaptrade_excluded_accounts",
-            return_value=["Schwab / Ezekiel 529 Plan"],
+            return_value=["Schwab / Beneficiary A 529 Plan"],
         ):
             self.assertEqual(
                 SnapTradeModule.excluded(
                     context=self.context(exclude=["Fidelity / Individual - TOD"])
                 ),
-                frozenset({"schwab / ezekiel 529 plan", "fidelity / individual - tod"}),
+                frozenset(
+                    {"schwab / beneficiary a 529 plan", "fidelity / individual - tod"}
+                ),
             )
 
     def test_blank_entries_are_dropped(self) -> None:

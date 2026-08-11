@@ -187,7 +187,7 @@ def match_account(hint: str, candidates: list[list[str]]) -> int | None:
     an exact match on the normalised text, a shared trailing run of digits
     (Schwab masks account numbers, so ``...4321`` has to match ``XXXX4321``),
     and finally a candidate name appearing inside the hint (``Contributions
-    for Ezekiel``).
+    for Beneficiary A``).
 
     A hint that matches two accounts is not an attribution, it is a collision,
     and it returns None for the same reason the multi-account case stores

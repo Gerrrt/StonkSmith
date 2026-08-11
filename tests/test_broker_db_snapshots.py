@@ -30,10 +30,10 @@ from etc.infrastructure import create_db_engine
 from etc.records import AccountIdentity, Holding, Transaction
 from keyring_isolation import MemoryKeyringMixin
 
-EZEKIEL = AccountIdentity(
-    account_key="Ezekiel",
-    display_name="Ezekiel",
-    beneficiary="Ezekiel A",
+BENEFICIARY_A = AccountIdentity(
+    account_key="Beneficiary A",
+    display_name="Beneficiary A",
+    beneficiary="Beneficiary A Surname",
     kind="529",
     external_id="ACC-1",
 )
@@ -97,7 +97,7 @@ class _SnapshotTestCase(MemoryKeyringMixin, unittest.TestCase):
 
     def save(self, **overrides: Any) -> int:
         kwargs: dict[str, Any] = {
-            "account": EZEKIEL,
+            "account": BENEFICIARY_A,
             "scraped_at": "2026-01-01 00:00:00",
             "value": 1234.56,
             "raw_value": "$1,234.56",
@@ -162,13 +162,15 @@ class WriteTests(_SnapshotTestCase):
         # quieter page produced would lose what the database already had.
         self.save()
         self.db.save_snapshot(
-            account=AccountIdentity(account_key="Ezekiel", display_name="Ezekiel"),
+            account=AccountIdentity(
+                account_key="Beneficiary A", display_name="Beneficiary A"
+            ),
             scraped_at="2026-01-02 00:00:00",
             value=1300.0,
         )
 
         account = self.db.get_accounts()[0]
-        self.assertEqual(account[3], "Ezekiel A", "beneficiary")
+        self.assertEqual(account[3], "Beneficiary A Surname", "beneficiary")
         self.assertEqual(account[4], "529", "kind")
 
 
@@ -469,7 +471,7 @@ class ReadTests(_SnapshotTestCase):
 
     def test_save_transactions_works_without_a_snapshot(self) -> None:
         stored = self.db.save_transactions(
-            account=EZEKIEL,
+            account=BENEFICIARY_A,
             timestamp="2026-01-01 00:00:00",
             rows=[CONTRIBUTION],
         )
@@ -561,7 +563,7 @@ class CurrentTransactionsTests(_SnapshotTestCase):
 
         row = self.db.get_current_transactions()[0]
 
-        self.assertEqual(row[0], "Ezekiel")
+        self.assertEqual(row[0], "Beneficiary A")
         self.assertEqual(len(row), 12)
 
     def test_it_returns_every_movement_however_many_there_are(self) -> None:

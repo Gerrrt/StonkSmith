@@ -93,7 +93,7 @@ def broker_args(
         help=(
             "Do not sync this account, because another broker already covers "
             "it; repeatable. Use the label the sync prints, e.g. "
-            "'Schwab / Ezekiel 529 Plan'. Adds to exclude_accounts in the "
+            "'Schwab / Beneficiary A 529 Plan'. Adds to exclude_accounts in the "
             "[SNAPTRADE] section of the config, which is the better place for "
             "a standing overlap since a cron run has nobody to remember it"
         ),

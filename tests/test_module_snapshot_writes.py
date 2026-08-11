@@ -200,7 +200,7 @@ class Schwab529WriteTests(unittest.TestCase):
     """Beneficiaries, holdings and transactions, not just a balance."""
 
     BENEFICIARIES: ClassVar[list[dict[str, Any]]] = [
-        {"Title": "Beneficiary:", "Name": "Ezekiel", "Account": "ACC-1"},
+        {"Title": "Beneficiary:", "Name": "Beneficiary A", "Account": "ACC-1"},
         {"Title": "Beneficiary:", "Name": "Naomi", "Account": "ACC-2"},
     ]
     BALANCES: ClassVar[list[dict[str, Any]]] = [
@@ -311,7 +311,7 @@ class Schwab529WriteTests(unittest.TestCase):
         log = _CapturingLog()
         rows: list[dict[str, Any]] = [
             {**self.TRANSACTIONS[0], "Account": "Naomi"},
-            {**self.TRANSACTIONS[0], "Account": "Ezekiel"},
+            {**self.TRANSACTIONS[0], "Account": "Beneficiary A"},
         ]
 
         attributed = self.attribute(rows, self.BALANCES, log)
@@ -326,7 +326,7 @@ class Schwab529WriteTests(unittest.TestCase):
         # different accounts, and a four-digit tail is what a human matches on.
         log = _CapturingLog()
         beneficiaries: list[dict[str, Any]] = [
-            {"Name": "Ezekiel", "Account": "1000-1234"},
+            {"Name": "Beneficiary A", "Account": "1000-1234"},
             {"Name": "Naomi", "Account": "1000-5678"},
         ]
 
@@ -343,7 +343,7 @@ class Schwab529WriteTests(unittest.TestCase):
     def test_a_section_heading_attributes_the_rows_beneath_it(self) -> None:
         log = _CapturingLog()
         rows: list[dict[str, Any]] = [
-            {**self.TRANSACTIONS[0], "Section": "Contributions for Ezekiel"},
+            {**self.TRANSACTIONS[0], "Section": "Contributions for Beneficiary A"},
             {**self.TRANSACTIONS[0], "Section": "Contributions for Naomi"},
         ]
 
@@ -356,7 +356,7 @@ class Schwab529WriteTests(unittest.TestCase):
         # history to protect nothing.
         log = _CapturingLog()
         rows: list[dict[str, Any]] = [
-            {**self.TRANSACTIONS[0], "Account": "Ezekiel"},
+            {**self.TRANSACTIONS[0], "Account": "Beneficiary A"},
             {**self.TRANSACTIONS[0], "Account": "Someone Else"},
         ]
 
@@ -426,8 +426,8 @@ class Schwab529WriteTests(unittest.TestCase):
         # their names, is the exact invention this refuses to make.
         log = _CapturingLog()
         rows: list[dict[str, Any]] = [
-            {**self.TRANSACTIONS[0], "Table": 0, "Title": "Ezekiel"},
-            {**self.TRANSACTIONS[0], "Table": 0, "Title": "Ezekiel"},
+            {**self.TRANSACTIONS[0], "Table": 0, "Title": "Beneficiary A"},
+            {**self.TRANSACTIONS[0], "Table": 0, "Title": "Beneficiary A"},
         ]
 
         attributed = self.attribute(rows, self.BALANCES, log)
@@ -438,7 +438,7 @@ class Schwab529WriteTests(unittest.TestCase):
     def test_a_caption_per_table_is_trusted(self) -> None:
         log = _CapturingLog()
         rows: list[dict[str, Any]] = [
-            {**self.TRANSACTIONS[0], "Table": 0, "Title": "Ezekiel"},
+            {**self.TRANSACTIONS[0], "Table": 0, "Title": "Beneficiary A"},
             {**self.TRANSACTIONS[0], "Table": 1, "Title": "Naomi"},
         ]
 
@@ -459,7 +459,7 @@ class Schwab529WriteTests(unittest.TestCase):
 
         for balances in (self.BALANCES[:1], self.BALANCES):
             Schwab529Module.attribute_transactions(
-                transactions=[{**self.TRANSACTIONS[0], "Account": "Ezekiel"}]
+                transactions=[{**self.TRANSACTIONS[0], "Account": "Beneficiary A"}]
                 if len(balances) > 1
                 else self.TRANSACTIONS,
                 balances=balances,
