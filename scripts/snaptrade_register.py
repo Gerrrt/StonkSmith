@@ -329,6 +329,11 @@ def main() -> int:
             "No SnapTrade consumer key in the OS keyring under "
             f"'{keyring_key(broker=BROKER_NAME, username=CONSUMER_KEY_ACCOUNT)}'. "
             "Run this script's 'store' command, or export SNAPTRADE_CONSUMER_KEY."
+            "\n\nIf 'store' has already been run and this works in your own "
+            "shell, the key is there and this context cannot see it -- which is "
+            "what a scheduled run on macOS looks like, because the login "
+            "keychain is not visible outside the GUI session. See "
+            "docs/scheduling.md."
         )
 
     client: Any = _client(client_id, consumer_key)

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    A LaunchAgent for the nightly run. macOS only; see docs/scheduling.md.
+
+    Two values below have to be edited, and both are the same ones a crontab
+    gets wrong. There is no way for a committed file to know either.
+
+      ProgramArguments   the absolute path to scripts/stonksmith-nightly.sh in
+                         your checkout. The script finds the repository from its
+                         own location, so this is the only path to set.
+
+      PATH               must contain uv. `which uv` says where yours is; uv's
+                         installer puts it in ~/.local/bin, which is not in the
+                         list below, and launchd does no more tilde expansion
+                         here than cron does.
+
+    Install, from the repository:
+
+        mkdir -p ~/Library/LaunchAgents
+        sed "s|/PATH/TO/StonkSmith|$PWD|; s|^\(.*<string>\)/usr/local/bin|\1$(dirname "$(command -v uv)"):/usr/local/bin|" \
+            scripts/com.stonksmith.nightly.plist > ~/Library/LaunchAgents/com.stonksmith.nightly.plist
+        launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.stonksmith.nightly.plist
+
+    `launchctl bootout gui/$(id -u)/com.stonksmith.nightly` removes it, and
+    `launchctl kickstart -p gui/$(id -u)/com.stonksmith.nightly` runs it now
+    rather than waiting for the evening, which is how to test it.
+
+    gui/$(id -u) rather than `launchctl load` is the point of the whole file: it
+    bootstraps the agent into the GUI login session, which is the context that
+    can read the login keychain. A system-level agent, or cron, cannot.
+
+    StartCalendarInterval fires on wake if the machine was asleep at the time,
+    which cron does not. On a laptop that is closed at 18:30 it is the
+    difference between a run that happens late and a run that never happens.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stonksmith.nightly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/PATH/TO/StonkSmith/scripts/stonksmith-nightly.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <!-- Weekdays after the close, and late enough that TSP has published.
+         Weekday 1 is Monday; 0 and 7 are both Sunday. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>30</integer></dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/stonksmith-nightly.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/stonksmith-nightly.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
