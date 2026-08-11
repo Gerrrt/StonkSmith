@@ -233,6 +233,13 @@ Three things it counts as stale, and the third is the one worth knowing about:
   account would otherwise read as the freshest one you own. The dashboard's staleness
   panel has this hole, because a Sheets `QUERY` compares strings; the check does not.
 
+  This covers dates that merely *look* right as well as obvious rubbish. `2026-13-45` is
+  the right shape and is not a day, and comparing it as text puts it above any cutoff —
+  so a check that only matched the pattern would call it fresh. A padded ` 2026-08-10 `
+  is reported too rather than quietly trimmed: nothing trims it on the tab either, so
+  accepting it here would have the panel call that account stale while this called it
+  fresh, and the two agreeing is the point.
+
 ### What the mail will look like
 
 `--quiet` lowers the log level. It does not suppress the progress bar, which is written to

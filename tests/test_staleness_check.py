@@ -77,6 +77,42 @@ class RuleTests(unittest.TestCase):
             with self.subTest(unreadable=unreadable):
                 self.assertTrue(is_stale(as_of=unreadable, cutoff=self.cutoff))
 
+    def test_a_date_shaped_like_one_and_not_being_one_is_stale(self) -> None:
+        # The shape check alone let these through, and they are the worst case
+        # there is: string-compared, "2026-13-45" sorts above the cutoff and read
+        # as *fresh*, so an account whose dates had gone wrong looked like the
+        # healthiest one owned -- the exact failure this rule exists to catch,
+        # surviving inside it. A pattern is not a parse.
+        for shaped in ("2026-13-45", "2026-02-30", "2026-00-00", "0000-00-00"):
+            with self.subTest(shaped=shaped):
+                self.assertTrue(is_stale(as_of=shaped, cutoff=self.cutoff))
+
+    def test_describing_one_of_those_does_not_raise(self) -> None:
+        # date.fromisoformat raises on them, and the raise happened while
+        # printing the report -- so the check died on the very account it had
+        # just caught, and the run got a traceback instead of a finding.
+        for shaped in ("2026-13-45", "2026-02-30", "2026-00-00"):
+            with self.subTest(shaped=shaped):
+                self.assertIn(
+                    "nothing could read", stale_reason(as_of=shaped, today=TODAY)
+                )
+
+    def test_a_date_that_does_not_compare_as_text_is_stale(self) -> None:
+        # date.fromisoformat accepts these; the dashboard's QUERY does not
+        # compare them the way it compares a hyphenated date. Accepting one here
+        # would have the panel call an account stale while the check called it
+        # fresh, which is the one thing this rule is shared to prevent.
+        for spelling in ("20260810", "2026-W32-1"):
+            with self.subTest(spelling=spelling):
+                self.assertTrue(is_stale(as_of=spelling, cutoff=self.cutoff))
+
+    def test_a_padded_date_is_reported_rather_than_tidied(self) -> None:
+        # Not stripped, deliberately. Nothing tidies it on the tab either -- the
+        # panel compares what is stored -- so accepting " 2026-08-10 " as fresh
+        # would announce it stale on the dashboard and fresh here. Reporting it
+        # says something true: whatever wrote it skipped a normalization.
+        self.assertTrue(is_stale(as_of=" 2026-08-10 ", cutoff=self.cutoff))
+
     def test_each_kind_of_stale_says_which_kind_it_is(self) -> None:
         # A reader told only "stale" is being sent to look at the wrong thing.
         self.assertEqual(stale_reason(as_of=None, today=TODAY), "no as-of date")
@@ -123,6 +159,23 @@ class OrderingTests(unittest.TestCase):
             [row.broker for row in found],
             ["ally", "snaptrade", "tsp", "fidelity"],
         )
+
+    def test_a_date_shaped_like_one_sorts_with_the_undated(self) -> None:
+        # It is reported as carrying no readable date, so sorting it in among
+        # the rows that do have one leaves the list contradicting its own
+        # entries -- and puts the account whose dates went wrong below the ones
+        # that are merely old.
+        holds = Portfolio(
+            accounts=(
+                account(broker="tsp", as_of="2026-01-31"),
+                account(broker="snaptrade", as_of="2026-13-45"),
+            )
+        )
+        found = stale_accounts(
+            portfolio=holds, cutoff=stale_cutoff(today=TODAY, days=STALE_DAYS)
+        )
+
+        self.assertEqual([row.broker for row in found], ["snaptrade", "tsp"])
 
     def test_a_fresh_account_is_not_in_the_list(self) -> None:
         holds = Portfolio(

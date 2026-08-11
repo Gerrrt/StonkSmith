@@ -253,6 +253,47 @@ _ISO_DATE: re.Pattern[str] = re.compile(pattern=ISO_DATE_PATTERN)
 STALE_DAYS: int = 7
 
 
+def _as_date(as_of: str | None) -> dt.date | None:
+    """
+    An As Of as a real date, or None when it is not one.
+
+    Two gates, and both are load-bearing.
+
+    The pattern first, because everything downstream compares these as *text*:
+    the dashboard's staleness QUERY does a string comparison, and
+    date.fromisoformat accepts spellings that do not compare that way --
+    "20260810" parses and sorts below every hyphenated date. Admitting one here
+    would make the panel and the check disagree about the same account, which is
+    the single thing this rule exists to prevent.
+
+    Then the parse, because a pattern is not a parse. "2026-13-45" matches
+    ^\\d{4}-\\d{2}-\\d{2}$ and is not a date, and the shape check alone let it
+    through: string-compared it sorts above the cutoff and read as *fresh*, so an
+    account whose dates had gone wrong looked like the healthiest one owned. That
+    is the failure this function was written to catch, surviving inside it.
+
+    Whitespace is deliberately not stripped. A padded value is not tidied here
+    because nothing tidies it on the tab either -- the panel compares what is
+    stored -- so accepting " 2026-08-10 " as fresh would announce it as stale on
+    the dashboard and fresh in the check. Reporting it is the conservative half
+    of that choice and says something true: whatever wrote it skipped a
+    normalization.
+    :param as_of: The date the source says the value is for
+    :return: The date, or None when it cannot be read as one
+    :rtype: dt.date | None
+    """
+
+    if not as_of or not _ISO_DATE.match(string=as_of):
+        return None
+
+    try:
+        return dt.date.fromisoformat(as_of)
+
+    except ValueError:
+        # Shaped like a date and not one: month 13, day 30 of February, zeroes.
+        return None
+
+
 def is_stale(as_of: str | None, cutoff: str) -> bool:
     """
     Whether an account's As Of has gone stale, failing closed three ways.
@@ -268,17 +309,21 @@ def is_stale(as_of: str | None, cutoff: str) -> bool:
     normalize sorts above every real one and reads as fresher than today. The
     dashboard's QUERY has exactly this hole -- it is the same reason
     _date_cases() matches Processed On against ISO_DATE_PATTERN rather than
-    trusting an ordering -- and Python can close it here.
+    trusting an ordering -- and Python can close it here. _as_date is what
+    decides, because matching the shape is not the same as being a date.
     :param as_of: The date the source says the value is for
     :param cutoff: The oldest date that still counts as fresh, ISO
     :return: True when the account cannot be shown to be fresh
     :rtype: bool
     """
 
-    if not as_of or not _ISO_DATE.match(string=as_of):
+    if _as_date(as_of=as_of) is None:
         return True
 
-    return as_of < cutoff
+    # Compared as text rather than as dates, because _as_date has already
+    # guaranteed both are YYYY-MM-DD -- which is the form the dashboard's QUERY
+    # compares, so the two cannot part company over an account.
+    return (as_of or "") < cutoff
 
 
 def stale_reason(as_of: str | None, today: dt.date) -> str:
@@ -299,12 +344,12 @@ def stale_reason(as_of: str | None, today: dt.date) -> str:
     if not as_of:
         return "no as-of date"
 
-    if not _ISO_DATE.match(string=as_of):
+    dated: dt.date | None = _as_date(as_of=as_of)
+
+    if dated is None:
         return f"an as-of date nothing could read: {as_of!r}"
 
-    days: int = (today - dt.date.fromisoformat(as_of)).days
-
-    return f"as of {as_of}, {days} days old"
+    return f"as of {as_of}, {(today - dated).days} days old"
 
 
 def stale_cutoff(today: dt.date, days: int = STALE_DAYS) -> str:
@@ -1284,7 +1329,10 @@ def stale_accounts(portfolio: Portfolio, cutoff: str) -> tuple[AccountRow, ...]:
     ]
 
     def order(row: AccountRow) -> tuple[int, str, str]:
-        dated: bool = bool(row.as_of) and bool(_ISO_DATE.match(string=row.as_of or ""))
+        # The same parse is_stale and stale_reason use, not the shape alone: a
+        # row reported as carrying no readable date must not then be sorted in
+        # among the ones that do, or the list contradicts its own entries.
+        dated: bool = _as_date(as_of=row.as_of) is not None
 
         return (1 if dated else 0, row.as_of or "", row.broker)
 
