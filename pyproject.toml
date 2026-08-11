@@ -33,7 +33,13 @@ stonksmith = "main:cli_entry"
 stonksmithdb = "etc.stonksmithdb:main"
 
 [dependency-groups]
-dev = [ "pytest>=9.0.3", "ruff>=0.15.11", "ty>=0.0.32" ]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.0",
+    "pytest-xdist>=3.8",
+    "ruff>=0.15.11",
+    "ty>=0.0.32",
+]
 
 [build-system]
 build-backend = "hatchling.build"
@@ -44,22 +50,99 @@ include = [ "src" ]
 sources = [ "src" ]
 
 [tool.pytest.ini_options]
+addopts = [ "-ra", "--strict-config", "--strict-markers" ]
+# A warning the suite does not notice is a warning that becomes a breakage on
+# some later dependency bump, so they are errors here.
+#
+# ResourceWarning is the one exception, and it is masking something real: tests
+# that build an engine with create_db_engine() close the session via
+# shutdown_db() but never dispose the engine, so SQLAlchemy's pool holds the
+# sqlite connections until the garbage collector finalises them -- 163 of them
+# per run. It surfaces as a warning rather than a failure because it is raised
+# during finalisation, outside any test. Removing this line is the check that
+# the leak is actually fixed; do not remove it before then, or the suite fails
+# at teardown with PytestUnraisableExceptionWarning.
+filterwarnings = [ "error", "ignore::ResourceWarning" ]
 pythonpath = [ "src" ]
 testpaths = [ "tests" ]
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+# The template is never executed; it exists to be read and copied.
+omit = [ "src/modules/example.py" ]
+source = [ "src" ]
+
+[tool.coverage.report]
+exclude_also = [ "if TYPE_CHECKING:", "raise NotImplementedError" ]
+show_missing = true
 
 [tool.ruff]
+# 88 is ruff's default; stated so a future default change cannot silently
+# reflow every file in the repo.
+line-length = 88
 src = [ "src", "tests" ]
 target-version = "py314"
 
+[tool.ruff.format]
+docstring-code-format = true
+
 [tool.ruff.lint]
-# Correctness-focused. Docstring (D) and annotation (ANN) rules are deliberately
-# left off: the codebase predates linting and enabling them produces hundreds of
-# findings that would keep CI permanently red without catching real bugs.
-select = [ "B", "C4", "E", "F", "I", "RUF", "SIM", "UP", "W" ]
+# Correctness-focused, plus a ratchet of rule sets that were already clean on
+# src/ when they were added -- they cost nothing to adopt and stop the
+# corresponding mistakes from ever landing.
+#
+# Docstring (D) and annotation (ANN) rules are deliberately left off. D is 1505
+# findings and the payoff is presentational. ANN is 79 -- affordable, but the
+# gap is concentrated in older files and closing it is its own piece of work
+# rather than a side effect of this list.
+#
+# ISC001 is documented as conflicting with the formatter: it can flag string
+# concatenation the formatter itself produced. ISC is clean today and ruff
+# raises no warning for this pairing, so the whole group is selected. If that
+# conflict ever surfaces, ignore ISC001 and keep ISC002/ISC003, which are where
+# the value is.
+select = [
+    # correctness
+    "B",
+    "C4",
+    "E",
+    "F",
+    "I",
+    "RUF",
+    "SIM",
+    "UP",
+    "W",
+    # ratchet
+    "ASYNC",
+    "ERA",
+    "EXE",
+    "FA",
+    "ICN",
+    "INP",
+    "INT",
+    "ISC",
+    "LOG",
+    "PIE",
+    "PYI",
+    "Q",
+    "RSE",
+    "SLF",
+    "SLOT",
+    "TID",
+    "YTT",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # The template is illustrative; its unused args are the point.
 "src/modules/example.py" = [ "B", "RUF" ]
+# INP001 wants an __init__.py here. It should not have one: these are hand-run
+# operator tools, not part of the shipped package -- the same reason [tool.ty.src]
+# excludes them.
+"scripts/*" = [ "INP" ]
+# Reaching past an underscore is what a test of internal behaviour does. SLF
+# stays on for src/, which is where it earns its place.
+"tests/*" = [ "SLF" ]
 
 [tool.ty.environment]
 root = [ "./src" ]

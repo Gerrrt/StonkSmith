@@ -38,4 +38,8 @@ jobs:
         # backend probe from picking something interactive.
         env:
           PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
-        run: uv run pytest -q
+        # The floor is the measured baseline (87.69%) rounded down, not a target.
+        # It lives here rather than in [tool.coverage.report] so that running
+        # `pytest --cov` over a handful of files locally does not fail on it.
+        # Raise it when the real number moves; never lower it to make CI pass.
+        run: uv run pytest -q --cov --cov-fail-under=87

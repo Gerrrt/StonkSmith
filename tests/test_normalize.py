@@ -88,7 +88,11 @@ class ToAmountTests(unittest.TestCase):
 
     def test_junk_never_raises(self) -> None:
         for junk in ("abc", "$", "..", "1.2.3", object()):
-            with self.subTest(junk=junk):
+            # repr(), not the value: pytest-xdist ships subTest parameters back
+            # to the controller and cannot serialise a bare object(), which
+            # failed the test under -n auto for a reason having nothing to do
+            # with to_amount(). The object itself still goes to the function.
+            with self.subTest(junk=repr(junk)):
                 self.assertIsNone(to_amount(junk))
 
 
