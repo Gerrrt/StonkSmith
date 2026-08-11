@@ -290,6 +290,11 @@ timer or CI step can tell whether the sync worked.
 | `1` | The run did not complete: unknown broker or module, could not connect or log in, a module reported it did nothing, only some of the requested modules loaded, or nothing reached the database. |
 | `130` | Interrupted (128 + SIGINT). Distinct from `1` so a scheduler can page on a real failure and shrug at a human pressing Ctrl-C. |
 
+`stonksmithdb <command>` reports the same way: `0` when the command did its work,
+`1` when it did not. For `stale` that means `1` when any account has gone stale
+or a database would not open — a status a crontab can act on, for the one failure
+none of the codes above can catch, because nothing broke.
+
 A partial module load still runs the modules that did load — partial data beats
 none — but reports `1` rather than claiming success.
 
@@ -309,6 +314,16 @@ uv run stonksmithdb
 
 The tables, the columns, the shell's commands and what a migration does on open
 are [`docs/database.md`](docs/database.md).
+
+Ask whether anything has quietly stopped updating — no login, no network:
+
+```bash
+uv run stonksmithdb stale
+```
+
+It exits `1` when any account's as-of date is missing, unreadable or more than a
+week old. That is the one question a schedule cannot otherwise ask: every other
+step reports when it *breaks*, and none reports when it stops happening.
 
 ### The sheet
 

@@ -66,9 +66,14 @@ from etc.portfolio import (
     HOLDING_COLUMNS,
     ISO_DATE_PATTERN,
     NET_WORTH_COLUMNS,
+    # Re-exported by being imported: STALE_DAYS lived here before the freshness
+    # check needed it somewhere gspread-free, and etc.portfolio_sheet.STALE_DAYS
+    # still resolves for anything that reads it from its old home.
+    STALE_DAYS,
     TRANSACTION_COLUMNS,
     Portfolio,
     read_workspace,
+    stale_cutoff,
 )
 from helpers.sheets import (
     SPREADSHEET_NAME,
@@ -132,10 +137,6 @@ FIRST_DATA_ROW: int = 3
 #: workspace is one rejection away from losing the whole write; chunking bounds
 #: what one rejected request costs.
 CHUNK_ROWS: int = 2000
-
-#: An account whose As Of is older than this, or missing, is listed on the
-#: dashboard rather than quietly counted at full value.
-STALE_DAYS: int = 7
 
 #: How short the dashboard's grid may be. A floor, not the answer -- the bands
 #: below the summary block spill as far as the portfolio is long, so the height
@@ -1411,7 +1412,7 @@ def _bands(today: dt.date) -> dict[str, str]:
     # deterministic, so a test can pin the exact formula, and free of TEXT's
     # locale-dependent format string. It freezes between syncs, which costs
     # nothing -- the data it filters only changes at a sync anyway.
-    cutoff: str = (today - dt.timedelta(days=STALE_DAYS)).isoformat()
+    cutoff: str = stale_cutoff(today=today, days=STALE_DAYS)
 
     series: str = (
         f"{tab_ref(tab=NET_WORTH_TAB)}$A${FIRST_DATA_ROW}:"

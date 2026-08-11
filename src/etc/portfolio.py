@@ -242,6 +242,132 @@ ISO_DATE_PATTERN: str = r"^\d{4}-\d{2}-\d{2}$"
 
 _ISO_DATE: re.Pattern[str] = re.compile(pattern=ISO_DATE_PATTERN)
 
+#: An account whose As Of is older than this, or missing, is stale: listed on the
+#: dashboard rather than quietly counted at full value, and reported by
+#: `stonksmithdb stale` with an exit status a scheduler can act on.
+#:
+#: Here rather than in portfolio_sheet, where it used to live, because two things
+#: now ask the question and they must not come to disagree about it. The panel
+#: renders the rule as a Sheets QUERY and the check evaluates it in Python; a
+#: number defined twice is a panel saying one thing while the alarm says another.
+STALE_DAYS: int = 7
+
+
+def _as_date(as_of: str | None) -> dt.date | None:
+    """
+    An As Of as a real date, or None when it is not one.
+
+    Two gates, and both are load-bearing.
+
+    The pattern first, because everything downstream compares these as *text*:
+    the dashboard's staleness QUERY does a string comparison, and
+    date.fromisoformat accepts spellings that do not compare that way --
+    "20260810" parses and sorts below every hyphenated date. Admitting one here
+    would make the panel and the check disagree about the same account, which is
+    the single thing this rule exists to prevent.
+
+    Then the parse, because a pattern is not a parse. "2026-13-45" matches
+    ^\\d{4}-\\d{2}-\\d{2}$ and is not a date, and the shape check alone let it
+    through: string-compared it sorts above the cutoff and read as *fresh*, so an
+    account whose dates had gone wrong looked like the healthiest one owned. That
+    is the failure this function was written to catch, surviving inside it.
+
+    Whitespace is deliberately not stripped. A padded value is not tidied here
+    because nothing tidies it on the tab either -- the panel compares what is
+    stored -- so accepting " 2026-08-10 " as fresh would announce it as stale on
+    the dashboard and fresh in the check. Reporting it is the conservative half
+    of that choice and says something true: whatever wrote it skipped a
+    normalization.
+    :param as_of: The date the source says the value is for
+    :return: The date, or None when it cannot be read as one
+    :rtype: dt.date | None
+    """
+
+    if not as_of or not _ISO_DATE.match(string=as_of):
+        return None
+
+    try:
+        return dt.date.fromisoformat(as_of)
+
+    except ValueError:
+        # Shaped like a date and not one: month 13, day 30 of February, zeroes.
+        return None
+
+
+def is_stale(as_of: str | None, cutoff: str) -> bool:
+    """
+    Whether an account's As Of has gone stale, failing closed three ways.
+
+    Missing is stale: a number with no date attached is a claim about no
+    particular day, and the dashboard's staleness panel exists to say so rather
+    than count it at face value.
+
+    Older than the cutoff is stale, which is the ordinary case.
+
+    **Unparseable is stale, and this is the one a string comparison gets
+    backwards.** "whenever" < "2026-08-04" is False, so a date the view could not
+    normalize sorts above every real one and reads as fresher than today. The
+    dashboard's QUERY has exactly this hole -- it is the same reason
+    _date_cases() matches Processed On against ISO_DATE_PATTERN rather than
+    trusting an ordering -- and Python can close it here. _as_date is what
+    decides, because matching the shape is not the same as being a date.
+    :param as_of: The date the source says the value is for
+    :param cutoff: The oldest date that still counts as fresh, ISO
+    :return: True when the account cannot be shown to be fresh
+    :rtype: bool
+    """
+
+    if _as_date(as_of=as_of) is None:
+        return True
+
+    # Compared as text rather than as dates, because _as_date has already
+    # guaranteed both are YYYY-MM-DD -- which is the form the dashboard's QUERY
+    # compares, so the two cannot part company over an account.
+    return (as_of or "") < cutoff
+
+
+def stale_reason(as_of: str | None, today: dt.date) -> str:
+    """
+    Why an account counts as stale, in the words a person needs.
+
+    One phrasing per state is_stale rejects, beside it rather than at the call
+    site: a reader who is told "stale" and not which of the three kinds is being
+    sent to look at the wrong thing. An unparseable date in particular is not an
+    old number -- it is a parser that stopped matching its source, and saying
+    "42 days old" about it would be inventing an age from text that has none.
+    :param as_of: The date the source says the value is for
+    :param today: The day freshness is measured from
+    :return: A phrase such as "as of 2026-01-31, 192 days old"
+    :rtype: str
+    """
+
+    if not as_of:
+        return "no as-of date"
+
+    dated: dt.date | None = _as_date(as_of=as_of)
+
+    if dated is None:
+        return f"an as-of date nothing could read: {as_of!r}"
+
+    return f"as of {as_of}, {(today - dated).days} days old"
+
+
+def stale_cutoff(today: dt.date, days: int = STALE_DAYS) -> str:
+    """
+    The oldest As Of that still counts as fresh.
+
+    One derivation, shared by the panel and the check. _bands() bakes this into
+    its QUERY rather than writing TEXT(TODAY()-7,...), so the formula is pinnable
+    and free of TEXT's locale-dependent format string -- which means the two
+    would silently disagree if each did its own arithmetic.
+    :param today: The day freshness is measured from
+    :param days: How many days old an As Of may be
+    :return: The cutoff, ISO
+    :rtype: str
+    """
+
+    return (today - dt.timedelta(days=days)).isoformat()
+
 
 def _iso(date: str | None) -> str | None:
     """
@@ -1180,3 +1306,34 @@ def read_workspace(workspace: str | None = None, root: Path | None = None) -> Po
         )
 
     return read_databases(paths=sorted(directory.glob(pattern="*.db")))
+
+
+def stale_accounts(portfolio: Portfolio, cutoff: str) -> tuple[AccountRow, ...]:
+    """
+    Every account that cannot be shown to be fresh: no date first, then oldest.
+
+    The two that carry no age come first as a group -- a missing date and one
+    nothing could read are both "no evidence" rather than old evidence, and
+    sorting them in among real dates by their text would rank 'whenever' as
+    younger than a genuine January. Below them, ISO dates sort chronologically
+    because they sort as text, the same property the dashboard leans on when it
+    sorts dates rather than MAXing them.
+    :param portfolio: What the workspace holds
+    :param cutoff: The oldest As Of that still counts as fresh, ISO
+    :return: The stale accounts, the least dated first
+    :rtype: tuple[AccountRow, ...]
+    """
+
+    found: list[AccountRow] = [
+        row for row in portfolio.accounts if is_stale(as_of=row.as_of, cutoff=cutoff)
+    ]
+
+    def order(row: AccountRow) -> tuple[int, str, str]:
+        # The same parse is_stale and stale_reason use, not the shape alone: a
+        # row reported as carrying no readable date must not then be sorted in
+        # among the ones that do, or the list contradicts its own entries.
+        dated: bool = _as_date(as_of=row.as_of) is not None
+
+        return (1 if dated else 0, row.as_of or "", row.broker)
+
+    return tuple(sorted(found, key=order))
