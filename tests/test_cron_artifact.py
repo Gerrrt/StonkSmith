@@ -27,6 +27,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 ARTIFACT = REPO / "scripts" / "stonksmith.cron"
 RECORD = REPO / "docs" / "scheduling.md"
+RUNNER = REPO / "scripts" / "stonksmith-nightly.sh"
 
 #: A fenced block introduced as `cron`. The document has exactly one, and the
 #: count is asserted rather than assumed -- a second block added later would
@@ -59,6 +60,37 @@ def schedule(text: str) -> list[str]:
         for line in text.splitlines()
         if (stripped := line.rstrip()) and not stripped.lstrip().startswith("#")
     ]
+
+
+def commands(text: str) -> list[str]:
+    """
+    The StonkSmith invocations a schedule makes, in order, however it is written.
+
+    A crontab entry carries a time and a `cd` that the shell script does not
+    need, and the script carries a `run` wrapper the crontab has no use for. The
+    part that has to agree is what is actually invoked and in what order --
+    which broker, with which flags, and the two reading steps last.
+    :param text: A crontab or the runner script
+    :return: The `uv run ...` commands, in order
+    """
+
+    found: list[str] = []
+
+    for line in text.splitlines():
+        stripped: str = line.strip()
+
+        if stripped.startswith("#") or not stripped:
+            continue
+
+        # A crontab entry: everything the shell is handed after the `cd`.
+        if "&& uv run " in stripped:
+            found.append(stripped.split("&& ", 1)[1].strip())
+
+        # The runner: one invocation per `run` line.
+        elif stripped.startswith("run uv run "):
+            found.append(stripped[len("run ") :].strip())
+
+    return found
 
 
 class TheArtifactMatchesTheRecord(unittest.TestCase):
@@ -123,6 +155,18 @@ class TheArtifactMatchesTheRecord(unittest.TestCase):
         ]
 
         self.assertEqual(len(minutes), len(set(minutes)))
+
+    def test_the_launchd_runner_makes_the_same_run(self) -> None:
+        # A third copy of the schedule, for the platform where cron is the wrong
+        # tool -- two steps read the login keychain, which a cron job cannot
+        # see. Same commands in the same order, or the two schedules quietly
+        # stop being the same nightly run and only one of them gets maintained.
+        self.assertEqual(
+            commands(RUNNER.read_text(encoding="utf-8")),
+            commands(self.artifact_text),
+            "scripts/stonksmith-nightly.sh and scripts/stonksmith.cron have "
+            "drifted apart; change both in the same pass",
+        )
 
     def test_the_reading_steps_follow_the_writing_ones(self) -> None:
         # Both read what the databases hold at the moment they run, so either

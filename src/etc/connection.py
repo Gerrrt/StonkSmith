@@ -373,6 +373,29 @@ class Connection:
                 )
 
             normalized_cred: tuple[Any, ...] = tuple(cred[:5])
+
+            if not normalized_cred[2]:
+                # An empty secret here is a keyring lookup that came back with
+                # nothing, not a credential nobody ever stored: the row exists,
+                # or there would be no tuple to unpack, and get_credentials()
+                # resolves the secret through the keyring and falls back to "".
+                #
+                # Left to itself the login proceeds with an empty password and
+                # the site rejects it, which reads as a wrong password and sends
+                # the reader to reset one that is fine. The common cause is
+                # context rather than content -- a scheduled run on macOS cannot
+                # see the login keychain, so a credential that works by hand
+                # resolves to nothing here.
+                self.logger.error(
+                    msg=(
+                        f"Credential {normalized_cred[1]} resolved to an empty "
+                        "secret; the row is stored but the keyring returned "
+                        "nothing, so the login below will fail as though the "
+                        "password were wrong. If it works by hand and only "
+                        "fails unattended, see docs/scheduling.md."
+                    )
+                )
+
             u.append(normalized_cred[1])
             o.append(False)
             s.append(normalized_cred[2])

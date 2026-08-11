@@ -243,6 +243,59 @@ account*](brokers.md#when-two-brokers-can-reach-the-same-account). And a SnapTra
 connection expires every few weeks, which surfaces as accounts quietly going missing
 from a run rather than as an error.
 
+### On macOS, cron is the wrong tool for two of these entries
+
+**Everything above assumes a scheduler whose jobs can read the OS keyring. On
+macOS a cron job cannot**, and the two entries that need one fail in a way that
+does not look like the reason.
+
+`snaptrade` reads its consumer key from the login keychain, and `schwab529plan`
+reads its stored credential from it. A cron job runs outside the GUI login
+session, and the login keychain is not visible there — so the lookup does not
+error, it comes back **empty**. Observed on 2026-08-11, from a cron entry, on a
+machine where the same command works by hand:
+
+```text
+No SnapTrade consumer key in the OS keyring under 'snaptrade:consumerKey'.
+exit 1
+```
+
+The key was there. Four interactive syncs the same afternoon prove it. What the
+message describes is a keyring that returned nothing, and it cannot tell that
+apart from one that was never written — which is why it recommends re-storing a
+key that is already stored. Schwab 529's version is worse: an empty secret is
+still a secret as far as the login is concerned, so it posts an empty password,
+the site rejects it, and the run reports a failed login. Nothing in that points
+at the keychain.
+
+The other four entries are unaffected. `tsp` has no credential at all,
+`ally --from-prices` reads units out of the database and signs in to nothing,
+and both `stonksmithdb` steps read databases — Google's credentials are files
+under `~/.config/gspread`, not keychain items. So a Mac running the crontab
+above gets four working entries, two failing ones, and a sheet that renders
+faithfully from two brokers that did not update.
+
+**The fix is a LaunchAgent, and it is better here for a second reason.**
+`launchctl bootstrap gui/$(id -u)` puts the agent in the GUI session, which is
+the context that can read the keychain. And `StartCalendarInterval` runs a
+missed job on wake, where cron simply skips it — on a laptop that is shut at
+18:30, that is the difference between running late and never running.
+
+[`scripts/com.stonksmith.nightly.plist`](../scripts/com.stonksmith.nightly.plist)
+is the agent and
+[`scripts/stonksmith-nightly.sh`](../scripts/stonksmith-nightly.sh) is what it
+runs; both carry their own install notes. Two things follow from being a script
+rather than six crontab lines: the steps run in sequence, so the sheet really
+does follow every broker and nothing can collide in the same second, and the
+script finds its own checkout instead of naming one. `tests/test_cron_artifact.py`
+holds it to the same six commands in the same order as the crontab.
+
+**Test it without waiting for the evening.** `launchctl kickstart -p
+gui/$(id -u)/com.stonksmith.nightly` runs it now, in the context it will really
+run in, which is the only test that settles the keychain question — an
+approximation of cron's environment from your own terminal still has your
+session, and passes where the real thing fails.
+
 ### The sheet step reports
 
 `stonksmithdb sheet` runs the one command and exits: `0` when the tabs were rewritten, `1`

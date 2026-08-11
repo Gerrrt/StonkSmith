@@ -38,10 +38,18 @@ CONSUMER_KEY_ACCOUNT = "consumerKey"
 #: of them yields no holdings against the other, silently.
 POSITION_KEYS: tuple[str, ...] = ("results", "positions")
 
+#: The second sentence is there because the first one is wrong about half the
+#: time this fires. A keyring lookup that finds nothing is indistinguishable
+#: from one that was never stored, and on macOS a scheduled run is exactly where
+#: a key that is definitely stored comes back empty -- the login keychain is not
+#: visible to a process outside the GUI session. Telling that operator to run
+#: `store` sends them to re-store a key that is already there.
 SETUP_HINT = (
     "Run `uv run python scripts/snaptrade_register.py store` to put your "
     "SnapTrade consumer key in the keyring, then set clientId in the "
-    "[SNAPTRADE] section of ~/.stonksmith/stonksmith.conf."
+    "[SNAPTRADE] section of ~/.stonksmith/stonksmith.conf. If this works by "
+    "hand and only fails unattended, the key is stored and the keyring is not "
+    "reachable from that context -- see docs/scheduling.md."
 )
 
 
