@@ -1592,11 +1592,11 @@ def _allocation(
     Asset class is the third, and it exists only because somebody typed it. No
     source here supplies one: SnapTrade gives a ticker, a scraped 529 gives a
     fund code, TSP gives a fund. So the mapping is config -- see
-    config.get_asset_classes -- and this block groups by what it says and names
-    what it does not cover, rather than deriving a class from a ticker. A guess
-    buried in a formula would still be a guess, and it would be one nobody could
-    see. Sector and region stay absent for the reason class used to be: nothing
-    states them and no lookup has been added to ask.
+    etc.config.get_asset_classes -- and this block groups by what it says and
+    names what it does not cover, rather than deriving a class from a ticker. A
+    guess buried in a formula would still be a guess, and it would be one nobody
+    could see. Sector and region stay absent for the reason class used to be:
+    nothing states them and no lookup has been added to ask.
 
     With no mapping the block is not drawn at all. One 100% "(unclassified)"
     wedge is not a breakdown, and unlike the refusal above there is nothing to
