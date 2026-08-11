@@ -59,6 +59,15 @@ class ScriptedFormTests(unittest.TestCase):
 
         self.assertEqual(status, 0)
 
+    def test_stale_reports_through_the_same_status(self) -> None:
+        # The point of `stale` is the exit code -- it is what a crontab reads,
+        # and the command is useless if the status does not carry. Pinned here
+        # beside `sheet` because both are argv forms a schedule calls, and both
+        # exist because a scheduled step that cannot fail stops working quietly.
+        self.assertEqual(run_main(args=["stale"], failed=False)[0], 0)
+        self.assertEqual(run_main(args=["stale"], failed=True)[0], 1)
+        self.assertEqual(run_main(args=["stale", "1"], failed=True)[0], 1)
+
     def test_a_command_that_failed_exits_one(self) -> None:
         status, _ = run_main(args=["sheet"], failed=True)
 

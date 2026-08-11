@@ -34,10 +34,11 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*20 of 22 claims have been settled by a live run — 19 confirmed, 1 disproved. The
-remaining 2 rest on evidence no run here has produced: a broker with the transaction
-volume to put the question, and a workspace whose brokers genuinely scraped on
-different days.*
+*20 of 23 claims have been settled by a live run — 19 confirmed, 1 disproved. The
+remaining 3 rest on evidence no run here has produced: a broker with the transaction
+volume to put the question, a workspace whose brokers genuinely scraped on
+different days, and a `verify tabs` run against a real spreadsheet since the
+allocation blocks acquired a check that reads them.*
 
 `tests/test_live_verification_tally.py` derives those five numbers from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
@@ -67,6 +68,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes |
 | The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes |
+| The sheet — every allocation block adding up to the total it is a share of | Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, which check that a wrong sum and a wrong share are both caught and that a refusal is not mistaken for either. Check 8 below. The row is new because the check is: every block already closed on a `Slices sum to` row and nothing read it, so no run before this one could have settled it, and the 2026-08-10 and 2026-08-11 runs predate the check rather than having passed it | No |
 | The sheet — the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py`. The 2026-08-11 run wrote the tab but settles nothing here: checks 6 and 7 are arithmetic across dates and a question about rows that are absent, and a column contract read back reaches neither. Still needs a workspace whose brokers genuinely ran on different days | No |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
@@ -958,7 +960,7 @@ step 5 exists to keep honest.
 
 ## The sheet
 
-Seven checks and a refusal, and it sits outside both broker sections because the sheet is
+Eight checks and a refusal, and it sits outside both broker sections because the sheet is
 not any broker's. One `sheet` run reads every database in the workspace, so the tabs it
 writes are as much Fidelity's and SnapTrade's as TSP's, and the three *The sheet — …*
 rows in the table above, and the *account series* row beside them, settle for all of
@@ -1213,8 +1215,26 @@ The seven checks, and which of them `verify tabs` settles:
    have *no row at all* before it, rather than a row worth `0`. A zero there would
    total correctly and be a lie about an account that did not exist yet.
 
+8. **Every allocation block adds up to the total it is a share of.** *`verify tabs`
+   reads this, and until recently nothing did.* Each block ends with a `Slices sum to`
+   row — the sheet's own arithmetic over the cells it wrote — and the check reads that
+   row back: the values must come to `Total (USD)` to the cent, and the shares to `1`.
+   Both blocks that are always drawn are checked, and the asset class block as well
+   whenever `asset_classes` is configured, which is why the check consults the same
+   config the sync did rather than inferring from the tab. An absent block and a block
+   that failed to write look identical otherwise.
+
+   The row was there from the beginning and was read by nobody, which is the failure
+   this file exists for: a block whose shares came to `0.8` would have been written,
+   reported as a success, and agreed with by every other check above. What settles this
+   row is a run where all three states are seen — a correct sheet passing, and, if the
+   workspace ever produces one, a refusal passing as the block working rather than
+   failing. A refusal cannot be arranged on demand; it needs positions exceeding
+   balances, so seeing only the passing state is the expected outcome and worth saying
+   so rather than leaving the row ambiguous.
+
 **Then the refusal, which is the point of the whole thing — and it goes last.** A
-refused tab means nothing is synced at all, so doing this first would leave the seven
+refused tab means nothing is synced at all, so doing this first would leave the eight
 checks above reading a sheet the run never wrote.
 
 Most of it no longer needs a deface. `verify guard` asks `claim()` all three of its

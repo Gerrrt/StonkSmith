@@ -25,6 +25,14 @@ Inside that shell: `broker schwab529plan`, then `add creds <username>`,
 SnapTrade stores no credentials there; its keys live in the config file and the
 keyring, so `add creds` points at the setup script instead.
 
+At the top level, three commands read the workspace rather than a broker:
+`sheet` rewrites the Google Sheet from these databases, `verify [tabs|guard]`
+reads it back, and `stale [days]` reports accounts nothing has refreshed lately
+and exits `1` if any turn up. All three also run as `stonksmithdb <command>`
+without entering the shell, which is what a crontab calls — see
+[*The freshness step*](scheduling.md#the-freshness-step-is-the-one-that-catches-silence)
+for why the last one exists.
+
 ## What is stored
 
 Each broker gets its own SQLite file at

@@ -24,6 +24,7 @@ from etc.portfolio import (
     HoldingRow,
     NetWorthRow,
     Portfolio,
+    stale_cutoff,
 )
 from etc.portfolio_sheet import (
     ACCOUNTS_TAB,
@@ -296,6 +297,16 @@ class FormulaTests(unittest.TestCase):
         self.assertEqual(cutoff, "2026-08-01")
         self.assertIn(f"Col9 < '{cutoff}'", stale)
         self.assertIn("Col9 is null or", stale)
+
+    def test_the_panel_and_the_freshness_check_share_one_cutoff(self) -> None:
+        # The panel renders the rule as a QUERY and `stonksmithdb stale`
+        # evaluates it in Python. Two derivations of one date is a panel saying
+        # an account is fine while the alarm says it is not, so they take the
+        # same number from the same function -- and this says so, because the
+        # arithmetic is one line and re-inlining it would look like a tidy-up.
+        stale: str = self.by_range[f"{STALENESS_COL}2"][0][0]
+
+        self.assertIn(f"< '{stale_cutoff(today=TODAY, days=STALE_DAYS)}'", stale)
 
     def test_every_band_that_can_error_is_wrapped(self) -> None:
         # FILTER and QUERY return #N/A over an empty range; SUMIF and COUNTA
