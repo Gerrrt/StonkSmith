@@ -8,18 +8,28 @@ deliberately only one of these: five brokers each writing their own tab is the
 arrangement the column contract exists to end. A per-broker tab cannot show a
 total anyway, because no single broker's database has one.
 
-So one read of the workspace feeds four tabs. `Accounts`, `Holdings` and
-`Transactions` are the three row shapes, verbatim. `Dashboard` is formulas over
-them, which is what makes append-only matter in the spreadsheet and not only in
-the tests: a QUERY addresses a column by position, so a column added at the end
-costs nothing and a column inserted in the middle would silently repoint every
-one of them.
+So one read of the workspace feeds five tabs. `Accounts`, `Holdings`,
+`Transactions` and `Net Worth` are the four row shapes, verbatim. `Dashboard` is
+formulas over them, which is what makes append-only matter in the spreadsheet
+and not only in the tests: a QUERY addresses a column by position, so a column
+added at the end costs nothing and a column inserted in the middle would
+silently repoint every one of them.
 
-`Transactions` is the one that is a log rather than current state, and it
-carries the whole of it. Every other tab is bounded by the size of the
-portfolio; this one grows forever, which is exactly why it is written in full.
-A tab whose purpose is history, showing the newest few hundred rows with nothing
-saying so, would be worse than not having one.
+`Transactions` and `Net Worth` are the two that are not current state, and both
+carry the whole of what they hold. The other tabs are bounded by the size of the
+portfolio; these grow forever -- one with every movement, one with every run --
+which is exactly why they are written in full. A tab whose purpose is history,
+showing the newest few hundred rows with nothing saying so, would be worse than
+not having one.
+
+`Net Worth` is also the one tab whose rows no source ever stated. It is a series
+across brokers that do not report on the same day, so most of its points carry
+some account's older value forward -- see `etc.portfolio.net_worth_history` for
+why the alternative draws a portfolio that collapses and recovers on nothing but
+scrape timing. Every row says which of its numbers were read and which were
+carried, and the dashboard's band totals the two separately rather than
+flattening them, because a point that is mostly carried is a weaker claim than
+one that was read.
 
 **The tabs are machine-owned, and this is where that stops being a README
 paragraph.** A tab is cleared only if its first cell carries BANNER, or if the
@@ -51,8 +61,10 @@ from gspread.utils import ValueRenderOption
 from etc.context import Context
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
+    CARRIED,
     HOLDING_COLUMNS,
     ISO_DATE_PATTERN,
+    NET_WORTH_COLUMNS,
     TRANSACTION_COLUMNS,
     Portfolio,
     read_workspace,
@@ -81,6 +93,7 @@ BANNER: str = (
 ACCOUNTS_TAB: str = "Accounts"
 HOLDINGS_TAB: str = "Holdings"
 TRANSACTIONS_TAB: str = "Transactions"
+NET_WORTH_TAB: str = "Net Worth"
 DASHBOARD_TAB: str = "Dashboard"
 
 #: Every tab StonkSmith opens. Nothing outside this tuple is ever touched, which
@@ -89,6 +102,11 @@ MACHINE_OWNED_TABS: tuple[str, ...] = (
     ACCOUNTS_TAB,
     HOLDINGS_TAB,
     TRANSACTIONS_TAB,
+    #: Appended ahead of the dashboard rather than after it, so the four data
+    #: tabs stay together and the one made of formulas over them stays last.
+    #: Nothing depends on the order -- claim() walks the whole tuple -- but the
+    #: tuple is also what a person reads to learn what this touches.
+    NET_WORTH_TAB,
     DASHBOARD_TAB,
 )
 
@@ -134,6 +152,10 @@ BY_SOURCE_COL: str = "G"
 STALENESS_COL: str = "J"
 UNREADABLE_COL: str = "O"
 
+#: The net worth band: one row per date, its USD total split into the part that
+#: was read that day and the part that was carried onto it.
+NET_WORTH_COL: str = "R"
+
 
 @dataclass(frozen=True, slots=True)
 class SheetSync:
@@ -150,6 +172,11 @@ class SheetSync:
     brokers_read: tuple[str, ...] = ()
     unreadable: tuple[tuple[str, str], ...] = ()
     total: float = 0.0
+
+    #: Rows on the Net Worth tab: accounts times the dates they can be placed
+    #: on, not dates. Appended rather than slotted in beside the other three
+    #: counts, so a caller reading positionally keeps its meaning.
+    net_worth: int = 0
 
 
 def column_letter(index: int) -> str:
@@ -191,6 +218,24 @@ def column_index(letter: str) -> int:
         index = index * 26 + (ord(character) - ord("A") + 1)
 
     return index
+
+
+def tab_ref(tab: str) -> str:
+    """
+    How a formula names a tab.
+
+    Quoted, always. ``Accounts!$A$3:$J`` is valid and ``Net Worth!$A$3:$K`` is
+    not -- a tab name with a space in it has to be wrapped in single quotes or
+    the reference is a parse error, and the failure is a whole panel showing
+    nothing. Quoting unconditionally rather than only when the name needs it,
+    because a branch taken by one tab out of five is a branch nothing exercises
+    until the day a tab is renamed.
+    :param tab: The tab's name
+    :return: The reference prefix, e.g. "'Accounts'!"
+    :rtype: str
+    """
+
+    return f"'{tab}'!"
 
 
 def _is_formula(cell: Any) -> bool:
@@ -314,7 +359,7 @@ def check_tabs(
     book: Any | None = None,
 ) -> tuple[GuardCase, ...]:
     """
-    Read the four tabs back and check what a successful write cannot show.
+    Read the tabs back and check what a successful write cannot show.
 
     write_rows() returning says the request was accepted, not that the values
     arrived as the kind of thing they were meant to be. Money can land as text, a
@@ -322,20 +367,24 @@ def check_tabs(
     a RAW upload reports success through all of it. These are the checks that used
     to need somebody opening the spreadsheet.
 
-    Seven of the nine compare strings and are certain: the banner, three column
-    contracts, the movement count against the databases, the date format, and the
-    ordering. Two read cell *values* -- money as a number and the dashboard's two
-    totals agreeing -- and those rested on what gspread hands back for a rendered
-    cell, which no test here could settle. They carried a marker saying so, on the
-    grounds that reporting an unconfirmed assumption as a confirmed defect is its
-    own kind of wrong.
+    Most compare strings and are certain: the banner, the column contract on
+    each tab that has one, the movement count against the databases, the date
+    format, and the ordering. Two read cell *values* -- money as a number and
+    the dashboard's two totals agreeing -- and those rested on what gspread hands
+    back for a rendered cell, which no test here could settle. They carried a
+    marker saying so, on the grounds that reporting an unconfirmed assumption as
+    a confirmed defect is its own kind of wrong.
 
     The marker is gone because the run happened: 2026-08-10, against the real
-    spreadsheet, all nine passing. A pass settles both directions at once -- had
-    the unformatted read returned display text, every money cell would have been
-    rejected as text, and a formula arriving as its own source would have failed
-    float() into "could not read both". Restoring the marker would mean a new
-    assumption, not a rediscovered one.
+    spreadsheet, every check then defined passing. A pass settles both directions
+    at once -- had the unformatted read returned display text, every money cell
+    would have been rejected as text, and a formula arriving as its own source
+    would have failed float() into "could not read both". Restoring the marker
+    would mean a new assumption, not a rediscovered one.
+
+    The Net Worth contract check postdates that run and has not been through it.
+    It is one of the certain ones -- row 2 against a literal -- so it rests on
+    nothing that run settled.
 
     A third value check was intended and cannot exist: an absent date arriving as
     an empty cell rather than as an empty string is invisible to a read, since
@@ -371,6 +420,12 @@ def check_tabs(
         (ACCOUNTS_TAB, ACCOUNT_COLUMNS),
         (HOLDINGS_TAB, HOLDING_COLUMNS),
         (TRANSACTIONS_TAB, TRANSACTION_COLUMNS),
+        # Every tab that carries columns, which is every machine-owned tab but
+        # the dashboard. The banner case above walks MACHINE_OWNED_TABS and so
+        # picked this one up for free; this loop is written out, so a tab added
+        # to the contract and not to here would be written every sync and never
+        # checked -- covered enough to look covered.
+        (NET_WORTH_TAB, NET_WORTH_COLUMNS),
     ):
         cases.append(_contract_case(worksheet=tabs[tab], tab=tab, columns=columns))
 
@@ -424,7 +479,7 @@ def _values(worksheet: Any, cells: str, rendered: bool = False) -> list[list[Any
 def _banner_case(tabs: dict[str, Any]) -> GuardCase:
     """
     The first cell of every tab, including the one with no columns.
-    :param tabs: The four tabs, by name
+    :param tabs: The machine-owned tabs, by name
     :return: What was found
     :rtype: GuardCase
     """
@@ -955,12 +1010,12 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         :param tab: The tab the column is on
         :param columns: The column contract that tab carries
         :param name: The column's name in that contract
-        :return: A range such as "Accounts!$G$3:$G"
+        :return: A range such as "'Accounts'!$G$3:$G"
         :rtype: str
         """
 
         letter: str = column_of(columns=columns, name=name)
-        return f"{tab}!${letter}${FIRST_DATA_ROW}:${letter}"
+        return f"{tab_ref(tab=tab)}${letter}${FIRST_DATA_ROW}:${letter}"
 
     value: str = down(tab=ACCOUNTS_TAB, columns=ACCOUNT_COLUMNS, name="Value")
     currency: str = down(tab=ACCOUNTS_TAB, columns=ACCOUNT_COLUMNS, name="Currency")
@@ -977,6 +1032,8 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
     processed: str = down(
         tab=TRANSACTIONS_TAB, columns=TRANSACTION_COLUMNS, name="Processed On"
     )
+    dated: str = down(tab=NET_WORTH_TAB, columns=NET_WORTH_COLUMNS, name="Date")
+    basis: str = down(tab=NET_WORTH_TAB, columns=NET_WORTH_COLUMNS, name="Basis")
 
     labels: list[list[Any]] = [
         ["Total (USD)"],
@@ -996,6 +1053,13 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         # the rows they knew had moved, and that is worth more than tidiness.
         ["Movements"],
         ["Newest movement"],
+        # Appended for the reason the two above were. These two belong together:
+        # the first says how long the series is, the second how much of it is
+        # not a reading. A series whose carried count approaches its length is
+        # a chart of one broker's runs with everything else held still, and the
+        # only place that is visible is here.
+        ["Dates in the series"],
+        ["Carried values"],
     ]
 
     def at(label: str) -> str:
@@ -1067,6 +1131,14 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
             f"=IFERROR(INDEX(SORT(UNIQUE(FILTER({processed},"
             f'REGEXMATCH({processed}&"","{ISO_DATE_PATTERN}"))),1,FALSE),1,1),"")'
         ],
+        # COUNTUNIQUE over a column with trailing blanks counts the blank as a
+        # value, so the empty tail is filtered out rather than subtracted.
+        [f'=IFERROR(COUNTUNIQUE(FILTER({dated},{dated}<>"")),0)'],
+        # Counted rather than inferred from the band below it. The band is USD
+        # only, because a total has to be; this is a count, which does not, so
+        # it says how many carried values are on the tab rather than how many
+        # are in the total.
+        [f'=COUNTIF({basis},"{CARRIED}")'],
     ]
 
     return labels, values
@@ -1074,7 +1146,7 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
 
 def _bands(today: dt.date) -> dict[str, str]:
     """
-    The dashboard's three QUERY bands, keyed by the column they start in.
+    The dashboard's four QUERY bands, keyed by the column they start in.
 
     Every reference is positional -- Col1..Col10 are exactly ACCOUNT_COLUMNS
     indices, because the range starts below the header and the query is told it
@@ -1086,7 +1158,7 @@ def _bands(today: dt.date) -> dict[str, str]:
     """
 
     right: str = last_column(columns=ACCOUNT_COLUMNS)
-    span: str = f"{ACCOUNTS_TAB}!$A$3:${right}"
+    span: str = f"{tab_ref(tab=ACCOUNTS_TAB)}$A${FIRST_DATA_ROW}:${right}"
 
     broker: int = list(ACCOUNT_COLUMNS).index("Broker") + 1
     source: int = list(ACCOUNT_COLUMNS).index("Source") + 1
@@ -1102,6 +1174,15 @@ def _bands(today: dt.date) -> dict[str, str]:
     # locale-dependent format string. It freezes between syncs, which costs
     # nothing -- the data it filters only changes at a sync anyway.
     cutoff: str = (today - dt.timedelta(days=STALE_DAYS)).isoformat()
+
+    series: str = (
+        f"{tab_ref(tab=NET_WORTH_TAB)}$A${FIRST_DATA_ROW}:"
+        f"${last_column(columns=NET_WORTH_COLUMNS)}"
+    )
+    on: int = list(NET_WORTH_COLUMNS).index("Date") + 1
+    worth: int = list(NET_WORTH_COLUMNS).index("Value") + 1
+    held_in: int = list(NET_WORTH_COLUMNS).index("Currency") + 1
+    basis: int = list(NET_WORTH_COLUMNS).index("Basis") + 1
 
     return {
         BY_BROKER_COL: (
@@ -1128,6 +1209,24 @@ def _bands(today: dt.date) -> dict[str, str]:
             f"order by Col{scraped} "
             f"label Col{broker} 'Broker', Col{account} 'Account', "
             f"Col{as_of} 'As Of', Col{scraped} 'Scraped At'\","
+            '0),"")'
+        ),
+        # Net worth over time, which is the only thing on this dashboard that is
+        # a series rather than a state. Pivoted on Basis rather than totalled
+        # flat, so each date arrives as its carried part beside its observed
+        # part: a point that is mostly carried is a weaker claim than one that
+        # was read, and a single summed column would render the two identically.
+        # Charting the two as a stacked series is then the obvious thing to do
+        # rather than something the reader has to think to ask for.
+        #
+        # USD only, on the SUMIF-on-currency precedent above: adding a dollar to
+        # a euro produces a number that is not wrong so much as meaningless.
+        NET_WORTH_COL: (
+            f"=IFERROR(QUERY({series},"
+            f'"select Col{on}, sum(Col{worth}) '
+            f"where Col{held_in} = 'USD' "
+            f"group by Col{on} order by Col{on} pivot Col{basis} "
+            f"label Col{on} 'Date'\","
             '0),"")'
         ),
     }
@@ -1223,12 +1322,23 @@ def write_dashboard(
     # is stale would be the first thing to vanish from a portfolio big enough to
     # need it. The floor is only for the empty case, where the summary block is
     # the tallest thing on the tab.
-    spill: int = max(len(portfolio.accounts), len(portfolio.unreadable))
+    #
+    # The net worth band spills by a row per date in the series, which is the
+    # one of the three that grows with the number of runs rather than with the
+    # size of the portfolio -- so on any workspace with a history it is the
+    # tallest thing on the tab, and the first to hit this.
+    spill: int = max(
+        len(portfolio.accounts),
+        len(portfolio.unreadable),
+        len({row.date for row in portfolio.net_worth}),
+    )
 
     fit(
         worksheet=worksheet,
         rows=max(DASHBOARD_MIN_ROWS, HEADER_ROW + spill),
-        cols=column_index(letter=UNREADABLE_COL) + 1,
+        # The net worth band is three columns wide at most -- the date, and one
+        # each for the carried and observed halves of its total.
+        cols=column_index(letter=NET_WORTH_COL) + 2,
     )
     worksheet.clear()
 
@@ -1246,7 +1356,7 @@ def refresh(
     """
     Put everything every broker in the workspace holds onto the sheet.
 
-    One read of the databases and one authorization, feeding four tabs. All of
+    One read of the databases and one authorization, feeding five tabs. All of
     them are claimed before any is cleared: a tab that is not ours then costs
     nothing rather than leaving Accounts rewritten beside a stale Holdings.
     :param workspace: The workspace name, or None for the configured one
@@ -1302,6 +1412,12 @@ def refresh(
         columns=TRANSACTION_COLUMNS,
         rows=[row.cells() for row in portfolio.transactions],
     )
+    net_worth: int = write_rows(
+        worksheet=tabs[NET_WORTH_TAB],
+        tab=NET_WORTH_TAB,
+        columns=NET_WORTH_COLUMNS,
+        rows=[row.cells() for row in portfolio.net_worth],
+    )
     write_dashboard(worksheet=tabs[DASHBOARD_TAB], portfolio=portfolio, today=today)
 
     return SheetSync(
@@ -1311,6 +1427,7 @@ def refresh(
         brokers_read=portfolio.brokers_read,
         unreadable=portfolio.unreadable,
         total=portfolio.total(),
+        net_worth=net_worth,
     )
 
 
@@ -1346,7 +1463,8 @@ def sync(context: Context, workspace: str | None = None) -> bool:
         context.log.success(
             msg=(
                 f"Sheet shows {result.accounts} accounts, {result.holdings} "
-                f"holdings and {result.transactions} movements from "
+                f"holdings, {result.transactions} movements and "
+                f"{result.net_worth} net worth rows from "
                 f"{', '.join(result.brokers_read) or 'no brokers'}."
             )
         )

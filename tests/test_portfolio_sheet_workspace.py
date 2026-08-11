@@ -16,7 +16,10 @@ from etc.broker_db import BrokerDatabase
 from etc.infrastructure import create_db_engine
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
+    CARRIED,
     HOLDING_COLUMNS,
+    NET_WORTH_COLUMNS,
+    OBSERVED,
     TRANSACTION_COLUMNS,
     read_workspace,
 )
@@ -26,6 +29,7 @@ from etc.portfolio_sheet import (
     DASHBOARD_TAB,
     HOLDINGS_TAB,
     MACHINE_OWNED_TABS,
+    NET_WORTH_TAB,
     TRANSACTIONS_TAB,
     refresh,
 )
@@ -82,6 +86,8 @@ class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
         value: float,
         holdings: Any = (),
         transactions: Any = (),
+        scraped_at: str = "2026-08-08 09:00:00",
+        as_of: str | None = "2026-08-07",
     ) -> None:
         db = BrokerDatabase(
             db_engine=create_db_engine(db_path=self.root / "default" / f"{broker}.db"),
@@ -91,8 +97,8 @@ class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
             account=AccountIdentity(
                 account_key=key, display_name=key, kind="INVESTMENT"
             ),
-            scraped_at="2026-08-08 09:00:00",
-            as_of="2026-08-07",
+            scraped_at=scraped_at,
+            as_of=as_of,
             value=value,
             currency="USD",
             holdings=holdings,
@@ -122,10 +128,55 @@ class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
             book.rows_written(tab=HOLDINGS_TAB, width="P"),
             [row.cells() for row in expected.holdings],
         )
+        self.assertEqual(
+            book.rows_written(tab=NET_WORTH_TAB, width="K"),
+            [row.cells() for row in expected.net_worth],
+        )
         self.assertEqual(result.accounts, 2)
         self.assertEqual(result.holdings, 1)
+        self.assertEqual(result.net_worth, 2)
         self.assertEqual(result.total, 3500.0)
         self.assertEqual(result.brokers_read, ("ally", "tsp"))
+
+    def test_two_brokers_that_scraped_on_different_days_still_both_count(self) -> None:
+        # The whole issue, from real databases through to the cells. Ally read
+        # on the 1st and nothing else did; TSP read on the 7th. Totalling the
+        # stored snapshots by date would put TSP's money alone on the 7th and
+        # draw a portfolio that lost its larger half overnight.
+        self._write(
+            broker="ally",
+            key="Individual",
+            value=2500.0,
+            scraped_at="2026-08-01 09:00:00",
+            as_of="2026-08-01",
+        )
+        self._write(
+            broker="tsp",
+            key="C Fund",
+            value=1000.0,
+            scraped_at="2026-08-07 09:00:00",
+            as_of="2026-08-07",
+        )
+
+        book = FakeBook()
+        refresh(workspace="default", root=self.root, book=book)
+
+        rows = book.rows_written(tab=NET_WORTH_TAB, width="K")
+        date = list(NET_WORTH_COLUMNS).index("Date")
+        value = list(NET_WORTH_COLUMNS).index("Value")
+        basis = list(NET_WORTH_COLUMNS).index("Basis")
+
+        totals: dict[str, float] = {}
+
+        for row in rows:
+            totals[row[date]] = totals.get(row[date], 0.0) + row[value]
+
+        self.assertEqual(totals, {"2026-08-01": 2500.0, "2026-08-07": 3500.0})
+
+        # And the number that was carried onto the 7th says so on the tab.
+        carried = [row for row in rows if row[date] == "2026-08-07"]
+
+        self.assertEqual(sorted(row[basis] for row in carried), [CARRIED, OBSERVED])
 
     def test_only_the_machine_owned_tabs_are_ever_opened(self) -> None:
         # The guarantee that makes every other tab in the book safe to keep

@@ -276,7 +276,7 @@ class VerifyCommandTests(unittest.TestCase):
 
     def test_bare_verify_runs_both_halves_tabs_first(self) -> None:
         # Tabs first deliberately: the guard half makes and deletes a tab, and
-        # reading the four back is the part that says whether the last sync
+        # reading them back is the part that says whether the last sync
         # landed. A reader wants that before a scratch tab appears.
         with (
             patch("etc.portfolio_sheet.check_ownership_guard") as guard,
@@ -289,7 +289,7 @@ class VerifyCommandTests(unittest.TestCase):
         guard.assert_called_once()
         tabs.assert_called_once()
         self.assertLess(
-            printed.index("Reading the four tabs back"), printed.index("Making the tab")
+            printed.index("Reading the tabs back"), printed.index("Making the tab")
         )
 
     def test_the_tab_half_reads_the_workspace_the_shell_is_in(self) -> None:

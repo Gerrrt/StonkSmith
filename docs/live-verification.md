@@ -33,9 +33,10 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*19 of 20 claims have been settled by a live run — 18 confirmed, 1 disproved. The
-remaining 1 rests on evidence no run here can produce: a broker with the transaction
-volume to put the question.*
+*19 of 21 claims have been settled by a live run — 18 confirmed, 1 disproved. The
+remaining 2 rest on evidence no run here has produced: a broker with the transaction
+volume to put the question, and a real spreadsheet the `Net Worth` tab has been
+written to.*
 
 `tests/test_live_verification_tally.py` derives those five numbers from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
@@ -57,13 +58,14 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files |
 | TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
 | TSP — share price download | A real request on 2026-08-07 written up in #48, and again unattended on 2026-08-10 (#116): 200 and 555,142 bytes, fetched by the run itself rather than by hand | Yes |
-| TSP — DFAS pay table parse | The live page, parsed on 2026-08-10 (#116) into all nine enlisted grades; `tests/dfas_basic_pay_em.html` is now that page rather than a reconstruction, and the reconstruction read **zero** grades off it | Yes |
-| TSP — DFAS pay table download | A real request on 2026-08-10 (#116): 200 and 116,257 bytes, unattended, through `fetch_pay_table`. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes |
+| TSP — DFAS pay table parse | All four published pages, parsed as served: the enlisted one on 2026-08-10 (#116) into all nine grades, and the officer, prior-service and warrant pages on 2026-08-11 (#118) into O-1..O-10, O-1E..O-3E and W-1..W-5. Every fixture in `tests/` is now a served page; the enlisted reconstruction read **zero** grades off the real one, and the prior-service reconstruction's rates were invented outright | Yes |
+| TSP — DFAS pay table download | Real requests through `fetch_pay_table`: the enlisted page unattended on 2026-08-10 (#116), 200 and 116,257 bytes, and the other three on 2026-08-11 (#118), 200 each. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes |
 | TSP — the contribution accrual | A live run on 2026-08-10 (#116) over the published price file and the DFAS page, both fetched by the run; all six months recomputed independently and matched on every field | Yes |
 | TSP — database write | Five runs on 2026-08-10 (#116) into a real `tsp.db`, four dates on one snapshot and the holdings summing to its value exactly; plus a genuine pre-migration database, migrated on open | Yes |
-| The sheet — four machine-owned tabs | All four checks, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes |
+| The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes |
 | The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes |
+| The sheet — the fifth tab, `Net Worth`, and the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py`. The tab postdates every run above, so nothing in the row before this one covers it: it has never been created, claimed or written against a real spreadsheet, and `verify tabs` has never read its column contract back. The carry-forward itself is arithmetic across dates that no read of one tab could settle either way | No |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
 *one account state*: one investment account, one holding, one deposit account. So the
@@ -827,10 +829,56 @@ Both are fixed, and the fixture is now the served page trimmed to its two tables
 otherwise byte-for-byte — **do not reflow it, the whitespace is the fixture.** It parses
 to all nine enlisted grades, with E-9's low bands still absent rather than zero.
 
-A number that is merely *plausible* remains the failure mode to watch for. The columns
-are matched from the right, so a table with an unexpected trailing column would shift
-every rate by one band — which reads as a member being paid at the wrong seniority, not
-as a parse error, and looks entirely like an answer.
+A number that is merely *plausible* was the failure mode to watch for, and it is now
+guarded rather than only named. The columns are matched from the right, so a table with
+an unexpected trailing column shifts every rate by one band — which reads as a member
+paid at the wrong seniority, not as a parse error, and looks entirely like an answer.
+`alignment_faults()` refuses such a page and drops the accrual rather than pricing on
+it; `missing_upper_table()` reports a page that yielded nothing past `Over 18`. Both ask
+the question of the page itself, because a test cannot ask it of a shape nobody serves.
+
+#### The other three pages, 2026-08-11
+
+DFAS publishes four, and only the enlisted one had been read. The officer and warrant
+pages had no fixture at all, and the prior-service fixture was a reconstruction whose
+**dollar figures were invented outright** — its own header said not to quote it as pay.
+All three were fetched through the same client the run uses, 200 each, and all three
+now sit in `tests/` as served:
+
+```text
+CO      200   127,403 bytes   O-1 .. O-10
+CO_FE   200    91,801 bytes   O-1E .. O-3E
+WO      200    97,027 bytes   W-1 .. W-5
+```
+
+The parser read every grade on every page, with no alignment fault and both halves
+present. Two things only the full set could show:
+
+* **DFAS does not mark up its own four pages alike.** The officer pages write
+  `<b>Over 10</b>` on one line; the enlisted and warrant pages stack it over a line
+  break. Matching a heading with its spacing removed is what makes both spellings the
+  same column — a fix that would have looked over-general with one page in hand.
+* **The officer page footnotes every grade**, `O-10 (Note 4)` through
+  `O-1 (Notes 5, 6 & 7)`, not two of them. Read literally it yields no grades at all,
+  where the same bug cost the enlisted page its top and bottom rows.
+
+And the prior-service page prints the **literal word `blank`** in every cell with no
+rate, where the other three leave the cell empty:
+
+```html
+<td ...> blank</td>   <td ...> blank</td>   <td ...>7,382.70</td>
+```
+
+The columns are all present — `2 or less` through `Over 18` in the header, as
+everywhere else — but no prior-service rate exists below `Over 4`, because these rates
+protect a new officer who already has four years' service. Nothing downstream notices:
+`to_number()` returns `None` for `blank` exactly as it does for an empty cell, and an
+absent band is what both mean. That is luck rather than design, so a test pins it —
+treating a non-empty cell as a published figure would put the string `blank` where a
+rate belongs, on the one page that writes it.
+
+None of that could have come from the reconstruction, which had no such cells and
+invented the figures around them.
 
 **What this does not settle.** It was run from a hosted environment, so it says nothing
 about a home connection beyond the obvious — a network that was refused before is
@@ -906,10 +954,11 @@ step 5 exists to keep honest.
 
 ## The sheet
 
-Five checks and a refusal, and it sits outside both broker sections because the sheet is
+Seven checks and a refusal, and it sits outside both broker sections because the sheet is
 not any broker's. One `sheet` run reads every database in the workspace, so the tabs it
 writes are as much Fidelity's and SnapTrade's as TSP's, and the three *The sheet — …*
-rows in the table above settle for all of them at once. This procedure lived under *TSP*
+rows in the table above, and the *account series* row beside them, settle for all of
+them at once. This procedure lived under *TSP*
 until it was moved here, because TSP was the broker it happened to be written against.
 
 **This is the one procedure on this page that needs a credential, and the account it
@@ -942,16 +991,16 @@ new client ID. Those are two different failures with two different fixes, and
 one file to delete, `deleted_client` gets the new client, and an unrecognised failure gets
 the cheap fix first and the expensive one as the fallback.
 
-**What it costs.** `sheet` clears and rewrites all four machine-owned tabs, and the
+**What it costs.** `sheet` clears and rewrites all five machine-owned tabs, and the
 refusal at the end has you deface the `Holdings` tab on purpose and hand it back
 afterwards. So this runs against a spreadsheet you are willing to have rewritten, which
-in practice means the real one. That is the whole reason these three rows are still `No`
+in practice means the real one. That is the whole reason these four rows are still `No`
 while others are settled: nothing in the procedure is difficult, but it needs a Google
 account and a database with real rows in it, and neither is available to anything
 holding only this repository.
 
-No tab needs creating: StonkSmith makes `Accounts`, `Holdings`, `Transactions` and
-`Dashboard` on the first sync. Nor does this need a scrape — the sheet is a view of the
+No tab needs creating: StonkSmith makes `Accounts`, `Holdings`, `Transactions`,
+`Net Worth` and `Dashboard` on the first sync. Nor does this need a scrape — the sheet is a view of the
 databases, so it can be built from them alone:
 
 ```
@@ -966,8 +1015,8 @@ fails, the sheet is left as it was rather than emptied and the run says so inste
 printing a count — clearing the tabs there would replace a correct sheet with a blank
 one and report success for doing it.
 
-Five things to confirm on the tabs themselves, none of which a unit test can see.
-**`verify tabs` now does most of it**, by reading the four tabs back:
+Seven things to confirm on the tabs themselves, none of which a unit test can see.
+**`verify tabs` now does most of it**, by reading the tabs back:
 
 ```
 stonksmithdb (default) > verify tabs
@@ -1000,24 +1049,33 @@ would have been rejected as text, and a formula arriving as its own source would
 `float()` into "could not read both". Neither happened, so the sheet is right *and* the two
 assertions are.
 
+There are ten checks now, not nine: `Net Worth` is a fifth machine-owned tab with a column
+contract of its own, so the banner line counts five and a tenth line reads its row 2 back.
+That tenth check has never run against the real spreadsheet — the tab postdates the session
+above — but it is one of the seven that compare strings, so it rests on nothing the session
+settled and nothing it left open.
+
 **Check 4 is not in that list, and could not have been.** It is a question about a formula's
 behaviour rather than about a cell's contents, so a read cannot answer it: an empty cell and
 an empty string come back the same, as `""` or a short row. It stays an eyeball check, and it
 is the reason this section still asks you to look — though not for the reason it used to give.
 See check 4 below.
 
-The five checks, and which of them `verify tabs` settles:
+The seven checks, and which of them `verify tabs` settles:
 
 1. **The first cell of every tab carries the machine-owned banner** — *settled, 2026-08-10,
-   by `verify tabs`, and the creation half separately: the four tabs were deleted and `sheet`
-   run again, which made them and adopted them empty before writing.* All four,
+   by `verify tabs`, and the creation half separately: the four tabs then defined were
+   deleted and `sheet` run again, which made them and adopted them empty before writing.
+   `Net Worth` came later and has been through neither half.* All five,
    `Dashboard` included, since a banner cannot be read back off a tab that was never
-   created. On the three that carry columns, row 2 is the column contract exactly as
+   created. On the four that carry columns, row 2 is the column contract exactly as
    `src/etc/portfolio.py` spells it; the dashboard has no such row, and its labels run
    down the summary column instead. `Holdings` is the one worth counting: sixteen
    columns, ending at `P`, `Units As Of` — `HOLDING_COLUMNS` in that same file. A tab
    still ending at `O` after a sync is a visible sign the sync did not run, and TSP is
-   the broker where the price date and the unit date visibly differ.
+   the broker where the price date and the unit date visibly differ. `Net Worth` is
+   eleven, ending at `K`, and its absence altogether is that same signal one change
+   later.
 2. **Money is a number, not text.** *Settled, 2026-08-10, by `verify tabs`.* By eye, if you
    want it twice: a currency cell should right-align on its own and accept a number format.
    If it left-aligns, something is writing strings again.
@@ -1088,9 +1146,30 @@ The five checks, and which of them `verify tabs` settles:
    newest-first within each account. A `12/30/2025` reaching a cell means the
    normalization was skipped, and the tab's order is then wrong wherever a December
    row sits above a January one.
+6. **`Net Worth` totals the same set of accounts on every date.** *`verify tabs` reads
+   this tab's column contract back with the other three and settles nothing else about
+   it — the carry-forward is arithmetic across dates, and no read of one tab can check
+   it.* Pivot `Value` by
+   `Date` on the tab, or read the dashboard's net worth band, and walk the account
+   count down the dates. It may only ever grow — an account joins the series at its
+   first reading and leaves it only after thirty days of silence — so a count that
+   drops and recovers between two adjacent dates means the carry-forward is not
+   running and the chart is drawing scrape timing rather than money. This needs a
+   workspace whose brokers genuinely did not all run on the same day, which is the
+   ordinary state of a real one and not of a freshly built one: run `sheet` against a
+   workspace where Ally last went a week ago and TSP ran this morning.
+7. **Carried rows are visibly carried, and no row is a back-filled zero.** *The other
+   check no command makes, and for a different reason than check 4: a row that is
+   absent cannot be read back, so the thing being checked is what is not there.* Every
+   row
+   reads `observed` or `carried` in `Basis` and never blank; a `carried` row's
+   `Observed On` is older than its `Date`, and an `observed` row's is equal to it.
+   Then look at the earliest dates: an account whose first reading came later must
+   have *no row at all* before it, rather than a row worth `0`. A zero there would
+   total correctly and be a lie about an account that did not exist yet.
 
 **Then the refusal, which is the point of the whole thing — and it goes last.** A
-refused tab means nothing is synced at all, so doing this first would leave the five
+refused tab means nothing is synced at all, so doing this first would leave the seven
 checks above reading a sheet the run never wrote.
 
 Most of it no longer needs a deface. `verify guard` asks `claim()` all three of its
@@ -1161,17 +1240,22 @@ rather than leaving one tab fresh beside a stale one. To get the sheet back afte
 empty that tab or delete it and run `sheet` once more; an empty tab is adopted, which is
 the third way out the message offers.
 
-**What this settles.** Three rows, and each check belongs to exactly one of them.
+**What this settles.** Four rows, and each check belongs to exactly one of them.
 
-*The sheet — four machine-owned tabs* is checks 1 through 4: the banner on all four and
-the column contract on the three that have one, money arriving as a number, the
+*The sheet — the machine-owned tabs* is checks 1 through 4: the banner on all of them and
+the column contract on the ones that have one, money arriving as a number, the
 dashboard's two totals agreeing, and an account with no date being surfaced rather than
 counted at face value. Those are four ways for a tab StonkSmith owns to be written wrongly
 while looking written. There is a fifth thing this section opens by asserting — that
-StonkSmith *makes* the four tabs — which a spreadsheet already holding them cannot show;
-that was settled on its own, by deleting the four and running `sheet` again. Anyone
-re-running against an established spreadsheet is back to observing the write and not the
-creation, so delete the four, or point at a fresh spreadsheet, to see that half.
+StonkSmith *makes* the tabs — which a spreadsheet already holding them cannot show;
+that was settled on its own, by deleting the four then defined and running `sheet` again.
+Anyone re-running against an established spreadsheet is back to observing the write and not
+the creation, so delete them, or point at a fresh spreadsheet, to see that half.
+
+That run predates `Net Worth`, so the row it settles is the four tabs it read. The fifth
+tab's banner, its column contract and its creation all belong to the row below, which is
+why widening this one to five would have quietly turned a settled row into a claim about a
+tab nothing has ever written.
 
 *The sheet — the whole transaction history reaching a tab* is check 5 alone, and it has a
 wrong way to pass: agreement with `show transactions` confirms nothing, at any size,
@@ -1180,14 +1264,22 @@ every row landed; only a workspace past five hundred settles whether there is a 
 and only one past 2,000 puts a second chunked write in front of Sheets. The date half of
 the check belongs to this row too, and needs no volume at all.
 
+*The sheet — the fifth tab, `Net Worth`, and the account series carried across brokers
+that scraped on different days* is checks 6 and 7, plus everything checks 1 through 4
+established for the other four tabs and have never been run for this one. Checks 6 and 7
+are the part that no amount of care with a fresh spreadsheet can settle: they need a
+workspace whose brokers really did run on different days, because a workspace where they
+all ran this morning produces a one-date series that passes both by having nothing to
+carry.
+
 *The sheet — refusing a tab it does not own* is the refusal, and it is the only one of
-the three that can be settled the other way. A sync that went ahead and ate your text is
+the four that can be settled the other way. A sync that went ahead and ate your text is
 not a failed check; it is that row observed as **Run, and it cannot** be relied on. Write
 it up that way, and say which tab. `verify` covers `claim()`'s three answers and not the
 abort, so a clean `verify` and no deface leaves this row where it is.
 
 Then *Recording a result* below, which is where the asymmetry it warns about actually
-bites: one `sheet` run touches all three of these rows, and the refusal is the only one
+bites: one `sheet` run touches all four of these rows, and the refusal is the only one
 that writes itself up.
 
 ### Run twice, on 2026-08-10
@@ -1246,11 +1338,12 @@ Two runs also make the view idempotent in practice and not just by construction:
 counts held, so the second sync neither appended to the tabs nor drifted from the
 databases it reads.
 
-**All three rows are still `No`, for three different reasons.** A write that returns says
+**All four rows are still `No`, for four different reasons** — the fourth trivially, in
+that *the account series* postdates these runs and was not written by them at all. A write that returns says
 nothing about how the values *render*, and rendering is exactly what checks 2 through 4
 are for: money can arrive as text, the dashboard's two totals can disagree, and an absent
 value can arrive as an empty string, all through a RAW upload that reports success.
-Nobody looked, so *four machine-owned tabs* stands unsettled. The refusal was never run,
+Nobody looked, so *five machine-owned tabs* stands unsettled. The refusal was never run,
 and the accept path succeeding four times says nothing about the refuse path — which is
 the one whose failure costs somebody their work. And 9 movements cannot settle
 *the whole transaction history reaching a tab* at all: the reader stops at 500, so a tab
@@ -1258,9 +1351,9 @@ that had silently windowed would have agreed with the shell exactly.
 
 **What would finish it.** Running twice was the cheapest evidence available and it is
 spent; what is left needs eyes or a deliberate act. Open the spreadsheet once for the
-column contract and checks 2 through 4, and *four machine-owned tabs* is done — that is
+column contract and checks 2 through 4, and *five machine-owned tabs* is done — that is
 one sitting, and the banner half of check 1 is already behind you. Then the refusal, which
-needs the deface and is the only one of the three that can be settled the other way. The
+needs the deface and is the only one of the four that can be settled the other way. The
 transaction row is the odd one out: it needs a workspace with a few hundred movements at
 least, and past 2,000 to put a second chunked write in front of Sheets, so it waits on a
 broker rather than on an afternoon.

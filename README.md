@@ -36,7 +36,7 @@ all the accounts you own.
 - [x] Credentials stored in the OS keyring
 - [x] Account history: numeric balances, holdings and transactions over time
 - [ ] More brokers. Vanguard needs no code at all; link it through SnapTrade.
-- [ ] Net worth tracking over time
+- [x] Net worth tracking over time
 - [ ] Asset allocation breakdown
 - [x] Scheduling (cron), for the brokers that run unattended — three of five,
       plus Ally in a reduced mode. Fidelity is replaced by SnapTrade, not
@@ -97,10 +97,11 @@ so anything plural about an Ally account is still inference. TSP has too: its
 statement and share-price parsers, the mark's arithmetic, its price download,
 its database write, its contribution accrual and both halves of the DFAS pay
 table are verified against real data. The sheet it feeds is verified as well:
-its four tabs were read back against the real spreadsheet and it was made to
-refuse a tab it did not own. What is unverified there is one claim about volume
+four of its five tabs were read back against the real spreadsheet and it was made
+to refuse a tab it did not own. What is unverified there is one claim about volume
 — that a tab holds every movement rather than the newest five hundred — which
-needs a broker with the history to ask it.
+needs a broker with the history to ask it, and the fifth tab, `Net Worth`, which
+postdates every run against the real spreadsheet.
 Green tests say the code does what it was written to do, which is not the same
 as saying the site still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
@@ -747,7 +748,14 @@ that must be exact arithmetic with no estimate in it.
 Anything that stops an estimate being made costs the estimate and not the run:
 a half-filled config, a rank that is not a pay grade, an unreadable service
 date, a grade DFAS publishes no rate for, or a refused download all report
-themselves and leave the anchored mark exactly as it was. The pay table is
+themselves and leave the anchored mark exactly as it was. So does a page whose
+columns stop lining up with its own headings — rates are matched from the right,
+so a column grown after the last one would shift every figure by one band and
+hand back a real published rate for the wrong seniority. That is the one failure
+here that would otherwise look like an answer, so the accrual is dropped rather
+than priced on it. `--show-pay-table` prints the whole parsed grid, grades down
+and years of service across, for checking the parser against the published page
+rather than against the single rate a run happens to need. The pay table is
 cached under `~/.stonksmith` for the rest of the year, since DFAS changes it
 every January. `--pay-table` reads a page saved by hand, the way `--prices`
 does, and remains the fallback: dfas.mil fingerprints its callers, so a download
@@ -767,9 +775,10 @@ reports. The database write has been run, against a real `tsp.db` and against
 one written before the `units_as_of` column existed. The sheet has been run too: on
 2026-08-10 it was built from real databases, read back tab by tab, checked by eye
 where a read could not reach, made to refuse a tab it did not own, and rebuilt
-from nothing after its four tabs were deleted. What is left there is the one claim
-nine movements cannot put — that a tab holds every movement rather than the newest
-five hundred — which is tracked on its own as #141.
+from nothing after the four tabs it then had were deleted. What is left there is the
+claim nine movements cannot put — that a tab holds every movement rather than the
+newest five hundred — which is tracked on its own as #141, and the `Net Worth` tab,
+which came after all of that and has never been written to a real spreadsheet.
 `docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
 statement naming a different fund from your config is refused, but one whose
@@ -903,9 +912,10 @@ sync outright rather than quietly storing less.
 
 ### The sheet is output
 
-**StonkSmith owns four tabs, and refuses to touch anything else.**
+**StonkSmith owns five tabs, and refuses to touch anything else.**
 
-The four are `Accounts`, `Holdings`, `Transactions` and `Dashboard`. They are
+The five are `Accounts`, `Holdings`, `Transactions`, `Net Worth` and
+`Dashboard`. They are
 created on the first sync if they are not there — you no longer add tabs by
 hand — and each is cleared and rewritten in full every run. A note, an override, a formula or a
 column you add to one of them is gone at the next sync.
@@ -937,7 +947,7 @@ costs one extra request, on the first sync of a tab and no other.
 
 So: anything you want to keep — notes, targets, allocations, a chart, arithmetic
 of your own — goes on a tab of your own, and pulls what it needs across with a
-formula. Only those four names are ever opened, so any other tab is safe, and
+formula. Only those five names are ever opened, so any other tab is safe, and
 one you name `Accounts` by accident is refused rather than eaten.
 
 **Formatting survives.** `clear()` empties values, not number formats. Format the
@@ -995,7 +1005,7 @@ stonksmithdb (default) > sheet
 [*] Refreshed: 6 accounts, 23 holdings, 412 movements from ally, fidelity, snaptrade, tsp.
 ```
 
-Rebuilds all four tabs from the current workspace's databases, with no login
+Rebuilds all five tabs from the current workspace's databases, with no login
 anywhere. This is what to reach for after a refused tab or a "the dashboard was
 not updated" line: the sheet is a view of the databases, so it can be rebuilt
 from them alone, and re-scraping Ally or Fidelity to fix a spreadsheet means
@@ -1019,10 +1029,10 @@ stops working silently.
 `verify`, beside it, checks what a successful sync cannot show. Two halves, and
 either can be run alone:
 
-`verify tabs` reads the four tabs back. A write that returned says the request was
-accepted, not that the values arrived as the kind of thing they were meant to be —
-so this checks the banner on all four, row 2 against the column contract on the
-three that have one, the movement count against the databases, that every
+`verify tabs` reads the machine-owned tabs back. A write that returned says the request
+was accepted, not that the values arrived as the kind of thing they were meant to be —
+so this checks the banner on all five, row 2 against the column contract on the
+four that have one, the movement count against the databases, that every
 `Processed On` is `YYYY-MM-DD` and sorted newest-first within its account, that
 money came back as a number rather than as text, and that the dashboard's two
 totals agree. The last two used to be marked as resting on an assumption about
@@ -1053,7 +1063,7 @@ Those five tabs each grew their own layout, and nothing shared a column:
 formula pointing at `SnapTrade!D:D` broke the day a column moved.
 
 `src/etc/portfolio.py` settles that. It reads every broker database in the
-workspace and produces three row shapes, shared across all brokers:
+workspace and produces four row shapes, shared across all brokers:
 
 **Accounts** — one row per account. Summing `Value` gives the portfolio total.
 
@@ -1105,11 +1115,72 @@ the newest few hundred rows with nothing saying so, would be worse than not
 having one. The read behind it takes no `limit` for that reason, and
 `stonksmithdb`'s `sheet` line reports the count so a short write is visible.
 
+**Net Worth** — one row per account per date, which is what a chart of your net
+worth over time is made of. Same first four columns again.
+
+| # | Column | |
+| --- | --- | --- |
+| 1-4 | `Broker`, `Source`, `Account`, `Account Key` | as above |
+| 5 | `Date` | the date this row stands on — not a claim by any source |
+| 6-7 | `Value`, `Currency` | |
+| 8 | `Basis` | `observed` if the value was read on that date, `carried` if it was carried onto it |
+| 9 | `Observed On` | the date the value *was* read for. Equal to `Date` when observed |
+| 10 | `As Of` | what the source itself said, blank when it said nothing |
+| 11 | `Scraped At` | the run that took that reading |
+
+#### Why this tab has to be constructed rather than read
+
+The other three tabs each render what some source said. This one renders what
+your portfolio was worth on a date, and no source ever says that — because
+**your brokers do not scrape on the same day.** Ally needs a manual sign-in and
+may go a week. TSP runs unattended. SnapTrade runs whenever you run it.
+
+So the obvious construction is wrong. Group the stored snapshots by date and
+total them, and a date on which only TSP ran holds only TSP's money. Chart it
+and you get a portfolio that repeatedly collapses and recovers — every number in
+it real, the shape of it fiction, and nothing about it looking like a bug.
+
+Instead each account's last known value is carried forward onto every later
+date, so every point totals the same set of accounts. That is the honest
+construction, and it is also partly made up, which is why three things are true
+of it:
+
+- **A carried value says it was carried.** `Basis` is `observed` or `carried` on
+  every row, and `Observed On` says how far back the carry reached. This is the
+  same argument `As Of` and `Scraped At` already settle: a point that is nine
+  parts observed and one part carried forward is not the same fact as one where
+  everything was read that day, and a chart rendering them identically asserts a
+  precision it does not have. The dashboard's net worth band totals the two
+  separately for exactly that reason — stack them and you can see how much of
+  each point is a reading.
+- **A carry does not reach forever.** Past **30 days** an account drops out of
+  the series rather than persisting at a stale value. Crossing a weekend is not
+  crossing a quarter. Thirty rather than the dashboard's seven-day staleness
+  threshold, deliberately: seven is right for "should a human look at this" and
+  wrong for "may this still be counted", because Ally routinely goes longer than
+  a week and a seven-day horizon would drop a live account and restore it a run
+  later — reintroducing the collapse as the fix for it.
+- **An account that did not exist yet is absent, not zero.** No row is emitted
+  for a date before that account's first reading. Zero and absent are different,
+  and an account opened in March did not spend February being worth nothing.
+
+A snapshot the source gave no number for is not a reading either: it cannot be
+carried, and it does not reset a carry that is already running, so the account
+keeps the last number anything actually knew. And the dates on this tab are the
+ones something was actually read on — not every day on the calendar. A point
+exists because a broker ran, so the tab grows with the number of runs rather
+than with the passage of time, and nothing here invents a date any more than it
+invents a value.
+
+**This tab grows forever too**, for both of `Transactions`' reasons and one of
+its own: a series whose oldest points have silently fallen off the end is a
+chart of a shorter history than the one you have.
+
 Three rules make that a contract rather than a list:
 
 - **Columns are append-only.** A new one goes on the end, never in the middle.
   Everything reading these addresses a column by position, so inserting one
-  silently repoints every formula at its neighbour. A test pins all three tuples
+  silently repoints every formula at its neighbour. A test pins all four tuples
   exactly, so that change fails in CI instead of in your spreadsheet.
 - **One name per meaning.** `Value` is what things are worth, everywhere.
   `As Of` is the source's own date and `Scraped At` is when the run happened —
@@ -1128,6 +1199,16 @@ Three rules make that a contract rather than a list:
   name for the same reason rather than a third `Scraped At`: that one moves
   every sync, because those rows are rewritten every run, while the run that
   first saw a movement never changes.
+
+  The series makes the same distinction a third time, and needs three columns to
+  do it. `Date` is the date a row stands on, which on a carried row is a date the
+  source said nothing whatever about — it belongs to whichever *other* broker ran
+  that day. `Observed On` is the date the value was actually read for. `As Of` is
+  still what the source itself claimed, and stays blank when it claimed nothing,
+  which is how you tell `Observed On` falling back to the run clock from
+  `Observed On` repeating a real source date. And `Basis` is not `Cost Basis`
+  with a word dropped: one is what was paid for a position, the other is whether
+  a number is a reading or a carry. Neither name appears in the other's tuple.
 - **Money and quantities are numbers, not text.** No `"$1,234.56"` in a cell
   you then cannot add up. Formatting is the cell's job. A value the source never
   gave stays empty rather than becoming `0`, because an account that reported no
@@ -1139,6 +1220,8 @@ balance and in no holding. One table doing both would understate every account
 holding cash while looking like it totalled correctly. Movements are the third
 because they are a *log* rather than current state: the other two are "what is
 true now" and are replaced every run, while a movement happened once and stays.
+The series is the fourth because it is neither — it is the only one of them no
+source ever stated, assembled across brokers that do not report together.
 
 **Dates on the transactions tab are normalized on the way out, not on the way
 in.** SnapTrade reports ISO; the 529 scraper's table says `12/30/2025`, and that
@@ -1167,7 +1250,7 @@ SnapTrade already supplies one, which is why only the 529 scraper's rows are
 keyed this way at all.
 
 `src/etc/portfolio_sheet.py` is the only thing that writes them: one read of the
-workspace, one authorization, four tabs. Values go up raw, so a number arrives
+workspace, one authorization, five tabs. Values go up raw, so a number arrives
 as a number — and so an account whose display name begins with `=` stays a name
 instead of becoming a formula the spreadsheet runs.
 

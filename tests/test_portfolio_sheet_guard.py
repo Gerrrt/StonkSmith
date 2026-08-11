@@ -20,6 +20,7 @@ from etc.portfolio_sheet import (
     GUARD_CHECK_TAB,
     HOLDINGS_TAB,
     MACHINE_OWNED_TABS,
+    NET_WORTH_TAB,
     TRANSACTIONS_TAB,
     check_ownership_guard,
     claim,
@@ -373,13 +374,19 @@ class OwnershipContractTests(unittest.TestCase):
             "your own.",
         )
 
-    def test_only_these_four_tabs_are_ever_opened(self) -> None:
+    def test_only_these_five_tabs_are_ever_opened(self) -> None:
         # Pinned as a tuple rather than a set: a tab added here is a tab the
         # next sync will clear, which is the one change in this module that can
         # cost somebody data. It should be typed out deliberately.
         self.assertEqual(
             MACHINE_OWNED_TABS,
-            (ACCOUNTS_TAB, HOLDINGS_TAB, TRANSACTIONS_TAB, DASHBOARD_TAB),
+            (
+                ACCOUNTS_TAB,
+                HOLDINGS_TAB,
+                TRANSACTIONS_TAB,
+                NET_WORTH_TAB,
+                DASHBOARD_TAB,
+            ),
         )
 
     def test_the_retired_broker_tabs_are_not_among_them(self) -> None:

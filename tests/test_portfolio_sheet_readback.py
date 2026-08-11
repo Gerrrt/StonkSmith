@@ -1,4 +1,4 @@
-"""Reading the four tabs back, which is what a successful write cannot do.
+"""Reading the tabs back, which is what a successful write cannot do.
 
 write_rows() returning says the request was accepted. It does not say the values
 arrived as the kind of thing they were meant to be: money can land as text, a
@@ -23,6 +23,7 @@ from gspread.utils import ValueRenderOption
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
+    NET_WORTH_COLUMNS,
     TRANSACTION_COLUMNS,
     Portfolio,
 )
@@ -32,6 +33,7 @@ from etc.portfolio_sheet import (
     DASHBOARD_TAB,
     HOLDINGS_TAB,
     MACHINE_OWNED_TABS,
+    NET_WORTH_TAB,
     TRANSACTIONS_TAB,
     check_tabs,
 )
@@ -142,6 +144,10 @@ def transactions_tab(rows: tuple[tuple[str, str], ...] = MOVEMENTS) -> Tab:
     return Tab(grid=grid)
 
 
+def net_worth_tab() -> Tab:
+    return Tab(grid=[[BANNER], list(NET_WORTH_COLUMNS)])
+
+
 def dashboard_tab(computed: object = 1234.5, as_read: object = 1234.5) -> Tab:
     return Tab(
         grid=[
@@ -159,6 +165,7 @@ def book(**overrides: Tab) -> MagicMock:
         ACCOUNTS_TAB: accounts_tab(),
         HOLDINGS_TAB: holdings_tab(),
         TRANSACTIONS_TAB: transactions_tab(),
+        NET_WORTH_TAB: net_worth_tab(),
         DASHBOARD_TAB: dashboard_tab(),
     }
     tabs.update(overrides)
@@ -193,7 +200,7 @@ class ReadBackTests(unittest.TestCase):
     def test_a_correct_sheet_passes_every_check(self) -> None:
         self.assertTrue(all(run(fake=book()).values()), run(fake=book()))
 
-    def test_all_four_tabs_are_read_including_the_one_without_columns(self) -> None:
+    def test_every_tab_is_read_including_the_one_without_columns(self) -> None:
         fake = book()
         run(fake=fake)
 
