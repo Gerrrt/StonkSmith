@@ -169,9 +169,12 @@ template.
 > [!NOTE]
 > **Not every claim here rests on a live run.** Green tests say the code does
 > what it was written to do, which is not the same as saying the site still
-> looks the way it did when the parser was written. All five brokers have now
-> been run against the real thing, and the sheet has been read back off a real
-> spreadsheet; six claims are still open. Three wait on data rather than on
+> looks the way it did when the parser was written. Four of the five brokers
+> have been run against the real thing, and the sheet has been read back off a
+> real spreadsheet; eleven claims are still open. Five are the `fidelity`
+> broker, which has never been run — the Fidelity accounts SnapTrade reaches
+> are settled, but that is an API answering, not a browser getting past bot
+> detection to scrape a summary page. Three wait on data rather than on
 > effort — whether the `Transactions` tab holds every movement or only the
 > newest five hundred, whether the `Net Worth` series carries across brokers
 > that scraped on different days, and whether a 529 with more than one
