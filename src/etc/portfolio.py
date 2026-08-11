@@ -55,10 +55,11 @@ nothing -- the database is careful about that distinction and this must not
 throw it away.
 
 Identity is per-broker. `account_key` is unique within one broker's database and
-means nothing outside it: the same real-world 529 is "Schwab - Beneficiary A 529 Plan"
-to SnapTrade and "Beneficiary A" to the Schwab scraper, with no stored field linking
-them. Nothing here can dedupe across brokers, which is why the `[SNAPTRADE]
-exclude_accounts` setting is still the thing that decides who owns an account.
+means nothing outside it: the same real-world 529 is "Schwab - Beneficiary A 529
+Plan" to SnapTrade and "Beneficiary A" to the Schwab scraper, with no stored
+field linking them. Nothing here can dedupe across brokers, which is why the
+`[SNAPTRADE] exclude_accounts` setting is still the thing that decides who owns
+an account.
 """
 
 import datetime as dt
