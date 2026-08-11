@@ -117,6 +117,11 @@ def anchors_of(path: Path) -> frozenset[str]:
 def references_of(path: Path) -> list[str]:
     """Every link target in a file, markdown and HTML alike.
 
+    Sorted by where they sit in the file rather than by which pattern found
+    them. Two passes concatenated would report the whole README's markdown
+    before any of its header, so a reader walking a failure list would be sent
+    up and down the file instead of down it.
+
     :param path: The markdown file to read
     :return: The raw targets, in the order they appear
     :rtype: list[str]
@@ -124,9 +129,12 @@ def references_of(path: Path) -> list[str]:
 
     body: str = FENCE.sub(repl="", string=path.read_text(encoding="utf-8"))
 
-    return [match.group("target") for match in LINK.finditer(body)] + [
-        match.group("target") for match in HTML_REF.finditer(body)
-    ]
+    found: list[re.Match[str]] = list(LINK.finditer(body)) + list(
+        HTML_REF.finditer(body)
+    )
+    found.sort(key=lambda match: match.start())
+
+    return [match.group("target") for match in found]
 
 
 class DocCrossReferences(unittest.TestCase):
