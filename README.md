@@ -37,7 +37,7 @@ all the accounts you own.
 - [x] Account history: numeric balances, holdings and transactions over time
 - [ ] More brokers. Vanguard needs no code at all; link it through SnapTrade.
 - [x] Net worth tracking over time
-- [ ] Asset allocation breakdown
+- [x] Asset allocation breakdown
 - [x] Scheduling (cron), for the brokers that run unattended — three of five,
       plus Ally in a reduced mode. Fidelity is replaced by SnapTrade, not
       scheduled
@@ -97,11 +97,12 @@ so anything plural about an Ally account is still inference. TSP has too: its
 statement and share-price parsers, the mark's arithmetic, its price download,
 its database write, its contribution accrual and both halves of the DFAS pay
 table are verified against real data. The sheet it feeds is verified as well:
-four of its five tabs were read back against the real spreadsheet and it was made
+all five of its tabs were read back against the real spreadsheet and it was made
 to refuse a tab it did not own. What is unverified there is one claim about volume
 — that a tab holds every movement rather than the newest five hundred — which
-needs a broker with the history to ask it, and the fifth tab, `Net Worth`, which
-postdates every run against the real spreadsheet.
+needs a broker with the history to ask it, and whether the `Net Worth` series
+carries correctly across brokers, which needs a workspace whose brokers did not
+all scrape on the same day.
 Green tests say the code does what it was written to do, which is not the same
 as saying the site still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
@@ -775,10 +776,13 @@ reports. The database write has been run, against a real `tsp.db` and against
 one written before the `units_as_of` column existed. The sheet has been run too: on
 2026-08-10 it was built from real databases, read back tab by tab, checked by eye
 where a read could not reach, made to refuse a tab it did not own, and rebuilt
-from nothing after the four tabs it then had were deleted. What is left there is the
-claim nine movements cannot put — that a tab holds every movement rather than the
-newest five hundred — which is tracked on its own as #141, and the `Net Worth` tab,
-which came after all of that and has never been written to a real spreadsheet.
+from nothing after the four tabs it then had were deleted. `Net Worth` came after all
+of that, and one run on 2026-08-11 made it, wrote it and read it back, ten checks
+passing. What is left
+there is the claim nine movements cannot put — that a tab holds every movement rather
+than the newest five hundred — which is tracked on its own as #141, and whether the
+`Net Worth` series carries correctly, which one run against a workspace that scraped
+all at once cannot show.
 `docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
 statement naming a different fund from your config is refused, but one whose
@@ -1284,6 +1288,28 @@ derived from the tuples above, so the letters cannot drift away from the contrac
   the way out of the database; see above for why they are not normalized on the
   way in.
 - Subtotals **by broker** and **by source**.
+- An allocation **by account kind** — `529`, `INVESTMENT`, `LOC`, whatever the
+  source calls it. It is the one breakdown that costs nothing: `Kind` is already
+  on every account row, and because the slices are account balances they include
+  the uninvested cash and add up to **Total (USD)** exactly. Asset class, sector
+  and region are the dimensions somebody actually wants and none of them is here
+  — a ticker, a fund code and a TSP fund is all any source supplies, and deriving
+  a class from those needs a mapping table kept by hand or an external lookup.
+  The tab does not claim a dimension it would have to guess.
+- An allocation **by position**, which is the one with the honesty problem.
+  Holdings do not sum to the portfolio, so a share of the holdings subtotal
+  renders a portfolio that is 30% cash as fully invested — every slice
+  overstated, and the numbers still adding to 100%. So **Cash and uninvested** is
+  a named slice, pointing at the very cell **In accounts, not in positions**
+  already publishes rather than subtracting a second time, and every share
+  divides by **Total (USD)**. Both blocks say so in their header instead of
+  leaving the base to be inferred, and both close with **Slices sum to** — the
+  sheet's own arithmetic over the cells it wrote, where a wrong base shows up as
+  a share column that does not come to 1.
+- When that gap goes negative — a position counted twice — the position block
+  refuses to draw and says by how much, instead of rendering a negative wedge
+  with every other share inflated to make room for it. The account-kind block
+  cannot have the problem and still draws.
 - **Not read** — one row per database that would not open, with the reason. A
   total short by a whole broker looks perfectly reasonable, so it is stated on the
   same tab as the total rather than only in the run's output.

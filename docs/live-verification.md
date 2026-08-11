@@ -33,10 +33,10 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*19 of 21 claims have been settled by a live run — 18 confirmed, 1 disproved. The
+*20 of 22 claims have been settled by a live run — 19 confirmed, 1 disproved. The
 remaining 2 rest on evidence no run here has produced: a broker with the transaction
-volume to put the question, and a real spreadsheet the `Net Worth` tab has been
-written to.*
+volume to put the question, and a workspace whose brokers genuinely scraped on
+different days.*
 
 `tests/test_live_verification_tally.py` derives those five numbers from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
@@ -65,7 +65,8 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes |
 | The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes |
-| The sheet — the fifth tab, `Net Worth`, and the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py`. The tab postdates every run above, so nothing in the row before this one covers it: it has never been created, claimed or written against a real spreadsheet, and `verify tabs` has never read its column contract back. The carry-forward itself is arithmetic across dates that no read of one tab could settle either way | No |
+| The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes |
+| The sheet — the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py`. The 2026-08-11 run wrote the tab but settles nothing here: checks 6 and 7 are arithmetic across dates and a question about rows that are absent, and a column contract read back reaches neither. Still needs a workspace whose brokers genuinely ran on different days | No |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
 *one account state*: one investment account, one holding, one deposit account. So the
@@ -1051,9 +1052,49 @@ assertions are.
 
 There are ten checks now, not nine: `Net Worth` is a fifth machine-owned tab with a column
 contract of its own, so the banner line counts five and a tenth line reads its row 2 back.
-That tenth check has never run against the real spreadsheet — the tab postdates the session
-above — but it is one of the seven that compare strings, so it rests on nothing the session
-settled and nothing it left open.
+That tenth check has been run, on 2026-08-11, against the same real spreadsheet:
+
+```
+stonksmithdb (default) > sheet
+[*] Refreshed: 16 accounts, 9 holdings, 9 movements from ally, fidelity, schwab529plan, snaptrade, tsp.
+stonksmithdb (default) > verify tabs
+[*] Reading the tabs back from 'Investment Account Scrapes'.
+[+] All 5 tabs carry the banner in A1
+[+] Accounts row 2 is the column contract, ending at J
+[+] Holdings row 2 is the column contract, ending at P
+[+] Transactions row 2 is the column contract, ending at O
+[+] Net Worth row 2 is the column contract, ending at K
+[+] Transactions holds all 9 movements the databases have
+[+] Every Processed On is YYYY-MM-DD
+[+] Processed On runs newest-first within each account
+[+] Accounts Value is a number, not text
+[+] The dashboard's two totals agree
+[*] All 10 checks behaved, against real Sheets rather than a stub. One thing it cannot cover is still in docs/live-verification.md: an absent value arriving as an empty cell.
+```
+
+Also quoted as it came out. Three things in it are worth reading rather than skimming past.
+The banner line counts **five**, so `Net Worth` was written and carries the banner. `Net Worth
+row 2 ... ending at K` is the eleven-column contract read back off the real tab, which is the
+check that did not exist in August. And the last two lines arrive **unmarked** — the markers
+came off in code after 2026-08-10, and this is the first run since to put that to the test on
+a sheet written from scratch that morning.
+
+**It settles the tab, and not the series.** Everything above is one read of one tab. Checks 6
+and 7 below are arithmetic across dates and a question about rows that are *absent*, and no
+column contract read back can reach either. Those are still outstanding, and the row in the
+table says so.
+
+**This run also made the tab, which is the creation half of check 1.** The spreadsheet carried
+four machine-owned tabs on 2026-08-10, no `sheet` run happened between then and this one, and
+afterwards there are five carrying the banner — so `ensure_worksheet` created `Net Worth` here
+and `claim()` adopted it empty before writing.
+
+That is three facts rather than a quoted line, and it is worth saying which kind of evidence
+it is. A tab that was created and a tab that was already there read back identically, so no
+`verify tabs` output could show this; what settles it is that the tab did not exist before the
+run and did after. The same holds for the four tabs on 2026-08-10, whose creation half is
+recorded above as reported rather than transcribed. If it turns out a run did happen in
+between, this paragraph is the one that was wrong.
 
 **Check 4 is not in that list, and could not have been.** It is a question about a formula's
 behaviour rather than about a cell's contents, so a read cannot answer it: an empty cell and
@@ -1066,7 +1107,8 @@ The seven checks, and which of them `verify tabs` settles:
 1. **The first cell of every tab carries the machine-owned banner** — *settled, 2026-08-10,
    by `verify tabs`, and the creation half separately: the four tabs then defined were
    deleted and `sheet` run again, which made them and adopted them empty before writing.
-   `Net Worth` came later and has been through neither half.* All five,
+   `Net Worth` came later and got both halves on 2026-08-11, in one run that made it
+   and then read it back.* All five,
    `Dashboard` included, since a banner cannot be read back off a tab that was never
    created. On the four that carry columns, row 2 is the column contract exactly as
    `src/etc/portfolio.py` spells it; the dashboard has no such row, and its labels run
@@ -1240,7 +1282,7 @@ rather than leaving one tab fresh beside a stale one. To get the sheet back afte
 empty that tab or delete it and run `sheet` once more; an empty tab is adopted, which is
 the third way out the message offers.
 
-**What this settles.** Four rows, and each check belongs to exactly one of them.
+**What this settles.** Five rows, and each check belongs to exactly one of them.
 
 *The sheet — the machine-owned tabs* is checks 1 through 4: the banner on all of them and
 the column contract on the ones that have one, money arriving as a number, the
@@ -1264,22 +1306,31 @@ every row landed; only a workspace past five hundred settles whether there is a 
 and only one past 2,000 puts a second chunked write in front of Sheets. The date half of
 the check belongs to this row too, and needs no volume at all.
 
-*The sheet — the fifth tab, `Net Worth`, and the account series carried across brokers
-that scraped on different days* is checks 6 and 7, plus everything checks 1 through 4
-established for the other four tabs and have never been run for this one. Checks 6 and 7
-are the part that no amount of care with a fresh spreadsheet can settle: they need a
-workspace whose brokers really did run on different days, because a workspace where they
-all ran this morning produces a one-date series that passes both by having nothing to
-carry.
+*The sheet — the fifth tab, `Net Worth`, created, written and read back* is what checks 1
+through 3 reach on the fifth tab, and it was settled on 2026-08-11: one run made the tab,
+wrote it, counted five banners and read the eleven-column contract back off it.
 
-*The sheet — refusing a tab it does not own* is the refusal, and it is the only one of
-the four that can be settled the other way. A sync that went ahead and ate your text is
-not a failed check; it is that row observed as **Run, and it cannot** be relied on. Write
-it up that way, and say which tab. `verify` covers `claim()`'s three answers and not the
+*The sheet — the account series carried across brokers that scraped on different days* is
+checks 6 and 7, and splitting it off from the row above is the point rather than
+bookkeeping. The tab existing and being shaped right is a read; the series being *true* is
+arithmetic across dates, and the 2026-08-11 run confirmed the first while touching none of
+the second. It is also the one row here that no amount of care with a fresh spreadsheet can
+settle: it needs a workspace whose brokers really did run on different days, because a
+workspace where they all ran this morning produces a one-date series that passes both
+checks by having nothing to carry.
+
+*The sheet — refusing a tab it does not own* is the refusal, and what marks it out is that
+the question can be put today: the two rows still outstanding wait on a workspace nobody
+here has, and this one only ever waited on somebody willing to deface a tab. It is not the
+only row that could come back settled the other way — a `Transactions` tab found holding
+five hundred of six hundred movements would be that too — but it is the one where asking
+costs nothing but nerve. A sync that went ahead and ate your text is not a failed check; it
+is that row observed as **Run, and it cannot** be relied on. Write it up that way, and say
+which tab. `verify` covers `claim()`'s three answers and not the
 abort, so a clean `verify` and no deface leaves this row where it is.
 
 Then *Recording a result* below, which is where the asymmetry it warns about actually
-bites: one `sheet` run touches all four of these rows, and the refusal is the only one
+bites: one `sheet` run touches all five of these rows, and the refusal is the only one
 that writes itself up.
 
 ### Run twice, on 2026-08-10
