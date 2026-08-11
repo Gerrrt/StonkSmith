@@ -725,7 +725,8 @@ one written before the `units_as_of` column existed. The sheet has been run too:
 2026-08-10 it was built from real databases, read back tab by tab, checked by eye
 where a read could not reach, made to refuse a tab it did not own, and rebuilt
 from nothing after the four tabs it then had were deleted. `Net Worth` came after all
-of that and was written and read back on 2026-08-11, ten checks passing. What is left
+of that, and one run on 2026-08-11 made it, wrote it and read it back, ten checks
+passing. What is left
 there is the claim nine movements cannot put — that a tab holds every movement rather
 than the newest five hundred — which is tracked on its own as #141, and whether the
 `Net Worth` series carries correctly, which one run against a workspace that scraped

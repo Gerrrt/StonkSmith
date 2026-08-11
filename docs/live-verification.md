@@ -65,7 +65,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes |
 | The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes |
-| The sheet — the fifth tab, `Net Worth`, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning | Yes |
+| The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes |
 | The sheet — the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py`. The 2026-08-11 run wrote the tab but settles nothing here: checks 6 and 7 are arithmetic across dates and a question about rows that are absent, and a column contract read back reaches neither. Still needs a workspace whose brokers genuinely ran on different days | No |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
@@ -1072,13 +1072,17 @@ and 7 below are arithmetic across dates and a question about rows that are *abse
 column contract read back can reach either. Those are still outstanding, and the row in the
 table says so.
 
-**One thing this run probably did and is not written down as having done.** The spreadsheet
-carried four machine-owned tabs on 2026-08-10, and `Net Worth` was written on 2026-08-11 — so
-unless a `sheet` run between the two made it, `ensure_worksheet` created it here and `claim()`
-adopted it empty before writing. That is the creation half of check 1 for the fifth tab, and
-it is left unclaimed rather than inferred: the transcript shows a tab that exists, and a tab
-that was created and a tab that was already there read back identically. Deleting `Net Worth`
-and running `sheet` once more settles it in one step, and that is the run worth doing.
+**This run also made the tab, which is the creation half of check 1.** The spreadsheet carried
+four machine-owned tabs on 2026-08-10, no `sheet` run happened between then and this one, and
+afterwards there are five carrying the banner — so `ensure_worksheet` created `Net Worth` here
+and `claim()` adopted it empty before writing.
+
+That is three facts rather than a quoted line, and it is worth saying which kind of evidence
+it is. A tab that was created and a tab that was already there read back identically, so no
+`verify tabs` output could show this; what settles it is that the tab did not exist before the
+run and did after. The same holds for the four tabs on 2026-08-10, whose creation half is
+recorded above as reported rather than transcribed. If it turns out a run did happen in
+between, this paragraph is the one that was wrong.
 
 **Check 4 is not in that list, and could not have been.** It is a question about a formula's
 behaviour rather than about a cell's contents, so a read cannot answer it: an empty cell and
@@ -1091,8 +1095,8 @@ The seven checks, and which of them `verify tabs` settles:
 1. **The first cell of every tab carries the machine-owned banner** — *settled, 2026-08-10,
    by `verify tabs`, and the creation half separately: the four tabs then defined were
    deleted and `sheet` run again, which made them and adopted them empty before writing.
-   `Net Worth` came later and was read back on 2026-08-11; its creation half is
-   unobserved, and see the note under that run.* All five,
+   `Net Worth` came later and got both halves on 2026-08-11, in one run that made it
+   and then read it back.* All five,
    `Dashboard` included, since a banner cannot be read back off a tab that was never
    created. On the four that carry columns, row 2 is the column contract exactly as
    `src/etc/portfolio.py` spells it; the dashboard has no such row, and its labels run
@@ -1290,9 +1294,9 @@ every row landed; only a workspace past five hundred settles whether there is a 
 and only one past 2,000 puts a second chunked write in front of Sheets. The date half of
 the check belongs to this row too, and needs no volume at all.
 
-*The sheet — the fifth tab, `Net Worth`, written and read back* is what checks 1 through 3
-reach on the fifth tab, and it was settled on 2026-08-11: the banner counted five and the
-eleven-column contract came back off the real tab.
+*The sheet — the fifth tab, `Net Worth`, created, written and read back* is what checks 1
+through 3 reach on the fifth tab, and it was settled on 2026-08-11: one run made the tab,
+wrote it, counted five banners and read the eleven-column contract back off it.
 
 *The sheet — the account series carried across brokers that scraped on different days* is
 checks 6 and 7, and splitting it off from the row above is the point rather than
