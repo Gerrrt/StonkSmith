@@ -6,6 +6,7 @@ import cmd
 import configparser
 from os import listdir
 from pathlib import Path
+from sys import argv
 from types import ModuleType
 from typing import Any
 
@@ -42,9 +43,16 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    exit              quit\n"
     )
 
-    def __init__(self, config_file_path: Path) -> None:
+    def __init__(self, config_file_path: Path, resume_last_broker: bool = True) -> None:
         """
         Initialize STONKSMITHDB menu
+
+        :param config_file_path: Path to the config file
+        :param resume_last_broker: Re-enter the broker the last session left in.
+            A convenience for a human returning to the shell, and wrong for the
+            scripted form: entering a broker runs that broker's sub-shell, so a
+            `stonksmithdb sheet` would sit at a sub-prompt instead of touching
+            the sheet.
         """
 
         super().__init__()
@@ -55,6 +63,13 @@ class StonkSmithDBMenu(cmd.Cmd):
         self.broker_loader = BrokerLoader()
         self.brokers: dict[str, dict[str, str]] = self.broker_loader.get_brokers()
 
+        #: Set by any command that reported a failure. It exists for the
+        #: scripted form in ``main()``, which has to exit non-zero when the
+        #: work did not happen. A command cannot say so by returning True --
+        #: cmd.Cmd reads a truthy return as "leave the loop", so failure and
+        #: quit would be the same signal.
+        self.failed: bool = False
+
         self.workspace: str = self.config.get(
             section="STONKSMITH", option="workspace", fallback="default"
         )
@@ -63,7 +78,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         last_db: str | None = self.config.get(
             section="STONKSMITH", option="last_used_db", fallback=None
         )
-        if last_db:
+        if last_db and resume_last_broker:
             self.do_broker(broker=last_db)
 
     def do_exit(self, line: str) -> bool:
@@ -95,6 +110,10 @@ class StonkSmithDBMenu(cmd.Cmd):
         """
 
         command: str = line.split()[0].lower() if line.split() else ""
+
+        # Nothing below this point is a command that ran. Set once here rather
+        # than on each way out, so a new branch cannot forget it.
+        self.failed = True
 
         if command in BROKER_SHELL_COMMANDS:
             if not self.brokers:
@@ -157,6 +176,10 @@ class StonkSmithDBMenu(cmd.Cmd):
         alone. Without this the only cure for "the dashboard was not updated" is
         another scrape, and for the browser-backed brokers that means a human at
         a sign-in page -- a high price for a tab that is missing a banner.
+
+        Every way this can go wrong sets ``self.failed``, which is what the
+        scripted form exits on. A scheduled refresh that cannot fail is worse
+        than no scheduled refresh: the tabs stop moving and nothing says so.
         :param line: Ignored
         :return: None
         """
@@ -175,10 +198,12 @@ class StonkSmithDBMenu(cmd.Cmd):
 
         except SheetsUnavailable as e:
             print(f"[-] {e}")
+            self.failed = True
             return
 
         except Exception as e:
             print(f"[-] Sheet refresh failed: {type(e).__name__}: {e}")
+            self.failed = True
             return
 
         print(
@@ -191,6 +216,10 @@ class StonkSmithDBMenu(cmd.Cmd):
             # Printed as well as written to the tab. A total short by a whole
             # broker is exactly the failure that must not be quiet.
             print(f"[-] Not on the sheet: {name} could not be read ({reason}).")
+            # And not quiet to a scheduler either. The refresh itself worked,
+            # but the sheet it produced is missing a broker's money, which is
+            # the wrong total rather than a stale one.
+            self.failed = True
 
     def do_verify(self, line: str) -> None:
         """
@@ -208,6 +237,11 @@ class StonkSmithDBMenu(cmd.Cmd):
         *whole* sync is refresh() claiming every tab before clearing any, and the
         scratch tab is not one of them; and an absent value arriving as an empty
         cell rather than an empty string cannot be seen from a read at all.
+
+        A check that did not behave sets ``self.failed``, as does a half that
+        could not run at all, so the scripted form exits on the finding. A
+        verification that reports "unguarded" and exits 0 would be read by
+        everything downstream as a clean run.
         :param line: "tabs", "guard", or empty for both
         :return: None
         """
@@ -225,6 +259,7 @@ class StonkSmithDBMenu(cmd.Cmd):
 
         if which not in ("", "tabs", "guard"):
             print(f"[-] Unknown check '{which}'. Use 'tabs', 'guard', or neither.")
+            self.failed = True
             return
 
         cases: list[Any] = []
@@ -236,6 +271,7 @@ class StonkSmithDBMenu(cmd.Cmd):
             )
 
             if read is None:
+                self.failed = True
                 return
 
             cases.extend(read)
@@ -249,6 +285,7 @@ class StonkSmithDBMenu(cmd.Cmd):
             guarded = self._checked(run=check_ownership_guard, what="Ownership check")
 
             if guarded is None:
+                self.failed = True
                 return
 
             cases.extend(guarded)
@@ -272,6 +309,7 @@ class StonkSmithDBMenu(cmd.Cmd):
                 "reads clean, treat the machine-owned tabs as unguarded and do "
                 "not keep anything of your own in the spreadsheet."
             )
+            self.failed = True
             return
 
         # Named per half that actually ran. A guard-only run listing the
@@ -521,9 +559,25 @@ def main() -> None:
         # SystemExit with no argument is SystemExit(None), which Python maps to
         # exit status 0 -- so this hard failure used to report success.
         raise SystemExit(1)
+
+    # Words after the command name run as one command and then exit, so
+    # `stonksmithdb sheet` is a thing cron can call. Piping into the shell
+    # already worked -- do_EOF quits cleanly -- but it exits 0 however the
+    # command went, and a scheduled step that cannot fail is one that stops
+    # working silently. This form reports.
+    command: str = " ".join(argv[1:]).strip()
+
     try:
-        shell = StonkSmithDBMenu(config_file_path=config_path)
+        shell = StonkSmithDBMenu(
+            config_file_path=config_path, resume_last_broker=not command
+        )
+
+        if command:
+            shell.onecmd(line=command)
+            raise SystemExit(1 if shell.failed else 0)
+
         shell.cmdloop()
+
     except KeyboardInterrupt:
         print("[*] Exiting...")
 

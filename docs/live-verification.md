@@ -203,11 +203,23 @@ in StonkSmith; nothing StonkSmith stores reconstitutes a session Ally will honou
 What does run unattended is `--from-prices`, which values the account from published
 closes and the units the last signed-in run recorded — no browser, no sign-in. That is
 a different claim from any of the ones settled here, so it has rows of its own in the
-table above, and they start at `No`.
+table above — opened at `No`, and settled by step 6 rather than by any of the nine.
 
 What *is* proven, every one of those nine runs: the sign-in flow, the holdings parse,
 the account rail, the bank/brokerage split and the database write. The scrape works.
 It is only the unattended part that does not.
+
+**A schedule is built on that distinction, and it adds no row here.**
+`docs/scheduling.md` records which of the five brokers a cron entry can run with nobody
+watching — a different question from whether a parser still matches a live site, and one
+this file does not answer. It makes no new claim about a live run either. Everything it
+leans on is already in the table above: the `--from-prices` path and the price feed
+behind it, TSP's rows, and the absence of any row at all for `snaptrade` and
+`schwab529plan`. This paragraph names those rows and no longer repeats their verdicts,
+because restating a status in a second place is maintaining it twice and disagreeing at
+the first change — which is what happened to the copies that used to stand right here.
+That file cites the rows; this table stays the count. Step 6 below is what settled the
+one a schedule leans on hardest.
 
 **What the recorder is being read for is written down elsewhere.** Ally's open questions
 are about endpoints nobody has seen -- whether an activity feed exists, whether it is

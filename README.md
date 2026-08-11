@@ -38,7 +38,9 @@ all the accounts you own.
 - [ ] More brokers. Vanguard needs no code at all; link it through SnapTrade.
 - [x] Net worth tracking over time
 - [x] Asset allocation breakdown
-- [ ] Scheduling (cron / background jobs)
+- [x] Scheduling (cron), for the brokers that run unattended — three of five,
+      plus Ally in a reduced mode. Fidelity is replaced by SnapTrade, not
+      scheduled
 
 ---
 
@@ -55,7 +57,8 @@ StonkSmith/
 |    |--- modules/           # per-broker scrape/sync modules
 |    |--- loaders/           # dynamic broker and module loading
 |    |--- helpers/           # db, sheets, logging helpers
-|--- docs/                # live verification, and what was decided against
+|--- docs/                # live verification, what a schedule can carry,
+|                         #   and what was decided against
 |--- scripts/             # one-off setup and probe scripts
 |--- tests/
 |--- pyproject.toml
@@ -186,6 +189,52 @@ timer or CI step can tell whether the sync worked.
 
 A partial module load still runs the modules that did load — partial data beats
 none — but reports `1` rather than claiming success.
+
+### Scheduling
+
+**The five brokers do not schedule alike, and two of them do not schedule at
+all.** That is the part a crontab cannot tell you, and getting it wrong is
+expensive in a specific way: a cron job that errors every night gets muted, and
+after that the portfolio has stopped updating with nothing to say so.
+
+| Broker | On a schedule |
+| --- | --- |
+| `tsp` | Yes. No credential in the daily path |
+| `snaptrade` | Yes, until the connection expires — a browser step every few weeks |
+| `schwab529plan` | Yes. A form post with a stored credential |
+| `ally` | `--from-prices` only, which reprices a stale unit count rather than scraping |
+| `fidelity` | No. Link it through SnapTrade instead |
+
+Weekdays after the close, one process per broker — `broker` is a positional
+subcommand, so there is no `--all` — staggered, because two runs inside the same
+UTC second collapse into one snapshot:
+
+```cron
+PATH=/usr/local/bin:/usr/bin:/bin
+
+30 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith tsp -M tsp --quiet
+35 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith snaptrade -M snaptrade --quiet
+40 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith schwab529plan -M schwab529plan -id 1 --quiet
+45 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith ally -M ally --from-prices --quiet
+50 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb sheet
+```
+
+**There is no `fidelity` line, and the `ally` line is not a scrape.** Ally
+honours no restored session, so `--from-prices` values the account from today's
+published close and *the units the last signed-in run recorded* — exact
+arithmetic on a number that goes quietly wrong the moment a deposit lands. It
+says so on every account it values, and a schedule that mails only on failure
+will never show anybody that line. Re-run `--manual-login` after a deposit; the
+schedule cannot, and will not ask.
+
+The sheet goes last, and it reports: `stonksmithdb sheet` exits `0` when the tabs
+were rewritten and `1` when the sheet was unreachable, a tab refused, or a broker
+database could not be read — a total short by a whole broker being the failure
+that must not be quiet.
+
+`docs/scheduling.md` is the record: what each broker can do unattended, what
+`--from-prices` is and is not, and which of these claims a live run has actually
+settled. This section summarises it rather than being maintained beside it.
 
 ### Fidelity
 
@@ -322,6 +371,9 @@ a day old however old they really were.
 Two things it does not do. It does not touch the sheet — only a scrape syncs, so
 `stonksmithdb`'s `sheet` command is what refreshes the tabs afterwards. And it
 does not notice new accounts, since it values what is already on record.
+
+This is the Ally path a schedule can run, and the only one — see *Scheduling*
+above, and `docs/scheduling.md` for what it means to run it nightly.
 
 #### What an Ally run writes down
 
@@ -963,6 +1015,21 @@ not updated" line: the sheet is a view of the databases, so it can be rebuilt
 from them alone, and re-scraping Ally or Fidelity to fix a spreadsheet means
 sitting at a sign-in page for no reason.
 
+Words after the command name run as one command and then exit, which is the form
+a schedule calls:
+
+```bash
+uv run stonksmithdb sheet
+```
+
+It exits `0` when the tabs were rewritten and `1` when the sheet could not be
+reached, a tab refused to be written, or a broker database could not be read.
+That last one renders a sheet whose total is short by a whole broker, which is a
+wrong number rather than a stale one, so it is reported as a failure rather than
+as a good night. Piping into the shell has always worked, but it exits `0`
+however the command went — and a scheduled step that cannot fail is one that
+stops working silently.
+
 `verify`, beside it, checks what a successful sync cannot show. Two halves, and
 either can be run alone:
 
@@ -981,6 +1048,11 @@ defaced first cell is refused, whether text below a blank one is refused, and
 whether a wholly empty tab is adopted, then deletes the tab again. No tab the sync
 writes is opened, and a tab of that name which already exists stops the run rather
 than being adopted.
+
+`verify` takes the same scripted form and the same statuses: `1` when a check did
+not behave, and `1` when a half could not be run at all. Not reaching the sheet
+says nothing about the guard, and "nothing known" must not exit the way "checked
+and clean" does.
 
 Two things neither half covers: that a refusal aborts the *whole* sync, and that an
 absent value arrived as an empty cell rather than an empty string — read back, those

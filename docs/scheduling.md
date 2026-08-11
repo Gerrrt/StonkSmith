@@ -1,0 +1,246 @@
+# Scheduling
+
+Everything cron needs has been in the tree for a while. A failed run exits non-zero,
+`--quiet` says only what went wrong, and `exclude_accounts` lives in config rather than
+in a flag precisely because a run from cron has nobody to remember one. What was missing
+is the part that cannot be inferred from any of that: **the five brokers do not schedule
+alike, and two of them do not schedule at all.**
+
+That gap is the whole reason this file exists. A scheduling section that lists five
+brokers and quietly fails on two is worse than no scheduling section, because the failure
+is not loud once and then over. It is loud every night, and a cron job that errors every
+night gets muted — after which the portfolio has stopped updating and nothing says so.
+The muting is the bug, and it is caused by the documentation rather than by the code.
+
+**This file is the record.** The README summarises it in one place — the *Scheduling*
+section under *Usage* — and that summary is derived from here rather than maintained
+beside it. Change what a broker can do unattended here, and change it there in the same
+pass.
+
+**And this file is about what a schedule can carry, not about whether a parser works.**
+`docs/live-verification.md` records which of StonkSmith's claims a live run has settled.
+This one records which of them a run with no human in front of it can make at all. The
+two overlap at exactly one row and it is called out below, but they answer different
+questions and a claim proven in one is not proven in the other.
+
+---
+
+## What a schedule already had
+
+Three things, none of them added for this and all of them load-bearing:
+
+- **A failed run exits non-zero.** `1` when a module reported it did nothing, could not
+  log in, or never reached the database; `130` for an interrupt, kept distinct so a
+  scheduler can page on a real failure and shrug at Ctrl-C. The *Exit codes* table in the
+  README is the reference.
+- **`--quiet` reports failures only.** Which is what an unattended run wants: cron mails
+  on output, so a run that says nothing when it worked is a run that only mails when it
+  did not.
+- **`exclude_accounts` is config, not a flag.** A standing overlap between two brokers
+  that can both reach one account has to be stated once, somewhere a scheduled run reads
+  it without being told.
+
+What no amount of that settles is which brokers can run with nobody watching.
+
+---
+
+## The five, and what each can do unattended
+
+| Broker | On a schedule | Why |
+| --- | --- | --- |
+| `tsp` | Yes | No credential in the daily path. Units are config, prices are a public file |
+| `snaptrade` | Yes, until the connection expires | An API key, and a browser step every few weeks to renew it |
+| `schwab529plan` | Yes | Posts a form with a stored credential. No browser, no bot detection, no session to keep |
+| `ally` | `--from-prices` only, and it is not a scrape | Ally honours no restored session, so a scrape needs a human every time |
+| `fidelity` | No — replace it with SnapTrade | Browser-backed behind bot detection and 2FA |
+
+The first three are the uninteresting rows, and they are uninteresting on purpose: put
+them in a crontab and they work. The last two are the reason this file is longer than the
+table.
+
+### SnapTrade expires, and that is not a failure
+
+Connections lapse after a few weeks and re-authorising is a browser step —
+`scripts/snaptrade_register.py link` again. Between renewals the sync is unattended, and
+when the connection goes the run reports it and exits non-zero, so the schedule surfaces
+it the same way it surfaces anything else.
+
+Worth knowing rather than discovering: a disabled connection does not error at the API.
+SnapTrade keeps serving its last cached balance. StonkSmith skips those accounts loudly
+rather than recording a stale number as a fresh one, which is why an expiry shows up as
+accounts going missing from a run rather than as a connection error.
+
+---
+
+## Ally on a schedule is a different thing from Ally
+
+This is the entry that has to be read rather than skimmed, because the flag that makes
+Ally schedulable does not do what scheduling the other brokers does.
+
+**The scrape cannot be scheduled.** Settled across nine live runs, both browsers, both
+persistence models: Ally refuses a restored session however it is stored. The saved jar is
+not the problem — it carries every token the site issues — but the next run is answered
+`401`, the app calls `auth/anonymous_invoke`, and the page renders signed out. Firefox with
+`storage_state`, Firefox with IndexedDB included, and a persistent Chrome profile were all
+tried and all three were refused. `docs/live-verification.md` has the evidence.
+
+That is a property of Ally's auth rather than a defect in StonkSmith. Nothing StonkSmith
+stores reconstitutes a session Ally will honour, so there is no version of this that a
+future commit fixes.
+
+**What can be scheduled is `--from-prices`, and it is a repriced stale unit count rather
+than a fresh scrape.** It opens no browser and signs in to nothing. It multiplies the
+units *the last signed-in run recorded* by today's published close:
+
+```bash
+uv run stonksmith ally -M ally --from-prices --quiet
+```
+
+Both halves of that sentence matter. The price is today's. The units are as old as the
+last time a human signed in, and they are wrong the moment a deposit lands — the total
+drifts low and keeps drifting, silently, until somebody signs in again. The arithmetic
+stays exact the whole time, which is what makes it dangerous: nothing about the number
+looks stale.
+
+So the run says so itself, on every account it values:
+
+```text
+[*] Individual (...0847): priced at 2026-08-06; units as recorded 2026-08-07 20:40:18. Re-run with --manual-login after a deposit.
+```
+
+That line is not decoration and it is not a warning about a rare case. It is the standing
+description of what a scheduled Ally run produces. A schedule that mails only on failure
+will never show it to anybody, which is the argument for reading it here instead.
+
+Three more things it does not do:
+
+- **It does not seed itself.** Against a database no signed-in run has written, it refuses
+  rather than valuing the account at nothing. Run `--manual-login` once first.
+- **It does not touch the sheet.** Only a scrape syncs, so the sheet step below is what
+  makes a priced run visible.
+- **It does not notice new accounts.** It values what is already on record.
+
+**So Ally has two paths and they are not interchangeable.** The scheduled one keeps a
+number approximately right between sign-ins. The manual one is the only thing that makes
+it right. Put a recurring reminder to run `--manual-login` wherever deposits are already
+tracked; the schedule cannot do it and will not ask.
+
+---
+
+## Fidelity is not scheduled, it is replaced
+
+Fidelity fronts its login with Akamai Bot Manager and ThreatMetrix, which reject a
+scripted sign-in before the form renders, and 2FA sits behind that. `--manual-login` is
+the documented way in, and it is a human at a browser by construction.
+
+The answer is not to schedule the scraper. It is to stop running it: SnapTrade covers
+Fidelity, and it is exactly what takes the account from attended to unattended. *When two
+brokers can reach the same account* in the README is the procedure.
+
+One thing to get right while switching, because it is the failure that looks like success:
+if both the `fidelity` scraper and SnapTrade run, both write, and the `Accounts` tab holds
+the money twice. The tab has a total on it, and that total is wrong in the direction that
+looks good. Pick one owner — for Fidelity that is SnapTrade — and drop the other from the
+schedule.
+
+---
+
+## A worked crontab
+
+Four things this shape respects, all of them consequences of how the tool works rather
+than preferences:
+
+- **The broker is a positional subcommand**, so one process runs one broker. There is no
+  `--all`. N brokers is N lines.
+- **Two runs inside the same UTC second collapse to one snapshot**, because `scraped_at`
+  is stamped to the second and is half the snapshot's key. Stagger the entries; do not
+  fire them together. TSP in particular is fast enough to matter.
+- **The sheet goes last**, after every broker has written, because it renders what the
+  databases hold at the moment it runs.
+- **`--quiet` on every run**, so cron mails when something broke and stays silent when
+  nothing did.
+
+Markets close at 16:00 ET; these run after the close, on weekdays only.
+
+```cron
+PATH=/usr/local/bin:/usr/bin:/bin
+
+30 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith tsp -M tsp --quiet
+35 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith snaptrade -M snaptrade --quiet
+40 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith schwab529plan -M schwab529plan -id 1 --quiet
+45 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith ally -M ally --from-prices --quiet
+50 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb sheet
+```
+
+**There is no `fidelity` line, and that is the point of the file.** There is an `ally`
+line and it is `--from-prices`, which is a repriced stale unit count. Neither absence is
+an oversight to be corrected by adding a sixth entry.
+
+`PATH` is set because cron's is short and `uv` usually is not on it. `cd` because the
+project is a `uv` workspace and `uv run` resolves it from the working directory.
+
+### The sheet step reports
+
+`stonksmithdb sheet` runs the one command and exits: `0` when the tabs were rewritten, `1`
+when the sheet could not be reached, when a tab refused to be written, or when a broker
+database could not be read. That last one is a success that produces a wrong total — the
+sheet renders, missing a whole broker's money — so it is reported as a failure rather than
+as a good night.
+
+The interactive shell is unchanged; `uv run stonksmithdb` with no arguments still opens
+it.
+
+### What the mail will look like
+
+`--quiet` lowers the log level. It does not suppress the progress bar, which is written to
+the console rather than through the logger, so a run that worked can still put a line of
+bar into cron's output. Redirect stdout per entry if that matters; the exit status is the
+part that carries the meaning.
+
+---
+
+## What a scheduled run has, and has not, been observed doing
+
+The honest summary, and it is shorter than the section above deserves.
+
+**`docs/live-verification.md` adds no row for any of this, on purpose.** Scheduling makes
+no new claim about a live site — it makes claims about brokers whose rows either already
+exist there or were never opened. Adding rows would restate them in a second place and put
+the two out of step at the first change.
+
+What that file already says, and what it means here:
+
+- **`Ally — valuing from published prices without a login` stands at `Yes`.** It read
+  `No` when this file was written, and the sharpest thing this section used to say —
+  that the one scheduled path recommended for Ally was the one path not verified — is no
+  longer true. It was run end to end on 2026-08-10, three times, against a real account
+  with nobody signed in. Two of those findings are what a crontab actually rests on. It
+  opens no browser, and the filesystem says so rather than the log: the same command
+  with the flag removed left session state behind, and these runs left the directory
+  empty. And against a database with no units on record it refuses and exits `1` instead
+  of valuing nothing — so a fresh machine, or a lost `ally.db`, mails you rather than
+  quietly reporting a smaller portfolio. **`Ally — one row per account across runs`
+  settled `Yes` alongside it**, which is the other thing a nightly entry leans on:
+  repeated runs added snapshots without adding accounts.
+  None of that makes the units any fresher, and the same runs are what pin the opposite.
+  The units' stamp held at the last sign-in's time across all three while the newest
+  snapshot's own time moved under it. The staleness this file leads with is therefore
+  real, does not drift younger as the snapshots accumulate, and is reported by nothing
+  except the line the run prints on every account it values.
+- **TSP's whole unattended path is confirmed live.** The share price download, the DFAS
+  pay table's download *and* its parse, the contribution accrual and the database write
+  were all run without a human on 2026-08-10, and every one of those rows now reads `Yes`.
+  This is the row a crontab can lean on hardest. One thing to carry into it anyway: DFAS
+  fingerprints its callers, and that file says plainly that what works today is not a
+  guarantee. A refused pay table reports itself and leaves the anchored mark exactly as it
+  was — it stalls the accrual rather than corrupting the number — but the way back is
+  `--pay-table` with a page saved from a browser, which is a human. A schedule that starts
+  mailing about the pay table is asking for that, not for a retry.
+- **`snaptrade` and `schwab529plan` have no rows at all.** Neither has been run against a
+  real account through StonkSmith. Their place in the table above rests on how they are
+  built — an API key, a form post, no session to lose — rather than on an observed run.
+  That is a weaker kind of evidence and it is worth saying so before a crontab is written
+  around it.
+
+None of that argues against scheduling them. It argues for reading the first week of cron
+mail rather than assuming silence means success.
