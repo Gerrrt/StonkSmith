@@ -35,6 +35,7 @@ from etc.config import (
     DEFAULT_DFAS_PAY_URL,
     DEFAULT_HOST_INFO_COLORS,
     DEFAULT_TSP_PRICE_URL,
+    get_asset_classes,
     get_audit_mode,
     get_host_info_colors,
     get_log_mode,
@@ -350,6 +351,90 @@ class SnapTradeExcludedAccountsTests(unittest.TestCase):
 
         with config_of(section("SNAPTRADE", exclude_accounts=written)):
             self.assertEqual(get_snaptrade_excluded_accounts(), [written])
+
+
+class AssetClassesTests(unittest.TestCase):
+    """
+    The dashboard's one hand-kept dimension, where a typo is silent.
+
+    These keys become SUMIFS criteria matched against the symbol exactly as the
+    source spelled it. So the failure mode is not a crash or a wrong number: a
+    key this getter tidied, lower-cased or split in the wrong place classifies
+    nothing at all, and the block renders as though no line had been written.
+    """
+
+    def test_indented_lines_become_one_entry_each(self) -> None:
+        body = "[ALLOCATION]\nasset_classes =\n    VTI = US Stock\n    G Fund = Bond\n"
+
+        with config_of(body):
+            self.assertEqual(get_asset_classes(), {"VTI": "US Stock", "G Fund": "Bond"})
+
+    def test_neither_the_indentation_nor_the_spacing_is_part_of_the_value(self) -> None:
+        # The indent is what makes it a continuation line in INI, so it is syntax
+        # rather than content -- but it survives into the value, and a key
+        # carrying four leading spaces matches no symbol on any tab.
+        body = "[ALLOCATION]\nasset_classes =\n        C Fund   =   US Stock   \n"
+
+        with config_of(body):
+            self.assertEqual(get_asset_classes(), {"C Fund": "US Stock"})
+
+    def test_the_case_that_was_typed_is_the_case_that_is_matched(self) -> None:
+        # The reason this is one option's value rather than a section of
+        # options: ConfigParser lower-cases option names, so "VTI" read that way
+        # would arrive as "vti" and match nothing. Pinned because the section
+        # form is the obvious refactor and it is silently wrong.
+        body = "[ALLOCATION]\nasset_classes =\n    VTI = US Stock\n"
+
+        with config_of(body):
+            self.assertEqual(list(get_asset_classes()), ["VTI"])
+
+    def test_blank_lines_between_entries_are_dropped(self) -> None:
+        body = "[ALLOCATION]\nasset_classes =\n    VTI = US Stock\n\n    BND = Bond\n"
+
+        with config_of(body):
+            self.assertEqual(len(get_asset_classes()), 2)
+
+    def test_an_empty_setting_classifies_nothing_rather_than_one_blank(self) -> None:
+        # {"": ""} would be an entry that classifies nothing but is still an
+        # entry, and the block is drawn on whether there are any.
+        with config_of(section("ALLOCATION", asset_classes="")):
+            self.assertEqual(get_asset_classes(), {})
+
+    def test_a_line_with_no_separator_is_dropped_rather_than_guessed_at(self) -> None:
+        # "VTI" alone states a symbol and no class. Reading it as its own class
+        # name would invent a slice nobody asked for and label it with a ticker.
+        body = "[ALLOCATION]\nasset_classes =\n    VTI\n    BND = Bond\n"
+
+        with config_of(body):
+            self.assertEqual(get_asset_classes(), {"BND": "Bond"})
+
+    def test_a_line_with_no_class_is_dropped_too(self) -> None:
+        body = "[ALLOCATION]\nasset_classes =\n    VTI =\n    BND = Bond\n"
+
+        with config_of(body):
+            self.assertEqual(get_asset_classes(), {"BND": "Bond"})
+
+    def test_the_split_is_on_the_first_separator_so_a_class_may_contain_one(
+        self,
+    ) -> None:
+        body = "[ALLOCATION]\nasset_classes =\n    VTI = Stock = US\n"
+
+        with config_of(body):
+            self.assertEqual(get_asset_classes(), {"VTI": "Stock = US"})
+
+    def test_the_last_line_for_a_symbol_wins(self) -> None:
+        # A symbol cannot be in two classes at once: the block would count its
+        # money twice and still report shares that sum to 1.
+        body = "[ALLOCATION]\nasset_classes =\n    VTI = Bond\n    VTI = US Stock\n"
+
+        with config_of(body):
+            self.assertEqual(get_asset_classes(), {"VTI": "US Stock"})
+
+    def test_a_single_entry_on_the_option_line_works(self) -> None:
+        # Documented as one per line, indented -- but writing the only one
+        # inline is the obvious shorthand and has to mean the same thing.
+        with config_of(section("ALLOCATION", asset_classes="VTI = US Stock")):
+            self.assertEqual(get_asset_classes(), {"VTI": "US Stock"})
 
 
 class TspUnitsTests(unittest.TestCase):

@@ -450,3 +450,46 @@ def get_tsp_pay_table_url() -> str:
     )
 
     return configured or DEFAULT_DFAS_PAY_URL
+
+
+def get_asset_classes() -> dict[str, str]:
+    """
+    Which symbol belongs to which asset class, as the operator declared it.
+
+    No source StonkSmith reads supplies an asset class: SnapTrade gives a ticker,
+    a scraped 529 gives a fund code, TSP gives a fund. They are the same field --
+    HoldingRow.symbol is "the ticker, or the fund code for sources that do not
+    trade in tickers" -- which is what makes one hand-kept table enough to cover
+    all five brokers. Deriving the class instead would take an external lookup or
+    a guess, and a guess buried in a dashboard formula is worse than a dimension
+    the tab does not claim to have.
+
+    Config rather than a flag, for the reason exclude_accounts is: which fund is
+    which asset class is a standing fact about the portfolio, and a run from cron
+    has nobody to remember it.
+
+    One "SYMBOL = Class" per line. Split on the first "=" so a class name may
+    contain one; a line without a separator is dropped rather than guessed at.
+    Keys keep the case they were typed in, because they are matched against the
+    symbol exactly as the source spelled it -- which is also why this is parsed
+    out of one option's value rather than read as a section of options, since
+    ConfigParser lower-cases option names and "VTI" would arrive as "vti".
+    :return: Symbol to class name, later duplicates winning
+    :rtype: dict[str, str]
+    """
+
+    raw: str = get_config().get(
+        section="ALLOCATION", option="asset_classes", fallback=""
+    )
+
+    classes: dict[str, str] = {}
+
+    for line in raw.splitlines():
+        symbol, sep, name = line.partition("=")
+
+        if not sep or not symbol.strip() or not name.strip():
+            continue
+
+        classes[symbol.strip()] = name.strip()
+
+    return classes

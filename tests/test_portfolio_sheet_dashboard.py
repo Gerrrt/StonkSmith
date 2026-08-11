@@ -31,6 +31,7 @@ from etc.portfolio_sheet import (
     BANNER,
     BANNER_CELL,
     BY_BROKER_COL,
+    BY_CLASS_COL,
     BY_KIND_COL,
     BY_POSITION_COL,
     BY_SOURCE_COL,
@@ -45,6 +46,7 @@ from etc.portfolio_sheet import (
     SUMMARY_LABELS,
     UNREADABLE_COL,
     _block_updates,
+    _unmatched_classes,
     column_index,
     column_letter,
     column_of,
@@ -594,23 +596,17 @@ def allocating(**overrides: Any) -> Portfolio:
     return Portfolio(**base)
 
 
-class AllocationTests(unittest.TestCase):
+class BlockReading:
     """
-    The breakdown, and the cash it has to account for.
+    Reading a written allocation block back out of the two update batches.
 
-    Holdings do not sum to the portfolio: uninvested money sits in a balance and
-    in no position. A share computed over the holdings subtotal therefore leaves
-    the cash out silently, overstates every slice, and still adds to 100% -- the
-    failure this project keeps finding, where the run reported success because
-    from its side nothing went wrong. These tests pin the base the shares divide
-    by, the slice that names the cash, and what happens when the gap goes the
-    way it cannot.
+    Shared by the blocks that are always drawn and the one that is drawn only
+    when it has been configured, because "what landed in this block's columns"
+    is the same question for all three and two answers to it could disagree.
     """
 
-    def setUp(self) -> None:
-        formulas, literals = dashboard_cells(portfolio=allocating(), today=TODAY)
-        self.formulas = cells(updates=formulas)
-        self.literals = cells(updates=literals)
+    formulas: dict[str, list[list[Any]]]
+    literals: dict[str, list[list[Any]]]
 
     def _summary_range(self) -> str:
         """
@@ -654,6 +650,25 @@ class AllocationTests(unittest.TestCase):
                 return [row[0] for row in values]
 
         raise AssertionError(f"nothing written down column {letter}")
+
+
+class AllocationTests(BlockReading, unittest.TestCase):
+    """
+    The breakdown, and the cash it has to account for.
+
+    Holdings do not sum to the portfolio: uninvested money sits in a balance and
+    in no position. A share computed over the holdings subtotal therefore leaves
+    the cash out silently, overstates every slice, and still adds to 100% -- the
+    failure this project keeps finding, where the run reported success because
+    from its side nothing went wrong. These tests pin the base the shares divide
+    by, the slice that names the cash, and what happens when the gap goes the
+    way it cannot.
+    """
+
+    def setUp(self) -> None:
+        formulas, literals = dashboard_cells(portfolio=allocating(), today=TODAY)
+        self.formulas = cells(updates=formulas)
+        self.literals = cells(updates=literals)
 
     def test_shares_divide_by_the_portfolio_not_by_the_holdings_subtotal(
         self,
@@ -1084,6 +1099,397 @@ class AllocationTests(unittest.TestCase):
 
         self.assertEqual(self._cells(block=BY_POSITION_COL, offset=0)[0], "(no symbol)")
         self.assertIn('"   "', self._cells(block=BY_POSITION_COL, offset=1)[0])
+
+
+#: allocating() holds 700 under "C" and 400 under a blank symbol, so this maps
+#: one of the two and deliberately leaves the other for the residual to catch.
+CLASSES: dict[str, str] = {"C": "US Stock"}
+
+
+class AssetClassAllocationTests(BlockReading, unittest.TestCase):
+    """
+    The one breakdown no database supplies, and therefore the one that can lie.
+
+    The other two group on a column that is already on a tab. A class is not: it
+    is a name somebody typed against a set of symbols, which means every failure
+    here is a failure of agreement rather than of arithmetic. A line that does
+    not match classifies nothing and looks identical to no line at all; a symbol
+    nobody wrote a line for would, if dropped, leave a breakdown of part of the
+    portfolio presented as a breakdown of all of it. So these pin what happens to
+    the money nobody classified, and what the criteria are matched on.
+    """
+
+    def setUp(self) -> None:
+        formulas, literals = dashboard_cells(
+            portfolio=allocating(), today=TODAY, classes=CLASSES
+        )
+        self.formulas = cells(updates=formulas)
+        self.literals = cells(updates=literals)
+
+    def _written(self) -> dict[str, Any]:
+        return {**self.formulas, **self.literals}
+
+    def test_no_mapping_draws_no_block_at_all(self) -> None:
+        # Absent, not empty. One 100% "(unclassified)" wedge is not a breakdown,
+        # and this is the one region whose emptiness is not ambiguous -- nobody
+        # asked for it, so there is nothing a blank could be hiding.
+        formulas, literals = dashboard_cells(portfolio=allocating(), today=TODAY)
+        written = {**cells(updates=formulas), **cells(updates=literals)}
+
+        for name in written:
+            self.assertFalse(
+                name.startswith(BY_CLASS_COL),
+                f"{name} was written with no mapping configured",
+            )
+
+    def test_the_block_groups_by_the_class_that_was_named(self) -> None:
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+
+        self.assertIn("US Stock", names)
+
+    def test_a_class_adds_up_one_sumifs_per_symbol_in_it(self) -> None:
+        # A class is a set of symbols and the tab has a column of symbols, so the
+        # value is a term per symbol rather than one criterion. Pinned because
+        # the readable alternative -- an array criterion inside SUMPRODUCT --
+        # would put fund codes inside spreadsheet punctuation.
+        both = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="VTI",
+                    value=600.0,
+                ),
+                HoldingRow(
+                    broker="snaptrade",
+                    source="Ally",
+                    account="Loose",
+                    account_key="l",
+                    symbol="VOO",
+                    value=500.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(
+            portfolio=both,
+            today=TODAY,
+            classes={"VTI": "US Stock", "VOO": "US Stock"},
+        )
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+        values = self._cells(block=BY_CLASS_COL, offset=1)
+        formula: str = values[names.index("US Stock")]
+
+        self.assertIn('"VTI"', formula)
+        self.assertIn('"VOO"', formula)
+        self.assertEqual(formula.count("SUMIFS("), 2)
+
+    def test_a_symbol_with_no_line_is_named_rather_than_dropped(self) -> None:
+        # The 400 held under a blank symbol has no line. Dropping it would leave
+        # a breakdown whose shares no longer add up while still looking whole.
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+
+        self.assertIn("(unclassified)", names)
+
+    def test_the_residual_sits_below_the_classes_somebody_declared(self) -> None:
+        # Not sorted in among them. It is what nobody has said anything about,
+        # which belongs beside the cash row rather than competing with the rows
+        # that are actually answers.
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+
+        self.assertLess(names.index("US Stock"), names.index("(unclassified)"))
+        self.assertLess(
+            names.index("(unclassified)"), names.index("Cash and uninvested")
+        )
+
+    def test_classes_are_ordered_largest_first(self) -> None:
+        spread = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="BND",
+                    value=100.0,
+                ),
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="VTI",
+                    value=900.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(
+            portfolio=spread,
+            today=TODAY,
+            classes={"VTI": "US Stock", "BND": "Bond"},
+        )
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+
+        self.assertLess(names.index("US Stock"), names.index("Bond"))
+
+    def test_cash_is_a_named_slice_here_for_the_same_reason(self) -> None:
+        # Holdings do not sum to the portfolio here either. Without this row a
+        # 31%-cash portfolio renders as fully invested, in a second place.
+        labels = [row[0] for row in self.literals[self._summary_range()]]
+        gap: int = labels.index("In accounts, not in positions") + FIRST_DATA_ROW
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+        values = self._cells(block=BY_CLASS_COL, offset=1)
+
+        self.assertEqual(values[names.index("Cash and uninvested")], f"=B{gap}")
+
+    def test_shares_divide_by_the_portfolio_not_by_the_holdings_subtotal(self) -> None:
+        labels = [row[0] for row in self.literals[self._summary_range()]]
+        total: str = f"B{labels.index('Total (USD)') + FIRST_DATA_ROW}"
+        held: str = f"B{labels.index('Holdings total (USD)') + FIRST_DATA_ROW}"
+
+        for share in self._cells(block=BY_CLASS_COL, offset=2)[:-1]:
+            self.assertIn(total, share)
+            self.assertNotIn(held, share)
+
+    def test_the_block_closes_on_the_same_check_row(self) -> None:
+        # The sheet's own arithmetic over the cells it wrote. A share column that
+        # does not come to 1 is a wrong base, visible without adding it up.
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+
+        self.assertEqual(names[-1], "Slices sum to")
+
+    def test_the_base_the_shares_are_of_is_written_in_the_header(self) -> None:
+        right: str = self._column(block=BY_CLASS_COL, offset=ALLOCATION_WIDTH - 1)
+        header = self.literals[f"{BY_CLASS_COL}{HEADER_ROW}:{right}{HEADER_ROW}"][0]
+
+        self.assertEqual(header, ["Asset class", "Value (USD)", "Share of total (USD)"])
+
+    def test_a_criterion_is_the_symbol_exactly_as_the_tab_spells_it(self) -> None:
+        # The mapping key is matched raw, for the reason _slices spells out: a
+        # criterion that has been tidied no longer finds the cell it is meant to.
+        # So "VTI " is classified only by a line that says "VTI ".
+        spaced = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="VTI ",
+                    value=100.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(
+            portfolio=spaced, today=TODAY, classes={"VTI ": "US Stock"}
+        )
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+        values = self._cells(block=BY_CLASS_COL, offset=1)
+
+        self.assertIn('"VTI "', values[names.index("US Stock")])
+
+    def test_a_line_that_does_not_match_exactly_classifies_nothing(self) -> None:
+        # The way a typo fails: silently. "vti" is not "VTI" on the tab, so the
+        # holding falls to the residual -- which is why the run reports the line.
+        spaced = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="VTI",
+                    value=100.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(
+            portfolio=spaced, today=TODAY, classes={"vti": "US Stock"}
+        )
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+
+        self.assertNotIn("US Stock", names)
+        self.assertIn("(unclassified)", names)
+
+    def test_that_unmatched_line_is_what_the_run_reports(self) -> None:
+        self.assertEqual(
+            _unmatched_classes(portfolio=allocating(), mapping={"vti": "US Stock"}),
+            ("vti",),
+        )
+        self.assertEqual(
+            _unmatched_classes(portfolio=allocating(), mapping=CLASSES), ()
+        )
+
+    def test_a_symbol_containing_a_quote_is_escaped(self) -> None:
+        # A quote inside a criterion closes the string and the rest of the fund
+        # code becomes syntax. Doubled, it is a quote.
+        quoted = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol='A"B',
+                    value=100.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(
+            portfolio=quoted, today=TODAY, classes={'A"B': "US Stock"}
+        )
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        self.assertIn('"A""B"', self._cells(block=BY_CLASS_COL, offset=1)[0])
+
+    def test_a_class_named_like_a_formula_is_not_run(self) -> None:
+        # The class name comes out of a config file, which is text a person
+        # typed, and the name column goes up RAW like every other name here.
+        hostile: str = '=IMPORTXML("http://example.invalid","//a")'
+        formulas, literals = dashboard_cells(
+            portfolio=allocating(), today=TODAY, classes={"C": hostile}
+        )
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        self.assertIn(hostile, self._cells(block=BY_CLASS_COL, offset=0))
+
+        names: str = self._column(block=BY_CLASS_COL, offset=0)
+        self.assertTrue(
+            any(name.startswith(names) for name in self.literals),
+            "the name column did not go up as a literal",
+        )
+        for values in self.formulas.values():
+            for row in values:
+                self.assertNotIn(hostile, row)
+
+    def test_no_class_formula_types_a_column_letter(self) -> None:
+        # Every reference derived from the contract tuples, as everywhere else:
+        # a column appended to Holdings must not repoint these at its neighbour.
+        symbol: str = column_of(columns=HOLDING_COLUMNS, name="Symbol")
+        value: str = column_of(columns=HOLDING_COLUMNS, name="Value")
+        formula: str = self._cells(block=BY_CLASS_COL, offset=1)[0]
+
+        self.assertIn(f"{tab_ref(tab=HOLDINGS_TAB)}${symbol}$3:${symbol}", formula)
+        self.assertIn(f"{tab_ref(tab=HOLDINGS_TAB)}${value}$3:${value}", formula)
+
+    def test_only_the_asked_for_currency_is_in_the_block(self) -> None:
+        # A share can only be a share of the total, and Portfolio.total refuses
+        # to add a dollar to a euro.
+        mixed = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="EUR",
+                    value=900.0,
+                    currency="EUR",
+                ),
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="C",
+                    value=100.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(
+            portfolio=mixed,
+            today=TODAY,
+            classes={"C": "US Stock", "EUR": "International Stock"},
+        )
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+        names = self._cells(block=BY_CLASS_COL, offset=0)
+
+        self.assertIn("US Stock", names)
+        self.assertNotIn("International Stock", names)
+
+    def test_both_holdings_blocks_refuse_together(self) -> None:
+        # The class block is the same money grouped a second way, so a version of
+        # it that drew while the position block refused would be the same lie
+        # with better manners.
+        doubled = allocating(
+            holdings=(
+                HoldingRow(
+                    broker="tsp",
+                    source="tsp",
+                    account="C Fund",
+                    account_key="c",
+                    symbol="C",
+                    value=2000.0,
+                ),
+            )
+        )
+        formulas, literals = dashboard_cells(
+            portfolio=doubled, today=TODAY, classes=CLASSES
+        )
+        self.formulas, self.literals = cells(updates=formulas), cells(updates=literals)
+
+        self.assertEqual(
+            self._cells(block=BY_CLASS_COL, offset=0), ["Allocation not drawn"]
+        )
+        self.assertEqual(
+            self._cells(block=BY_POSITION_COL, offset=0), ["Allocation not drawn"]
+        )
+        self.assertIn("400.00", self._cells(block=BY_CLASS_COL, offset=1)[0])
+
+    def test_the_block_does_not_land_on_top_of_the_bands(self) -> None:
+        # A QUERY that would spill into an occupied cell returns #REF! and shows
+        # nothing at all, so nothing may be written into a band's path.
+        starts = [
+            SUMMARY_COL,
+            BY_BROKER_COL,
+            BY_SOURCE_COL,
+            STALENESS_COL,
+            UNREADABLE_COL,
+            NET_WORTH_COL,
+            BY_KIND_COL,
+            BY_POSITION_COL,
+            BY_CLASS_COL,
+        ]
+        self.assertEqual(len(set(starts)), len(starts))
+        self.assertGreaterEqual(
+            column_index(letter=BY_CLASS_COL),
+            column_index(letter=BY_POSITION_COL) + ALLOCATION_WIDTH,
+        )
+
+    def test_the_grid_is_widened_to_reach_the_block(self) -> None:
+        tab = MagicMock()
+        tab.acell.return_value = MagicMock(value=BANNER)
+        tab.row_count = 1000
+        tab.col_count = 26
+
+        write_dashboard(
+            worksheet=tab, portfolio=allocating(), today=TODAY, classes=CLASSES
+        )
+
+        tab.add_cols.assert_called_once_with(
+            column_index(letter=BY_CLASS_COL) + ALLOCATION_WIDTH - 1 - tab.col_count
+        )
+
+    def test_and_is_not_widened_for_a_block_nobody_asked_for(self) -> None:
+        # Reserving columns for a block that is not drawn would widen every
+        # dashboard in the field to hold nothing.
+        tab = MagicMock()
+        tab.acell.return_value = MagicMock(value=BANNER)
+        tab.row_count = 1000
+        tab.col_count = 26
+
+        write_dashboard(worksheet=tab, portfolio=allocating(), today=TODAY)
+
+        tab.add_cols.assert_called_once_with(
+            column_index(letter=BY_POSITION_COL) + ALLOCATION_WIDTH - 1 - tab.col_count
+        )
 
 
 if __name__ == "__main__":
