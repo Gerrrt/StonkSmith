@@ -388,11 +388,12 @@ class Connection:
                 # resolves to nothing here.
                 self.logger.error(
                     msg=(
-                        f"Credential {normalized_cred[1]} resolved to an empty "
-                        "secret; the row is stored but the keyring returned "
-                        "nothing, so the login below will fail as though the "
-                        "password were wrong. If it works by hand and only "
-                        "fails unattended, see docs/scheduling.md."
+                        f"Credential id {normalized_cred[0]} "
+                        f"({normalized_cred[1]}) resolved to an empty secret; "
+                        "the row is stored but the keyring returned nothing, so "
+                        "the login below will fail as though the password were "
+                        "wrong. If it works by hand and only fails unattended, "
+                        "see docs/scheduling.md."
                     )
                 )
 

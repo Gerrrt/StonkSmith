@@ -21,13 +21,39 @@
 #   repository is cloned.
 #
 # A failing step does not stop the ones after it -- a broker that cannot log in
-# should not cost you the sheet. The exit status is the worst of them, so
+# should not cost you the sheet. The script exits non-zero if any step did, so
 # launchd and the log see a failure even when it was the second of six.
 
 set -u
 
-cd "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
+# Resolved in steps, each one checked, rather than as one nested substitution.
+# `cd ""` *succeeds* and stays where it was, so a substitution that came back
+# empty would not trip `|| exit 1` -- it would leave the run in whatever
+# directory launchd started it in, which is `/` for an agent, and `uv run` there
+# resolves some other project or none at all. No `--` on dirname or cd either:
+# $0 is an absolute path in every context this runs in, and BSD and GNU do not
+# agree about accepting it.
+script_dir=$(dirname "$0")
+[ -n "$script_dir" ] || exit 1
 
+repo=$(CDPATH= cd "$script_dir/.." && pwd)
+[ -n "$repo" ] || exit 1
+
+cd "$repo" || exit 1
+
+# The check a wrong answer above cannot survive. Cheaper than discovering it
+# from six identical `uv run` failures.
+if [ ! -f pyproject.toml ]; then
+    echo "Not a StonkSmith checkout: no pyproject.toml in $repo" >&2
+    exit 1
+fi
+
+# 1 for any failure, rather than the failing step's own code. The exit codes
+# this aggregates are 1 for a real failure and 130 for an interrupt, and the
+# tool's contract is that a scheduler pages on 1 and shrugs at 130 -- so taking
+# the larger of them would let an interrupted step mask a broken one and report
+# the night as nothing to worry about. A run where anything failed is a run to
+# look at.
 status=0
 
 run() {
