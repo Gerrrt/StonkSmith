@@ -45,9 +45,17 @@ LINK = re.compile(r"\[(?P<text>[^\]]*)\]\((?P<target>[^)\s]+)\)")
 #: A setext-free ATX heading, which is the only kind these files use.
 HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<title>.+?)\s*$", re.MULTILINE)
 
-#: Fenced code blocks. Headings are matched after these are removed, so a shell
-#: comment at the start of a line is never mistaken for a heading.
-FENCE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
+#: Fenced code blocks. Headings and links are matched after these are removed, so
+#: a shell comment at the start of a line is never mistaken for a heading and an
+#: illustrated path is never mistaken for a link.
+#:
+#: The leading whitespace is not decoration. A fence indented under a list item
+#: is still a fence -- docs/live-verification.md has one, three spaces in, under
+#: step 5 of *The sheet* -- and anchoring at column 0 left its contents to be
+#: scanned as prose. That block happens to hold neither a link nor a heading, so
+#: nothing was misread; the next one to hold an example path would have been
+#: reported as a broken link that no reader could see.
+FENCE = re.compile(r"^[ \t]*```.*?^[ \t]*```", re.MULTILINE | re.DOTALL)
 
 #: Characters GitHub drops when it slugs a heading. Emoji shortcodes are the case
 #: worth naming: `## :wrench: Features` anchors as `wrench-features`, so a slugger
@@ -161,6 +169,30 @@ class DocCrossReferences(unittest.TestCase):
                         "heading with that anchor. A renamed or moved heading "
                         "leaves the link rendering as text.",
                     )
+
+    def test_a_fence_is_stripped_whether_or_not_it_is_indented(self) -> None:
+        # The stripper is what keeps an illustration from being read as a claim,
+        # so its own blind spot is worth pinning rather than leaving to the
+        # documents that happen to exist today. A fence indented under a list
+        # item is the case that was missed.
+        document: str = (
+            "# Title\n\n"
+            "- A step:\n\n"
+            "   ```bash\n"
+            "   cat [notes](does-not-exist.md)\n"
+            "   ```\n\n"
+            "```bash\n"
+            "cat [more](also-missing.md)\n"
+            "```\n"
+        )
+
+        stripped: str = FENCE.sub(repl="", string=document)
+
+        self.assertEqual(
+            [],
+            [match.group("target") for match in LINK.finditer(stripped)],
+            "A path inside a code block is an illustration, not a link.",
+        )
 
     def test_the_split_chapters_are_reachable_from_the_readme(self) -> None:
         # The three files the manual moved into. A README that stopped linking
