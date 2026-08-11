@@ -1303,10 +1303,14 @@ settle: it needs a workspace whose brokers really did run on different days, bec
 workspace where they all ran this morning produces a one-date series that passes both
 checks by having nothing to carry.
 
-*The sheet — refusing a tab it does not own* is the refusal, and it is the only one of
-the five that can be settled the other way. A sync that went ahead and ate your text is
-not a failed check; it is that row observed as **Run, and it cannot** be relied on. Write
-it up that way, and say which tab. `verify` covers `claim()`'s three answers and not the
+*The sheet — refusing a tab it does not own* is the refusal, and what marks it out is that
+the question can be put today: the two rows still outstanding wait on a workspace nobody
+here has, and this one only ever waited on somebody willing to deface a tab. It is not the
+only row that could come back settled the other way — a `Transactions` tab found holding
+five hundred of six hundred movements would be that too — but it is the one where asking
+costs nothing but nerve. A sync that went ahead and ate your text is not a failed check; it
+is that row observed as **Run, and it cannot** be relied on. Write it up that way, and say
+which tab. `verify` covers `claim()`'s three answers and not the
 abort, so a clean `verify` and no deface leaves this row where it is.
 
 Then *Recording a result* below, which is where the asymmetry it warns about actually
