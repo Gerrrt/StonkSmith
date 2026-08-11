@@ -391,24 +391,37 @@ derived from the tuples above, so the letters cannot drift away from the contrac
 - An allocation **by account kind** — `529`, `INVESTMENT`, `LOC`, whatever the
   source calls it. It is the one breakdown that costs nothing: `Kind` is already
   on every account row, and because the slices are account balances they include
-  the uninvested cash and add up to **Total (USD)** exactly. Asset class, sector
-  and region are the dimensions somebody actually wants and none of them is here
-  — a ticker, a fund code and a TSP fund is all any source supplies, and deriving
-  a class from those needs a mapping table kept by hand or an external lookup.
-  The tab does not claim a dimension it would have to guess.
+  the uninvested cash and add up to **Total (USD)** exactly.
 - An allocation **by position**, which is the one with the honesty problem.
   Holdings do not sum to the portfolio, so a share of the holdings subtotal
   renders a portfolio that is 30% cash as fully invested — every slice
   overstated, and the numbers still adding to 100%. So **Cash and uninvested** is
   a named slice, pointing at the very cell **In accounts, not in positions**
   already publishes rather than subtracting a second time, and every share
-  divides by **Total (USD)**. Both blocks say so in their header instead of
-  leaving the base to be inferred, and both close with **Slices sum to** — the
-  sheet's own arithmetic over the cells it wrote, where a wrong base shows up as
-  a share column that does not come to 1.
+  divides by **Total (USD)**. Every block says so in its header instead of
+  leaving the base to be inferred, and every one closes with **Slices sum to** —
+  the sheet's own arithmetic over the cells it wrote, where a wrong base shows up
+  as a share column that does not come to 1.
+- An allocation **by asset class**, and only if you asked for one. No source
+  supplies a class: a ticker, a fund code and a TSP fund is all any of them gives,
+  and those are the same field — `Symbol` — which is what makes one hand-kept
+  table enough to cover all five brokers. So the mapping is yours, one
+  `SYMBOL = Class` per line under `asset_classes` in
+  `~/.stonksmith/stonksmith.conf`, and the block groups by what it says rather
+  than deriving a class from a ticker. Symbols are matched **exactly** as the
+  source spells them, so a line that matches nothing classifies nothing — which
+  looks identical to having written no line at all, and is therefore reported by
+  the run. Anything held and unlisted lands in one **(unclassified)** slice
+  rather than being dropped, cash is a named slice here for the same reason it is
+  above, and with no mapping at all the block is not drawn: one 100%
+  "(unclassified)" wedge is not a breakdown. Sector and region stay absent for
+  the reason class used to be — nothing states them, and no lookup has been added
+  to ask.
 - When that gap goes negative — a position counted twice — the position block
   refuses to draw and says by how much, instead of rendering a negative wedge
-  with every other share inflated to make room for it. The account-kind block
+  with every other share inflated to make room for it. The class block refuses
+  with it: it is the same money grouped a second way, so a version of it that
+  drew alone would be the same lie with better manners. The account-kind block
   cannot have the problem and still draws.
 - **Not read** — one row per database that would not open, with the reason. A
   total short by a whole broker looks perfectly reasonable, so it is stated on the

@@ -395,7 +395,10 @@ maintained beside it.
 - [x] Credentials stored in the OS keyring
 - [x] Account history: numeric balances, holdings and transactions over time
 - [x] Net worth tracking over time
-- [x] Asset allocation breakdown
+- [x] Asset allocation breakdown — by account kind and by position, both free
+      from what the databases already hold, plus by asset class from a mapping
+      you keep in `~/.stonksmith/stonksmith.conf`. Sector and region are still
+      absent: nothing states them and nothing here guesses
 - [x] Scheduling (cron), for the brokers that run unattended — three of five,
       plus Ally in a reduced mode. Fidelity is replaced by SnapTrade, not
       scheduled
