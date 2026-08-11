@@ -215,6 +215,10 @@ class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
 
         context = MagicMock()
         context.db = _DB()
+        # Set rather than left to the mock: sync() reads this with getattr, and
+        # every attribute of a MagicMock is a truthy MagicMock -- so the flag
+        # would read as passed and skip the very path this test exercises.
+        context.args.no_sheet = False
 
         connection = MagicMock()
         connection.session.get.return_value = MagicMock(
@@ -236,6 +240,46 @@ class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
         succeeded = " ".join(str(c) for c in context.log.success.call_args_list)
         self.assertNotIn("sync complete", succeeded)
         self.assertIn("dashboard was not updated", succeeded)
+
+
+class NoSheetSkipsTheRefreshTests(unittest.TestCase):
+    """`--no-sheet` exists so a batch rewrites the sheet once, not once a broker.
+
+    Every broker calls sync() when it finishes, so a schedule running four of
+    them rewrites all five tabs four times over before the step that exists to
+    do it runs at all. Spread across a crontab that is waste; run back to back
+    it exhausts Sheets' per-minute write quota and the final rewrite -- the only
+    one that mattered -- is the one Google refuses.
+    """
+
+    @patch("etc.portfolio_sheet.refresh")
+    def test_the_flag_skips_the_refresh_entirely(self, mock_refresh: MagicMock) -> None:
+        from etc.portfolio_sheet import sync
+
+        context = MagicMock()
+        context.args.no_sheet = True
+
+        result = sync(context=context)
+
+        mock_refresh.assert_not_called()
+        self.assertFalse(
+            result,
+            "a skipped refresh did not update the dashboard, and the callers "
+            "turn that into 'saved locally; the dashboard was not updated'",
+        )
+
+    @patch("etc.portfolio_sheet.refresh")
+    def test_without_the_flag_the_refresh_still_happens(
+        self, mock_refresh: MagicMock
+    ) -> None:
+        from etc.portfolio_sheet import sync
+
+        context = MagicMock()
+        context.args.no_sheet = False
+
+        sync(context=context)
+
+        mock_refresh.assert_called_once()
 
 
 if __name__ == "__main__":

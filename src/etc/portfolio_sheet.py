@@ -2223,6 +2223,24 @@ def sync(context: Context, workspace: str | None = None) -> bool:
     :rtype: bool
     """
 
+    if getattr(context.args, "no_sheet", False):
+        # Asked for, so not a failure -- and False is still the honest answer,
+        # because the callers turn it into "saved locally; the dashboard was not
+        # updated", which is exactly what happened. They log that as a success
+        # and return the *database* result, so nothing here reaches the exit
+        # code.
+        #
+        # What this is for: every broker calls sync(), so a schedule running
+        # several of them rewrites the whole sheet once per broker. Staggered
+        # across a crontab that merely wastes the writes; run back to back it
+        # exhausts Sheets' per-minute write quota and the last one fails -- which
+        # is the one the schedule ends with, and the only one that needed to
+        # happen.
+        context.log.highlight(
+            msg="Skipping the Google Sheets refresh: --no-sheet was passed."
+        )
+        return False
+
     try:
         context.log.highlight(msg="Syncing data to Google Sheets...")
         result: SheetSync = refresh(workspace=workspace)

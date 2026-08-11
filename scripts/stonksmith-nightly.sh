@@ -16,6 +16,13 @@
 #   minutes imply. There is nothing to stagger, and no way for two runs to land
 #   in the same second and collapse into one snapshot.
 #
+#   Which is also how the --no-sheet flags below were found. Every broker
+#   rewrites the whole sheet when it finishes, so this ran five full rewrites in
+#   about thirty seconds and Google refused the last one -- the only one that
+#   needed to happen -- for exceeding the write quota per minute. Staggered
+#   crontab entries hid that by spacing the waste out. The brokers now skip it
+#   and the sheet entry renders all of them once.
+#
 #   It finds its own checkout. The crontab has to name a path and guess wrong;
 #   this one starts from where the script lives, so it is right wherever the
 #   repository is cloned.
@@ -61,10 +68,10 @@ run() {
     "$@" || status=1
 }
 
-run uv run stonksmith tsp -M tsp --quiet
-run uv run stonksmith snaptrade -M snaptrade --quiet
-run uv run stonksmith schwab529plan -M schwab529plan -id 1 --quiet
-run uv run stonksmith ally -M ally --from-prices --quiet
+run uv run stonksmith tsp -M tsp --no-sheet --quiet
+run uv run stonksmith snaptrade -M snaptrade --no-sheet --quiet
+run uv run stonksmith schwab529plan -M schwab529plan -id 1 --no-sheet --quiet
+run uv run stonksmith ally -M ally --from-prices --no-sheet --quiet
 run uv run stonksmithdb sheet
 run uv run stonksmithdb stale
 

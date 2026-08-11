@@ -159,7 +159,7 @@ disk*](brokers.md#neither-remedy-touches-what-is-already-on-disk) is the procedu
 
 ## A worked crontab
 
-Four things this shape respects, all of them consequences of how the tool works rather
+Five things this shape respects, all of them consequences of how the tool works rather
 than preferences:
 
 - **The broker is a positional subcommand**, so one process runs one broker. There is no
@@ -171,16 +171,24 @@ than preferences:
   databases hold at the moment it runs.
 - **`--quiet` on every run**, so cron mails when something broke and stays silent when
   nothing did.
+- **`--no-sheet` on every broker run**, because each broker rewrites the whole sheet when
+  it finishes and the entry below then rewrites it again. Four of those five rewrites are
+  thrown away by the next one, and Sheets has a write quota per minute: spaced out across
+  a crontab that is merely waste, but run back to back — which is what the launchd runner
+  further down does — Google refuses the last one, the only one that mattered, with
+  `[429] Quota exceeded for quota metric 'Write requests'`. It is a no-op on the `ally`
+  entry, whose `--from-prices` path returns before it would sync, and is there so all four
+  broker lines read alike.
 
 Markets close at 16:00 ET; these run after the close, on weekdays only.
 
 ```cron
 PATH=/usr/local/bin:/usr/bin:/bin
 
-30 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith tsp -M tsp --quiet
-35 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith snaptrade -M snaptrade --quiet
-40 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith schwab529plan -M schwab529plan -id 1 --quiet
-45 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith ally -M ally --from-prices --quiet
+30 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith tsp -M tsp --no-sheet --quiet
+35 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith snaptrade -M snaptrade --no-sheet --quiet
+40 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith schwab529plan -M schwab529plan -id 1 --no-sheet --quiet
+45 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith ally -M ally --from-prices --no-sheet --quiet
 50 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb sheet
 55 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb stale
 ```
