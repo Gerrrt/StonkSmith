@@ -97,6 +97,16 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         help="Report failures only; say nothing about a run that worked",
     )
     parser.add_argument(
+        "--no-sheet",
+        action="store_true",
+        help=(
+            "Skip this run's Google Sheets refresh. Every broker rewrites the "
+            "whole sheet, so a batch that runs several back to back rewrites it "
+            "several times over and can exhaust the per-minute write quota; "
+            "`stonksmithdb sheet` afterwards renders all of them once"
+        ),
+    )
+    parser.add_argument(
         "--version", action="version", version=f"{version} - {codename}"
     )
 
@@ -170,6 +180,7 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         ("--verbose", "Enable verbose output"),
         ("--debug", "Enable debug level information"),
         ("--quiet", "Report failures only; say nothing about a run that worked"),
+        ("--no-sheet", "Skip this run's Google Sheets refresh"),
     ):
         std_parser.add_argument(
             flag,
