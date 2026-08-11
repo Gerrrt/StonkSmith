@@ -28,6 +28,7 @@ right thing; live-verification.md is explicit that this half stays human.
 
 import re
 import unittest
+from functools import cache
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -73,17 +74,24 @@ def slug(title: str) -> str:
     return "-".join(text.split())
 
 
-def anchors_of(path: Path) -> set[str]:
+@cache
+def anchors_of(path: Path) -> frozenset[str]:
     """Every fragment a link into this file may name.
+
+    Cached on the path. Fragments cluster -- the README alone points into
+    docs/brokers.md six times -- and the uncached version re-read and re-slugged
+    the whole file for each one.
 
     :param path: The markdown file to read
     :return: The slugs of its headings
-    :rtype: set[str]
+    :rtype: frozenset[str]
     """
 
     body: str = FENCE.sub(repl="", string=path.read_text(encoding="utf-8"))
 
-    return {slug(title=match.group("title")) for match in HEADING.finditer(body)}
+    return frozenset(
+        slug(title=match.group("title")) for match in HEADING.finditer(body)
+    )
 
 
 class DocCrossReferences(unittest.TestCase):
@@ -102,6 +110,17 @@ class DocCrossReferences(unittest.TestCase):
                 path: Path = (source.parent / target.split("#", 1)[0]).resolve()
 
                 with self.subTest(source=source.name, target=target):
+                    # Inside the repository, not merely somewhere on the disk.
+                    # resolve() follows `../` as far as it is told to, so a link
+                    # that climbed out of the tree would be checked against
+                    # whatever happens to sit at that path on this machine --
+                    # which passes here and is a broken link for every reader who
+                    # is not running the suite.
+                    self.assertTrue(
+                        path.is_relative_to(REPO),
+                        f"{source.name} links to {target}, which resolves outside "
+                        f"the repository to {path}.",
+                    )
                     self.assertTrue(
                         path.is_file(),
                         f"{source.name} links to {target}, which is not a file. "
@@ -130,7 +149,7 @@ class DocCrossReferences(unittest.TestCase):
                     source if not relative else (source.parent / relative).resolve()
                 )
 
-                if not path.is_file():
+                if not path.is_relative_to(REPO) or not path.is_file():
                     # Reported by the test above; not worth failing twice.
                     continue
 
