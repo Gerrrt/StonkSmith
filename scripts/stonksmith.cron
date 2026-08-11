@@ -1,0 +1,73 @@
+# StonkSmith, nightly.
+#
+# Install by pasting the schedule below into `crontab -e`. Do not run
+# `crontab scripts/stonksmith.cron` unless you mean it: that replaces your
+# whole crontab rather than adding to it. Keep a copy first either way --
+#
+#     crontab -l > ~/crontab.backup
+#
+# docs/scheduling.md is the record this file is derived from. It explains what
+# each broker can do with nobody watching, and it is the thing to change first
+# if a line here changes.
+#
+# ---------------------------------------------------------------------------
+# Why the schedule has the shape it has
+#
+#   One line per broker. The broker is a positional subcommand, so one process
+#   runs one broker. There is no --all; N brokers is N lines.
+#
+#   Staggered, not fired together. `scraped_at` is stamped to the second and is
+#   half a snapshot's key, so two runs landing in the same second collapse into
+#   one snapshot. TSP is fast enough for this to matter.
+#
+#   The sheet goes last, after every broker has written, because it renders
+#   what the databases hold at the moment it runs.
+#
+#   --quiet on every run. Cron mails on output, so a run that says nothing when
+#   it worked is a run that only mails when it did not.
+#
+#   PATH is set because cron's is short and `uv` is usually not on it. `cd`
+#   because the project is a uv workspace and `uv run` resolves it from the
+#   working directory.
+#
+# ---------------------------------------------------------------------------
+# Two absences that are deliberate
+#
+#   There is no `fidelity` line. Fidelity sits behind bot detection and 2FA, so
+#   its scraper needs a human every time; SnapTrade covers the same accounts
+#   unattended. Run both and the money lands on the Accounts tab twice, and the
+#   total is wrong in the direction that looks good.
+#
+#   The `ally` line is not a scrape. Ally honours no restored session, so
+#   --from-prices multiplies the units the last signed-in run recorded by
+#   today's published close. The arithmetic is exact; the units are as old as
+#   your last sign-in and go quietly wrong the moment a deposit lands. The run
+#   says so on every account it values -- and --quiet means nobody will ever
+#   see it. Re-run `--manual-login` after a deposit; this schedule cannot, and
+#   will not ask.
+#
+# ---------------------------------------------------------------------------
+# Before the first night
+#
+#   Every line below is a no-op or a nightly failure until its broker is set
+#   up. docs/scheduling.md has the checklist; the one that bites hardest is
+#   Ally, which refuses and exits 1 against a database no signed-in run has
+#   written. Run `stonksmith ally -M ally --manual-login` once first, or this
+#   entry fails every night rather than once.
+#
+# ---------------------------------------------------------------------------
+# The times are local to the machine running cron.
+#
+#   What matters is that they fall after the 16:00 ET close and late enough
+#   that TSP has published the day's share prices. 18:30 local satisfies both
+#   on US Eastern, and on Pacific it lands at 21:30 ET, which is later still
+#   and equally fine. Move them if your machine sits somewhere that makes
+#   18:30 local earlier than about 18:30 Eastern.
+
+PATH=/usr/local/bin:/usr/bin:/bin
+
+30 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith tsp -M tsp --quiet
+35 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith snaptrade -M snaptrade --quiet
+40 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith schwab529plan -M schwab529plan -id 1 --quiet
+45 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith ally -M ally --from-prices --quiet
+50 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb sheet
