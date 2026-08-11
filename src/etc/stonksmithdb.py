@@ -4,6 +4,7 @@ Create database engine for stonksmith
 
 import cmd
 import configparser
+import datetime as dt
 from os import listdir
 from pathlib import Path
 from sys import argv
@@ -39,6 +40,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    workspace list    list workspaces\n"
         "    sheet             rewrite the Google Sheet from these databases\n"
         "    verify [tabs|guard]  check what a successful sheet write cannot show\n"
+        "    stale [days]      report accounts nothing has refreshed lately\n"
         "    help              commands at this level\n"
         "    exit              quit\n"
     )
@@ -220,6 +222,100 @@ class StonkSmithDBMenu(cmd.Cmd):
             # but the sheet it produced is missing a broker's money, which is
             # the wrong total rather than a stale one.
             self.failed = True
+
+    def do_stale(self, line: str) -> None:
+        """
+        Report accounts whose As Of has gone stale, and fail if any have.
+
+        The check a schedule has no other way to make. `docs/scheduling.md` opens
+        by naming the failure this closes: "a cron job that errors every night
+        gets muted -- after which the portfolio has stopped updating and nothing
+        says so." Exit code 1 already covers a module reporting it did nothing,
+        which is the loud way to break. This covers the quiet way, which the
+        design itself creates: the Net Worth series carries an account's value
+        forward for thirty days and --from-prices reprices a recorded unit count
+        indefinitely, so a broker can go dark for a month while every run exits 0
+        and the chart stays smooth.
+
+        Reads databases and nothing else -- no login, no Sheets, no network -- so
+        it is cheap enough to run on every schedule rather than occasionally.
+
+        The dashboard has shown this for as long as it has had a staleness panel.
+        What it has never had is a way to tell anybody who was not looking at it.
+        :param line: An optional day count, defaulting to STALE_DAYS
+        :return: None
+        """
+
+        # Imported here rather than at module scope for do_sheet's reason: the
+        # shell is mostly used for things that never read a workspace, and
+        # tests/test_no_import_side_effects.py imports this module in a
+        # subprocess and asserts nothing appears in $HOME.
+        from etc.portfolio import (
+            STALE_DAYS,
+            AccountRow,
+            Portfolio,
+            read_workspace,
+            stale_accounts,
+            stale_cutoff,
+            stale_reason,
+        )
+
+        days: int = STALE_DAYS
+        asked: str = line.strip()
+
+        if asked:
+            try:
+                days = int(asked)
+
+            except ValueError:
+                print(f"[-] '{asked}' is not a number of days.")
+                self.failed = True
+                return
+
+            if days < 0:
+                # A negative window puts the cutoff in the future, which makes
+                # every account stale including the one written this morning.
+                # That is not a stricter check, it is a broken one.
+                print(f"[-] A day count cannot be negative, and {days} is.")
+                self.failed = True
+                return
+
+        today: dt.date = dt.datetime.now(tz=dt.UTC).date()
+        cutoff: str = stale_cutoff(today=today, days=days)
+        portfolio: Portfolio = read_workspace(workspace=self.workspace)
+
+        print(
+            f"[*] Freshness in '{self.workspace}': {len(portfolio.accounts)} "
+            f"accounts, nothing older than {cutoff} ({days} days)."
+        )
+
+        for name, reason in portfolio.unreadable:
+            # The strongest freshness failure there is. A database that will not
+            # open is not stale data, it is no data -- and do_sheet already
+            # treats it as a failure rather than a note.
+            print(f"[-] {name} could not be read ({reason}).")
+            self.failed = True
+
+        stale: tuple[AccountRow, ...] = stale_accounts(
+            portfolio=portfolio, cutoff=cutoff
+        )
+
+        for row in stale:
+            print(
+                f"[-] {row.broker} / {row.account}: "
+                f"{stale_reason(as_of=row.as_of, today=today)}."
+            )
+
+        if stale:
+            self.failed = True
+
+        # Printed either way. A check whose success is silent is one nobody can
+        # tell ran, which is the same failure mode as the muted cron job this
+        # exists to catch.
+        print(
+            f"[{'-' if stale else '+'}] {len(stale)} of "
+            f"{len(portfolio.accounts)} accounts are stale."
+        )
 
     def do_verify(self, line: str) -> None:
         """

@@ -172,6 +172,7 @@ PATH=/usr/local/bin:/usr/bin:/bin
 40 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith schwab529plan -M schwab529plan -id 1 --quiet
 45 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith ally -M ally --from-prices --quiet
 50 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb sheet
+55 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb stale
 ```
 
 **There is no `fidelity` line, and that is the point of the file.** There is an `ally`
@@ -191,6 +192,46 @@ as a good night.
 
 The interactive shell is unchanged; `uv run stonksmithdb` with no arguments still opens
 it.
+
+### The freshness step is the one that catches silence
+
+Every line above reports when it *breaks*. None of them reports when it stops
+happening, and this file opens by saying why that matters: a job that errors every night
+gets muted, and a muted job looks exactly like a job that is fine.
+
+The design makes it quieter still. The `Net Worth` series carries an account's last value
+forward for thirty days, and the `ally --from-prices` line reprices a unit count that a
+signed-in run recorded — possibly weeks ago. So a broker can go dark and the totals keep
+moving, the chart stays smooth, and every entry above exits `0`.
+
+`stonksmithdb stale` is the entry that asks the other question. It reads the databases
+and nothing else — no login, no Sheets, no network — and exits `1` when any account's
+`As Of` is missing, unreadable, or older than seven days:
+
+```
+$ uv run stonksmithdb stale
+[*] Freshness in 'default': 16 accounts, nothing older than 2026-08-04 (7 days).
+[-] tsp / TSP L 2060: as of 2026-01-31, 192 days old.
+[-] 1 of 16 accounts are stale.
+```
+
+A day count overrides the window: `stonksmithdb stale 30` for a workspace whose brokers
+genuinely report monthly. Zero is legal and means "must have reported today"; a negative
+count is refused, because it puts the cutoff in the future and would call this morning's
+scrape stale.
+
+**It runs last, after the sheet**, for the reason the sheet runs last: it reports on what
+the databases hold at the moment it runs, and every entry above changes that.
+
+Three things it counts as stale, and the third is the one worth knowing about:
+
+- **No `As Of` at all.** A number with no date attached is a claim about no particular
+  day.
+- **An `As Of` older than the window.** The ordinary case.
+- **An `As Of` nothing could parse.** A parser that stopped matching its source can leave
+  text where a date belongs, and text sorts *above* every real date — so the broken
+  account would otherwise read as the freshest one you own. The dashboard's staleness
+  panel has this hole, because a Sheets `QUERY` compares strings; the check does not.
 
 ### What the mail will look like
 
