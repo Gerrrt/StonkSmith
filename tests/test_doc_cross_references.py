@@ -42,8 +42,19 @@ SOURCES: tuple[Path, ...] = (REPO / "README.md", *sorted((REPO / "docs").glob("*
 #: them would report on prose rather than on links.
 LINK = re.compile(r"\[(?P<text>[^\]]*)\]\((?P<target>[^)\s]+)\)")
 
+#: An `src=` or `href=` on raw HTML, which markdown permits and the README's
+#: header block is built out of. Its logo `<img>` and its whole table of contents
+#: are HTML, so a check that read only markdown links would leave the most
+#: visible reference on the page -- the mark itself -- unverified.
+HTML_REF = re.compile(r"(?:src|href)=\"(?P<target>[^\"]+)\"")
+
 #: A setext-free ATX heading, which is the only kind these files use.
 HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<title>.+?)\s*$", re.MULTILINE)
+
+#: An explicit HTML anchor, `<a id="readme-top">`. A link may name one of these
+#: as legitimately as it names a heading, and the back-to-top link at the foot of
+#: every section names exactly this one.
+HTML_ANCHOR = re.compile(r"<a\s+(?:id|name)=\"(?P<anchor>[^\"]+)\"")
 
 #: Fenced code blocks. Headings and links are matched after these are removed, so
 #: a shell comment at the start of a line is never mistaken for a heading and an
@@ -91,15 +102,31 @@ def anchors_of(path: Path) -> frozenset[str]:
     the whole file for each one.
 
     :param path: The markdown file to read
-    :return: The slugs of its headings
+    :return: The slugs of its headings, plus any explicit HTML anchor
     :rtype: frozenset[str]
     """
 
     body: str = FENCE.sub(repl="", string=path.read_text(encoding="utf-8"))
 
     return frozenset(
-        slug(title=match.group("title")) for match in HEADING.finditer(body)
+        [slug(title=match.group("title")) for match in HEADING.finditer(body)]
+        + [match.group("anchor") for match in HTML_ANCHOR.finditer(body)]
     )
+
+
+def references_of(path: Path) -> list[str]:
+    """Every link target in a file, markdown and HTML alike.
+
+    :param path: The markdown file to read
+    :return: The raw targets, in the order they appear
+    :rtype: list[str]
+    """
+
+    body: str = FENCE.sub(repl="", string=path.read_text(encoding="utf-8"))
+
+    return [match.group("target") for match in LINK.finditer(body)] + [
+        match.group("target") for match in HTML_REF.finditer(body)
+    ]
 
 
 class DocCrossReferences(unittest.TestCase):
@@ -107,11 +134,7 @@ class DocCrossReferences(unittest.TestCase):
 
     def test_every_relative_link_names_a_file_that_exists(self) -> None:
         for source in SOURCES:
-            body: str = FENCE.sub(repl="", string=source.read_text(encoding="utf-8"))
-
-            for match in LINK.finditer(body):
-                target: str = match.group("target")
-
+            for target in references_of(path=source):
                 if target.startswith(("http://", "https://", "#", "mailto:")):
                     continue
 
@@ -137,11 +160,7 @@ class DocCrossReferences(unittest.TestCase):
 
     def test_every_fragment_names_a_heading_that_exists(self) -> None:
         for source in SOURCES:
-            body: str = FENCE.sub(repl="", string=source.read_text(encoding="utf-8"))
-
-            for match in LINK.finditer(body):
-                target: str = match.group("target")
-
+            for target in references_of(path=source):
                 if target.startswith(("http://", "https://", "mailto:")):
                     continue
 

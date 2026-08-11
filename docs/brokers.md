@@ -11,9 +11,9 @@ broker can do unattended, and
 [`ally-transactions.md`](ally-transactions.md) for why Ally stores no
 transactions. Where this file summarises one of them, it says so and links.
 
-The *Brokers* table in [the README](../README.md#package-brokers) is the index
+The *Brokers* table in [the README](../README.md#brokers) is the index
 into this file, and
-[*Project Structure*](../README.md#bricks-project-structure) there explains the
+[*Project structure*](../README.md#project-structure) there explains the
 three shapes a broker comes in — scraper, browser-backed, API-backed — and which
 base class each one gets.
 

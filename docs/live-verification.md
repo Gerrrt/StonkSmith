@@ -10,7 +10,7 @@ which have not, and gives the procedure for closing the gap. It is meant to be w
 through, not read.
 
 **This file is the record.** Three places summarise it — the paragraph under
-[*Project Structure*](../README.md#bricks-project-structure) in the README, the end of
+[*Project structure*](../README.md#project-structure) in the README, the end of
 [*Ally Invest*](brokers.md#ally-invest) and the opening of [`sheet.md`](sheet.md) — and
 all three are derived from the table below rather than maintained alongside it. Change a
 row here and change those there in the same pass; do not edit them on their own.
@@ -199,7 +199,7 @@ worth adding there only if Fidelity acquires a question of its own.
 
 **The outcome: the Ally scrape cannot run unattended.** `--manual-login` on every
 scrape is the correct description, and both the README's
-[*Brokers*](../README.md#package-brokers) table and
+[*Brokers*](../README.md#brokers) table and
 [`brokers.md`](brokers.md#ally-invest) say so. This is not a defect to fix
 in StonkSmith; nothing StonkSmith stores reconstitutes a session Ally will honour.
 
