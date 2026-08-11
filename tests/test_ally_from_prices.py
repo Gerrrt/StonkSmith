@@ -328,8 +328,8 @@ class WhenItCannot(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(context.db.saved, [])
 
-        # The sentence, not a fragment of it. docs/live-verification.md and the
-        # README both quote this line verbatim, and the file says a quoted
+        # The sentence, not a fragment of it. docs/live-verification.md and
+        # docs/brokers.md both quote this line verbatim, and the file says a quoted
         # string that does not appear means the step failed or the message was
         # edited -- which only holds while something compares the two. Asserted
         # as one string so re-wrapping the implicit concatenation in
