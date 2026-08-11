@@ -94,11 +94,12 @@ so anything plural about an Ally account is still inference. TSP has too: its
 statement and share-price parsers, the mark's arithmetic, its price download,
 its database write, its contribution accrual and both halves of the DFAS pay
 table are verified against real data. The sheet it feeds is verified as well:
-four of its five tabs were read back against the real spreadsheet and it was made
+all five of its tabs were read back against the real spreadsheet and it was made
 to refuse a tab it did not own. What is unverified there is one claim about volume
 — that a tab holds every movement rather than the newest five hundred — which
-needs a broker with the history to ask it, and the fifth tab, `Net Worth`, which
-postdates every run against the real spreadsheet.
+needs a broker with the history to ask it, and whether the `Net Worth` series
+carries correctly across brokers, which needs a workspace whose brokers did not
+all scrape on the same day.
 Green tests say the code does what it was written to do, which is not the same
 as saying the site still looks the way it did when the parser was written.
 `docs/live-verification.md` records which claims stand on an observed run and
@@ -723,10 +724,12 @@ reports. The database write has been run, against a real `tsp.db` and against
 one written before the `units_as_of` column existed. The sheet has been run too: on
 2026-08-10 it was built from real databases, read back tab by tab, checked by eye
 where a read could not reach, made to refuse a tab it did not own, and rebuilt
-from nothing after the four tabs it then had were deleted. What is left there is the
-claim nine movements cannot put — that a tab holds every movement rather than the
-newest five hundred — which is tracked on its own as #141, and the `Net Worth` tab,
-which came after all of that and has never been written to a real spreadsheet.
+from nothing after the four tabs it then had were deleted. `Net Worth` came after all
+of that and was written and read back on 2026-08-11, ten checks passing. What is left
+there is the claim nine movements cannot put — that a tab holds every movement rather
+than the newest five hundred — which is tracked on its own as #141, and whether the
+`Net Worth` series carries correctly, which one run against a workspace that scraped
+all at once cannot show.
 `docs/live-verification.md` has the
 procedure, those runs written up, and one trap worth knowing about first — a
 statement naming a different fund from your config is refused, but one whose
