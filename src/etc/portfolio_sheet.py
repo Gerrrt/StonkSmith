@@ -58,6 +58,7 @@ from typing import Any
 
 from gspread.utils import ValueRenderOption
 
+from etc.config import get_asset_classes
 from etc.context import Context
 from etc.portfolio import (
     ACCOUNT_COLUMNS,
@@ -154,6 +155,13 @@ UNREADABLE_COL: str = "O"
 BY_KIND_COL: str = "V"
 BY_POSITION_COL: str = "Z"
 
+#: The asset class block, which starts one column past the position block's right
+#: edge plus the gutter the other blocks already keep between them. Last because
+#: it is the one block that is not always drawn: with no mapping configured there
+#: is nothing here, and a block that comes and goes must not sit between two that
+#: do not.
+BY_CLASS_COL: str = "AD"
+
 #: Columns an allocation block occupies: what the slice is, what it is worth,
 #: and what share of the portfolio that is.
 ALLOCATION_WIDTH: int = 3
@@ -209,6 +217,12 @@ SUMMARY_LABELS: tuple[str, ...] = (
 UNNAMED_KIND: str = "(no kind)"
 UNNAMED_SYMBOL: str = "(no symbol)"
 
+#: Where a held symbol goes when the configured mapping has no line for it. Named
+#: for the same reason those two are: the money is held whether or not anybody has
+#: said what kind of thing it is, and a class breakdown that dropped it would be a
+#: breakdown of part of the portfolio presented as a breakdown of all of it.
+UNCLASSIFIED: str = "(unclassified)"
+
 #: The row closing each allocation block. Its two values are what the slices
 #: above it actually add to -- the sheet's own arithmetic over the cells it
 #: wrote, not Python's over the databases. A share sum that is not 1 is a wrong
@@ -240,6 +254,10 @@ class SheetSync:
     #: on, not dates. Appended rather than slotted in beside the other three
     #: counts, so a caller reading positionally keeps its meaning.
     net_worth: int = 0
+
+    #: Symbols the configured asset class mapping names that nothing in the
+    #: workspace holds. Appended for the reason net_worth was.
+    unmatched_classes: tuple[str, ...] = ()
 
 
 def column_letter(index: int) -> str:
@@ -1343,6 +1361,83 @@ def _slices(rows: Sequence[Any], name: str, currency: str) -> list[tuple[str, fl
     return sorted(totals.items(), key=lambda pair: (-pair[1], pair[0]))
 
 
+def _class_slices(
+    holdings: Sequence[Any], mapping: dict[str, str], currency: str
+) -> list[tuple[str, list[str], float]]:
+    """
+    One (class, its symbols, value) triple per asset class held, largest first.
+
+    Unlike the other two breakdowns, a class is not a column on any tab -- it is
+    a name the operator gave to a set of symbols. So a slice carries the symbols
+    rather than a single criterion, and its formula adds up one SUMIFS per symbol
+    over the column that *is* on the tab. Nothing new is written to Holdings for
+    this: a class is a fact about the operator's opinion, not about the position,
+    and the rule that a column belongs to a fact the database holds is the reason
+    Units As Of got one and Ally's G/L did not.
+
+    The keys are raw, for the reason _slices spells out at length: they become
+    SUMIFS criteria, and a criterion that has been tidied no longer matches the
+    cell it is meant to find. A configured "vti" therefore does not classify a
+    held "VTI" -- it classifies nothing, and _unmatched_classes reports it.
+
+    :param holdings: HoldingRow values to group
+    :param mapping: Symbol to class name, as configured
+    :param currency: The currency to keep
+    :return: (class, symbols ascending, value), declared classes by value
+        descending then name, with the unclassified residual last
+    :rtype: list[tuple[str, list[str], float]]
+    """
+
+    totals: dict[str, float] = {}
+    symbols: dict[str, set[str]] = {}
+
+    for row in holdings:
+        if row.value is None or row.currency != currency:
+            continue
+
+        key: str = str(object=row.symbol or "")
+        label: str = mapping.get(key, UNCLASSIFIED)
+
+        totals[label] = totals.get(label, 0.0) + row.value
+        symbols.setdefault(label, set()).add(key)
+
+    # The residual sits below the declared classes rather than being sorted in
+    # among them. It is a different kind of row -- what nobody has said anything
+    # about -- and it belongs beside the cash slice for the same reason: both are
+    # what is left after the breakdown, not slices of it.
+    ordered: list[str] = sorted(
+        (label for label in totals if label != UNCLASSIFIED),
+        key=lambda label: (-totals[label], label),
+    )
+
+    if UNCLASSIFIED in totals:
+        ordered.append(UNCLASSIFIED)
+
+    return [(label, sorted(symbols[label]), totals[label]) for label in ordered]
+
+
+def _unmatched_classes(
+    portfolio: Portfolio, mapping: dict[str, str]
+) -> tuple[str, ...]:
+    """
+    Configured symbols that nothing in the workspace holds.
+
+    A mapping line is typed by hand and matched exactly, so the way it fails is
+    silence: the symbol classifies nothing, its holdings fall into the
+    unclassified slice, and the tab looks the same as it would with no line at
+    all. Reported by the run so a typo says so, which is the only feedback there
+    is that the config took effect.
+    :param portfolio: What the workspace holds
+    :param mapping: Symbol to class name, as configured
+    :return: The unmatched symbols, in the order they were configured
+    :rtype: tuple[str, ...]
+    """
+
+    held: set[str] = {str(object=row.symbol or "") for row in portfolio.holdings}
+
+    return tuple(symbol for symbol in mapping if symbol not in held)
+
+
 def _block(
     start: str,
     heading: str,
@@ -1419,26 +1514,100 @@ def _block(
     return grid
 
 
-def _allocation(portfolio: Portfolio) -> dict[str, list[list[Any]]]:
+def _sum_of(
+    symbols: Sequence[str],
+    criterion_range: str,
+    value_range: str,
+    currency_range: str,
+    currency: str,
+) -> str:
     """
-    The dashboard's two allocation blocks, keyed by the column they start in.
+    One class slice's value: a SUMIFS per symbol in it, added together.
 
-    Two, because neither one alone is honest. Account kind is free -- it is
-    already on AccountRow, needs no data this project does not have, and its
-    slices are account balances, so they add up to the portfolio exactly with no
-    cash left over. Position is the breakdown somebody actually wants, and it is
-    the one with the problem: holdings do not sum to the portfolio, because
-    uninvested cash sits in a balance and in no position. So cash is a named
-    slice here, taken from the very cell the summary block already publishes it
-    in, and every share divides by the portfolio total rather than by the
-    holdings subtotal.
+    Longer than an array criterion and deliberately so. The alternative that
+    reads better -- one SUMIFS over a {"VTI";"VOO"} literal wrapped in
+    SUMPRODUCT -- puts the set of symbols inside a piece of spreadsheet syntax,
+    where a fund code containing a semicolon or a brace stops being a string and
+    starts being punctuation. A term per symbol quotes each one the same way
+    every other criterion on this tab is quoted, and _quoted is then the only
+    thing standing between scraped text and the formula.
+    :param symbols: The raw symbols in the class, as the tab spells them
+    :param criterion_range: The column SUMIFS matches symbols against
+    :param value_range: The column SUMIFS adds up
+    :param currency_range: The column SUMIFS filters on currency
+    :param currency: The currency being totalled
+    :return: The value formula
+    :rtype: str
+    """
 
-    Neither block is asset class, sector or region. No source here supplies any
-    of them: SnapTrade gives a ticker, a scraped 529 gives a fund code, TSP
-    gives a fund. Deriving one would take a mapping table kept by hand or a new
-    external lookup, and a guess buried in a formula is worse than a dimension
-    the tab does not claim to have.
+    return "=" + "+".join(
+        f'SUMIFS({value_range},{criterion_range},"{_quoted(text=symbol)}",'
+        f'{currency_range},"{currency}")'
+        for symbol in symbols
+    )
+
+
+def _refused(heading: str, cash: float) -> list[list[Any]]:
+    """
+    What a holdings-based block says instead of drawing itself.
+
+    Stated in place of the block, not left blank -- an empty region is
+    indistinguishable from a write that failed, which is the same reason the
+    unreadable panel says "everything read". Shared by the two blocks built over
+    holdings, because the arithmetic that defeats them is the same arithmetic and
+    two wordings of it could come to disagree.
+    :param heading: What the block's name column is called
+    :param cash: The gap, which is negative here
+    :return: The grid, header row first
+    :rtype: list[list[Any]]
+    """
+
+    return [
+        [heading, f"Value ({USD})", f"Share of total ({USD})"],
+        [
+            "Allocation not drawn",
+            f"positions exceed account balances by {-cash:,.2f} {USD}, "
+            "so something is counted twice",
+            "",
+        ],
+    ]
+
+
+def _allocation(
+    portfolio: Portfolio, classes: dict[str, str] | None = None
+) -> dict[str, list[list[Any]]]:
+    """
+    The dashboard's allocation blocks, keyed by the column they start in.
+
+    Two always, and a third when it has been configured, because no one of them
+    alone is honest. Account kind is free -- it is already on AccountRow, needs
+    no data this project does not have, and its slices are account balances, so
+    they add up to the portfolio exactly with no cash left over. Position is the
+    breakdown somebody actually wants, and it is the one with the problem:
+    holdings do not sum to the portfolio, because uninvested cash sits in a
+    balance and in no position. So cash is a named slice here, taken from the
+    very cell the summary block already publishes it in, and every share divides
+    by the portfolio total rather than by the holdings subtotal.
+
+    Asset class is the third, and it exists only because somebody typed it. No
+    source here supplies one: SnapTrade gives a ticker, a scraped 529 gives a
+    fund code, TSP gives a fund. So the mapping is config -- see
+    config.get_asset_classes -- and this block groups by what it says and names
+    what it does not cover, rather than deriving a class from a ticker. A guess
+    buried in a formula would still be a guess, and it would be one nobody could
+    see. Sector and region stay absent for the reason class used to be: nothing
+    states them and no lookup has been added to ask.
+
+    With no mapping the block is not drawn at all. One 100% "(unclassified)"
+    wedge is not a breakdown, and unlike the refusal above there is nothing to
+    report -- a block nobody asked for is absent rather than empty.
+
+    The mapping is passed in rather than read here. Rendering a tab is not the
+    layer that should be deciding what the user's config file says: refresh()
+    reads it once at the edge, the way it resolves the workspace once at the
+    edge, and everything below this point works off values it was handed.
     :param portfolio: What the workspace holds
+    :param classes: Symbol to asset class, or None for no mapping
     :return: Start column to grid, header row first
     :rtype: dict[str, list[list[Any]]]
     """
@@ -1448,6 +1617,24 @@ def _allocation(portfolio: Portfolio) -> dict[str, list[list[Any]]]:
     )
     positions: list[tuple[str, float]] = _slices(
         rows=portfolio.holdings, name="symbol", currency=USD
+    )
+    mapping: dict[str, str] = classes or {}
+
+    # Derived once and shared: the position block and the class block address the
+    # same three columns of the same tab, and two derivations of one range is one
+    # more place for them to come apart.
+    symbol_range: str = down(tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Symbol")
+    held_range: str = down(tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Value")
+    held_currency: str = down(
+        tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Currency"
+    )
+
+    # The cash row both holdings blocks close on. Pointed at rather than
+    # recomputed per block, for the reason it is pointed at rather than
+    # subtracted: one number, one cell, no way for two of them to disagree.
+    uninvested: tuple[str, str] = (
+        "Cash and uninvested",
+        f"={summary_cell(label='In accounts, not in positions')}",
     )
 
     blocks: dict[str, list[list[Any]]] = {
@@ -1477,18 +1664,13 @@ def _allocation(portfolio: Portfolio) -> dict[str, list[list[Any]]]:
         # Refused rather than drawn. A negative gap means some position is
         # counted twice, and the slice it implies cannot exist: it would be a
         # negative wedge in a pie, with every other share overstated to make
-        # room for it. Stated in place of the block, not left blank -- an empty
-        # region is indistinguishable from a write that failed, which is the
-        # same reason the unreadable panel says "everything read".
-        blocks[BY_POSITION_COL] = [
-            ["Position", f"Value ({USD})", f"Share of total ({USD})"],
-            [
-                "Allocation not drawn",
-                f"positions exceed account balances by {-cash:,.2f} {USD}, "
-                "so something is counted twice",
-                "",
-            ],
-        ]
+        # room for it. Both holdings blocks refuse together -- the class block is
+        # the same money grouped a second way, so a version of it that drew while
+        # the position block refused would be the same lie with better manners.
+        blocks[BY_POSITION_COL] = _refused(heading="Position", cash=cash)
+
+        if mapping:
+            blocks[BY_CLASS_COL] = _refused(heading="Asset class", cash=cash)
 
         return blocks
 
@@ -1496,18 +1678,51 @@ def _allocation(portfolio: Portfolio) -> dict[str, list[list[Any]]]:
         start=BY_POSITION_COL,
         heading="Position",
         slices=positions,
-        criterion_range=down(tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Symbol"),
-        value_range=down(tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Value"),
-        currency_range=down(tab=HOLDINGS_TAB, columns=HOLDING_COLUMNS, name="Currency"),
+        criterion_range=symbol_range,
+        value_range=held_range,
+        currency_range=held_currency,
         unnamed=UNNAMED_SYMBOL,
         currency=USD,
-        extra=(
-            (
-                "Cash and uninvested",
-                f"={summary_cell(label='In accounts, not in positions')}",
-            ),
-        ),
+        extra=(uninvested,),
     )
+
+    if mapping:
+        blocks[BY_CLASS_COL] = _block(
+            start=BY_CLASS_COL,
+            heading="Asset class",
+            # Every row of this block is an extra rather than a slice: a slice is
+            # one name matched against one column, and a class is a set of
+            # symbols with no column of its own. _block's extra rows already get
+            # the share column and the check row, so the block closes on the same
+            # arithmetic as the other two without _block knowing about classes.
+            slices=(),
+            criterion_range=symbol_range,
+            value_range=held_range,
+            currency_range=held_currency,
+            # Unreachable while slices is empty, and passed as what it would have
+            # to be rather than as a placeholder that would be wrong the day it
+            # is not.
+            unnamed=UNCLASSIFIED,
+            currency=USD,
+            extra=(
+                *(
+                    (
+                        label,
+                        _sum_of(
+                            symbols=symbols,
+                            criterion_range=symbol_range,
+                            value_range=held_range,
+                            currency_range=held_currency,
+                            currency=USD,
+                        ),
+                    )
+                    for label, symbols, _ in _class_slices(
+                        holdings=portfolio.holdings, mapping=mapping, currency=USD
+                    )
+                ),
+                uninvested,
+            ),
+        )
 
     return blocks
 
@@ -1575,7 +1790,9 @@ def _block_updates(
 
 
 def dashboard_cells(
-    portfolio: Portfolio, today: dt.date | None = None
+    portfolio: Portfolio,
+    today: dt.date | None = None,
+    classes: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     The dashboard, split into what must be entered as formulas and what must not.
@@ -1587,6 +1804,7 @@ def dashboard_cells(
     with "=" would become a formula.
     :param portfolio: What the workspace holds
     :param today: The date staleness is measured from, for tests
+    :param classes: Symbol to asset class, or None for no mapping
     :return: (formula updates, literal updates)
     :rtype: tuple[list[dict[str, Any]], list[dict[str, Any]]]
     """
@@ -1638,7 +1856,7 @@ def dashboard_cells(
         }
     )
 
-    for start, grid in _allocation(portfolio=portfolio).items():
+    for start, grid in _allocation(portfolio=portfolio, classes=classes).items():
         block_formulas, block_literals = _block_updates(start=start, grid=grid)
         formulas += block_formulas
         literals += block_literals
@@ -1647,20 +1865,26 @@ def dashboard_cells(
 
 
 def write_dashboard(
-    worksheet: Any, portfolio: Portfolio, today: dt.date | None = None
+    worksheet: Any,
+    portfolio: Portfolio,
+    today: dt.date | None = None,
+    classes: dict[str, str] | None = None,
 ) -> None:
     """
     Claim the dashboard, empty it, and write both halves of it.
     :param worksheet: The Dashboard tab
     :param portfolio: What the workspace holds
     :param today: The date staleness is measured from, for tests
+    :param classes: Symbol to asset class, or None for no mapping
     :return: None
     :raises SheetNotOwned: when the tab is not StonkSmith's
     """
 
     claim(worksheet=worksheet, tab=DASHBOARD_TAB)
 
-    formulas, literals = dashboard_cells(portfolio=portfolio, today=today)
+    formulas, literals = dashboard_cells(
+        portfolio=portfolio, today=today, classes=classes
+    )
 
     # Every band starts on HEADER_ROW and spills downward -- the staleness query
     # by a row per account, the unreadable block by a row per broker that would
@@ -1680,25 +1904,34 @@ def write_dashboard(
     #
     # Measured off the same grids that get written, not recounted from the
     # portfolio: a height derived a second way is a height that can be wrong.
+    blocks: dict[str, list[list[Any]]] = _allocation(
+        portfolio=portfolio, classes=classes
+    )
+
     spill: int = max(
         len(portfolio.accounts),
         len(portfolio.unreadable),
         len({row.date for row in portfolio.net_worth}),
-        *(len(grid) - 1 for grid in _allocation(portfolio=portfolio).values()),
+        *(len(grid) - 1 for grid in blocks.values()),
     )
 
     fit(
         worksheet=worksheet,
         rows=max(DASHBOARD_MIN_ROWS, HEADER_ROW + spill),
-        # The rightmost edge of the two bands that sit furthest right, rather
-        # than whichever one happens to be further today: the net worth band is
-        # three columns wide at most -- the date, and one each for the carried
-        # and observed halves of its total -- and the position allocation is
-        # ALLOCATION_WIDTH. A max means moving either band's start column cannot
-        # silently cut the other one off at the edge of the grid.
+        # The rightmost edge of the bands that sit furthest right, rather than
+        # whichever one happens to be further today: the net worth band is three
+        # columns wide at most -- the date, and one each for the carried and
+        # observed halves of its total -- and every allocation block is
+        # ALLOCATION_WIDTH. A max means moving any band's start column cannot
+        # silently cut another one off at the edge of the grid.
+        #
+        # Taken off the blocks that were actually built, for the same reason the
+        # height is: the asset class block is drawn only when a mapping is
+        # configured, and reserving columns for a block nobody asked for would
+        # widen every dashboard in the field to hold nothing.
         cols=max(
             column_index(letter=NET_WORTH_COL) + 2,
-            column_index(letter=BY_POSITION_COL) + ALLOCATION_WIDTH - 1,
+            *(column_index(letter=start) + ALLOCATION_WIDTH - 1 for start in blocks),
         ),
     )
     worksheet.clear()
@@ -1713,6 +1946,7 @@ def refresh(
     spreadsheet: str = SPREADSHEET_NAME,
     book: Any | None = None,
     today: dt.date | None = None,
+    classes: dict[str, str] | None = None,
 ) -> SheetSync:
     """
     Put everything every broker in the workspace holds onto the sheet.
@@ -1725,12 +1959,19 @@ def refresh(
     :param spreadsheet: The spreadsheet to write into
     :param book: An already-open spreadsheet, for tests and for reuse
     :param today: The date staleness is measured from, for tests
+    :param classes: Symbol to asset class, or None for the configured mapping
     :return: What was written, and what would not read
     :rtype: SheetSync
     :raises SheetsUnavailable: if Sheets is unreachable or a tab is not ours
     """
 
     portfolio: Portfolio = read_workspace(workspace=workspace, root=root)
+
+    # Read once, here, and handed down. This is the only place in the sheet path
+    # that asks the config anything, which is what keeps rendering a function of
+    # its arguments -- a dashboard that changed shape with the developer's own
+    # config file would be untestable in the way that matters.
+    mapping: dict[str, str] = get_asset_classes() if classes is None else classes
 
     if portfolio.unreadable and not portfolio.brokers_read:
         # Every database failed to open. Clearing the tabs here would replace a
@@ -1779,7 +2020,12 @@ def refresh(
         columns=NET_WORTH_COLUMNS,
         rows=[row.cells() for row in portfolio.net_worth],
     )
-    write_dashboard(worksheet=tabs[DASHBOARD_TAB], portfolio=portfolio, today=today)
+    write_dashboard(
+        worksheet=tabs[DASHBOARD_TAB],
+        portfolio=portfolio,
+        today=today,
+        classes=mapping,
+    )
 
     return SheetSync(
         accounts=accounts,
@@ -1789,6 +2035,7 @@ def refresh(
         unreadable=portfolio.unreadable,
         total=portfolio.total(),
         net_worth=net_worth,
+        unmatched_classes=_unmatched_classes(portfolio=portfolio, mapping=mapping),
     )
 
 
@@ -1818,6 +2065,20 @@ def sync(context: Context, workspace: str | None = None) -> bool:
             # learn that it happened.
             context.log.fail(
                 msg=f"Not on the sheet: {name} could not be read ({reason})."
+            )
+
+        if result.unmatched_classes:
+            # A warning rather than a failure: the sheet is correct either way,
+            # and the money is on it. What is wrong is the operator's belief that
+            # they classified something -- a mapping line is matched exactly, so
+            # the way a typo fails is by classifying nothing and looking no
+            # different from having written no line at all.
+            context.log.highlight(
+                msg=(
+                    "Asset class lines matching nothing held: "
+                    f"{', '.join(result.unmatched_classes)}. Those holdings, if "
+                    "any, are counted as unclassified."
+                )
             )
 
         context.log.success(msg="Google Sheets updated successfully!")

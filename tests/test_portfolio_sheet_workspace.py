@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+from config_isolation import UserConfigMixin
 from etc.broker_db import BrokerDatabase
 from etc.infrastructure import create_db_engine
 from etc.portfolio import (
@@ -71,7 +72,7 @@ class FakeBook:
         return written
 
 
-class WorkspaceRefreshTests(MemoryKeyringMixin, unittest.TestCase):
+class WorkspaceRefreshTests(UserConfigMixin, MemoryKeyringMixin, unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.tmp = tempfile.TemporaryDirectory()
