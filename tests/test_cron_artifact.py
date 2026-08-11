@@ -31,18 +31,25 @@ RECORD = REPO / "docs" / "scheduling.md"
 #: A fenced block introduced as `cron`. The document has exactly one, and the
 #: count is asserted rather than assumed -- a second block added later would
 #: otherwise go unchecked, which is the failure this file exists to prevent.
-CRON_FENCE = re.compile(r"^```cron\n(?P<body>.*?)^```$", re.MULTILINE | re.DOTALL)
+#: `\r?` on both fences because a checkout that converts line endings would
+#: otherwise fail this as "no cron block at all", which reads as drift and is
+#: not. The lines inside are rstripped by schedule(), so they need no such care.
+CRON_FENCE = re.compile(
+    r"^```cron[ \t]*\r?\n(?P<body>.*?)^```[ \t]*\r?$", re.MULTILINE | re.DOTALL
+)
 
 
 def schedule(text: str) -> list[str]:
     """
     The lines of a crontab that carry meaning.
 
-    Comments and blank lines are dropped: the artifact explains itself at
-    length and the document cannot, so requiring those to match would be
-    requiring the two to be the same document rather than the same schedule.
-    Trailing whitespace goes too, since it is invisible in a diff and would
-    fail this test in a way nobody could see.
+    Whole-line comments and blank lines are dropped: the artifact explains
+    itself at length and the document cannot, so requiring those to match would
+    be requiring the two to be the same document rather than the same schedule.
+    A trailing comment on an entry is *kept*, deliberately -- it is part of the
+    line cron reads, so two entries differing only in one differ. Trailing
+    whitespace goes, since it is invisible in a diff and would fail this test
+    in a way nobody could see.
     :param text: A crontab, or the body of a fenced cron block
     :return: The significant lines, in order
     """

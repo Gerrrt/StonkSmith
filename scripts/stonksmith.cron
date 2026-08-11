@@ -35,6 +35,13 @@
 #   because the project is a uv workspace and `uv run` resolves it from the
 #   working directory.
 #
+#   Check the PATH below actually contains uv before trusting a night of this:
+#   `which uv` says where yours is, and uv's own installer puts it in
+#   ~/.local/bin, which is *not* in the list. Add the directory it names, as an
+#   absolute path -- cron does not expand `~` or `$HOME` in a PATH assignment,
+#   so "$HOME/.local/bin" here is a literal directory that does not exist. A
+#   PATH missing uv fails every entry identically, on the first night.
+#
 # ---------------------------------------------------------------------------
 # Two absences that are deliberate
 #

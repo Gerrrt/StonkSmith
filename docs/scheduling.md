@@ -181,6 +181,13 @@ an oversight to be corrected by adding a sixth entry.
 `PATH` is set because cron's is short and `uv` usually is not on it. `cd` because the
 project is a `uv` workspace and `uv run` resolves it from the working directory.
 
+**Check that `PATH` actually contains `uv` before trusting a night of it.** The three
+directories above are the usual system ones, and uv's own installer does not use any of
+them — it puts the binary in `~/.local/bin`. `which uv` says where yours is; add that
+directory, written out in full, because cron does not expand `~` or `$HOME` in a `PATH`
+assignment and a literal `$HOME/.local/bin` is simply a directory that is not there. A
+`PATH` without `uv` on it fails every entry the same way, on the first night.
+
 That same schedule is committed as [`scripts/stonksmith.cron`](../scripts/stonksmith.cron),
 commented, so it can be pasted into `crontab -e` rather than retyped. Paste it; do not
 run `crontab scripts/stonksmith.cron` unless you mean to replace your whole crontab.
