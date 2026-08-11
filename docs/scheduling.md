@@ -204,8 +204,11 @@ where you keep the repository — the author of it does not keep it there — an
 fails takes its entry with it, through the `&&`. So a wrong path fails every entry the
 same way and on the same first night as a wrong `PATH`, while looking nothing like it in
 the mail. From inside the checkout,
-`sed -i '' "s|cd ~/StonkSmith|cd $PWD|g" scripts/stonksmith.cron` rewrites all six; drop
-the `''` on GNU sed. Both of these are loud failures rather than quiet ones, which is the
+`sed -i '' "/^[0-9]/ s|cd ~/StonkSmith|cd $PWD|" scripts/stonksmith.cron` rewrites all
+six; drop the `''` on GNU sed. The `/^[0-9]/` restricts it to the entries, which are the
+only lines beginning with a minute — without it the command also rewrites the comment in
+that file which documents the command, and the instruction destroys itself the first time
+anybody follows it. Both of these are loud failures rather than quiet ones, which is the
 good version of wrong — but neither is worth learning from a week of cron mail.
 
 That same schedule is committed as [`scripts/stonksmith.cron`](../scripts/stonksmith.cron),

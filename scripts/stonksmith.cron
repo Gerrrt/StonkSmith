@@ -51,7 +51,13 @@
 #   the same first night, for a reason that reads nothing like the PATH one. In
 #   the repository, this rewrites them all to wherever you actually keep it:
 #
-#       sed -i '' "s|cd ~/StonkSmith|cd $PWD|g" scripts/stonksmith.cron
+#       sed -i '' "/^[0-9]/ s|cd ~/StonkSmith|cd $PWD|" scripts/stonksmith.cron
+#
+#   The /^[0-9]/ is load-bearing rather than tidy: it restricts the edit to the
+#   entries, which are the only lines starting with a minute. Without it the
+#   same command rewrites this comment too -- the line you are reading contains
+#   the string it searches for -- and the instruction destroys itself on first
+#   use. As written it is also safe to run twice.
 #
 #   (drop the '' on GNU sed). Both of these fail loudly rather than quietly,
 #   which is the good version of wrong, and neither is worth discovering by
