@@ -51,8 +51,8 @@ LIABILITY_CATEGORIES = frozenset({"LOC"})
 LIVE_STATUSES = frozenset({"open"})
 
 #: The "Brokerage / Account" separator, with whatever spacing it was written
-#: with. Normalized so a hand-typed "Schwab/Ezekiel 529 Plan" still matches the
-#: "Schwab / Ezekiel 529 Plan" the sync prints.
+#: with. Normalized so a hand-typed "Schwab/Beneficiary A 529 Plan" still matches the
+#: "Schwab / Beneficiary A 529 Plan" the sync prints.
 _SEPARATOR = re.compile(pattern=r"\s*/\s*")
 
 
@@ -127,7 +127,7 @@ def normalize_label(label: str) -> str:
 
     The separator gets its own rule because it is the one piece of punctuation
     this format demands and therefore the one a person retypes: "Schwab /
-    Ezekiel 529 Plan" and "Schwab/Ezekiel 529 Plan" are plainly the same
+    Beneficiary A 529 Plan" and "Schwab/Beneficiary A 529 Plan" are plainly the same
     account, and collapsing whitespace alone leaves them different strings.
     Every slash is treated the same way, on both sides, so a name that contains
     one is not a special case.

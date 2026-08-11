@@ -310,7 +310,7 @@ class WorkspaceRefreshTests(UserConfigMixin, MemoryKeyringMixin, unittest.TestCa
     def test_the_transactions_tab_is_exactly_what_the_read_path_says(self) -> None:
         self._write(
             broker="schwab529plan",
-            key="Ezekiel",
+            key="Beneficiary A",
             value=1234.56,
             transactions=(
                 Transaction(

@@ -98,10 +98,10 @@ def account_tuple(**overrides: Any) -> tuple[Any, ...]:
     """One row in get_current_accounts() order."""
 
     row: dict[str, Any] = {
-        "account_key": "Ezekiel",
+        "account_key": "Beneficiary A",
         "source": "",
-        "display_name": "Ezekiel 529",
-        "beneficiary": "Ezekiel A",
+        "display_name": "Beneficiary A 529",
+        "beneficiary": "Beneficiary A A",
         "kind": "529",
         "value": 1234.56,
         "currency": "USD",
@@ -116,7 +116,7 @@ def holding_tuple(**overrides: Any) -> tuple[Any, ...]:
     """One row in get_current_holdings() order."""
 
     row: dict[str, Any] = {
-        "account_key": "Ezekiel",
+        "account_key": "Beneficiary A",
         "position": 0,
         "symbol": None,
         "fund_code": "SWX",
@@ -140,7 +140,7 @@ def transaction_tuple(**overrides: Any) -> tuple[Any, ...]:
     """One row in get_current_transactions() order."""
 
     row: dict[str, Any] = {
-        "account_key": "Ezekiel",
+        "account_key": "Beneficiary A",
         "tx_type": "Contribution",
         "symbol": None,
         "description": None,
@@ -627,13 +627,13 @@ class ReadBrokerTests(unittest.TestCase):
         _, holdings, _ = read_broker(
             broker="schwab529plan",
             db=_FakeDb(
-                accounts=[account_tuple(display_name="Ezekiel 529")],
+                accounts=[account_tuple(display_name="Beneficiary A 529")],
                 holdings=[holding_tuple()],
             ),
         )
 
-        self.assertEqual(holdings[0].account, "Ezekiel 529")
-        self.assertEqual(holdings[0].account_key, "Ezekiel")
+        self.assertEqual(holdings[0].account, "Beneficiary A 529")
+        self.assertEqual(holdings[0].account_key, "Beneficiary A")
 
     def test_a_units_date_reaches_the_row_and_its_own_cell(self) -> None:
         db = _FakeDb(
@@ -729,8 +729,8 @@ class ReadTransactionsTests(unittest.TestCase):
         row = self._one()
 
         self.assertEqual(row.broker, "schwab529plan")
-        self.assertEqual(row.account, "Ezekiel 529")
-        self.assertEqual(row.account_key, "Ezekiel")
+        self.assertEqual(row.account, "Beneficiary A 529")
+        self.assertEqual(row.account_key, "Beneficiary A")
         # A direct scraper is its own source, exactly as for the other two.
         self.assertEqual(row.source, "schwab529plan")
 
@@ -921,7 +921,9 @@ class WorkspaceReadTests(MemoryKeyringMixin, unittest.TestCase):
     def test_movements_from_every_broker_come_back_tagged(self) -> None:
         self._write(
             broker="schwab529plan",
-            account=AccountIdentity(account_key="Ezekiel", display_name="Ezekiel 529"),
+            account=AccountIdentity(
+                account_key="Beneficiary A", display_name="Beneficiary A 529"
+            ),
             value=1234.56,
             transactions=(
                 Transaction(
@@ -984,7 +986,9 @@ class WorkspaceReadTests(MemoryKeyringMixin, unittest.TestCase):
         self._write(
             broker="schwab529plan",
             account=AccountIdentity(
-                account_key="Ezekiel", display_name="Ezekiel 529", kind="529"
+                account_key="Beneficiary A",
+                display_name="Beneficiary A 529",
+                kind="529",
             ),
             value=1234.56,
             holdings=(FUND,),
@@ -1006,13 +1010,15 @@ class WorkspaceReadTests(MemoryKeyringMixin, unittest.TestCase):
         self.assertEqual(portfolio.unreadable, ())
         self.assertEqual(
             {(row.broker, row.account_key) for row in portfolio.accounts},
-            {("schwab529plan", "Ezekiel"), ("snaptrade", "Schwab - Brokerage")},
+            {("schwab529plan", "Beneficiary A"), ("snaptrade", "Schwab - Brokerage")},
         )
 
     def test_the_total_is_the_sum_of_the_accounts(self) -> None:
         self._write(
             broker="schwab529plan",
-            account=AccountIdentity(account_key="Ezekiel", display_name="Ezekiel"),
+            account=AccountIdentity(
+                account_key="Beneficiary A", display_name="Beneficiary A"
+            ),
             value=1234.56,
             holdings=(FUND,),
         )
@@ -1029,7 +1035,9 @@ class WorkspaceReadTests(MemoryKeyringMixin, unittest.TestCase):
     def test_holdings_join_to_their_account_across_brokers(self) -> None:
         self._write(
             broker="schwab529plan",
-            account=AccountIdentity(account_key="Ezekiel", display_name="Ezekiel 529"),
+            account=AccountIdentity(
+                account_key="Beneficiary A", display_name="Beneficiary A 529"
+            ),
             value=1234.56,
             holdings=(FUND,),
         )
@@ -1055,7 +1063,9 @@ class WorkspaceReadTests(MemoryKeyringMixin, unittest.TestCase):
     def test_only_the_newest_snapshot_is_shown(self) -> None:
         # The view is current state. A second run adds a snapshot beside the
         # first rather than over it, and both appearing would double the total.
-        account = AccountIdentity(account_key="Ezekiel", display_name="Ezekiel")
+        account = AccountIdentity(
+            account_key="Beneficiary A", display_name="Beneficiary A"
+        )
         self._write(broker="schwab529plan", account=account, value=1000.0)
 
         db = BrokerDatabase(

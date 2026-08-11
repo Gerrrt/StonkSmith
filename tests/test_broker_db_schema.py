@@ -48,8 +48,8 @@ CREATE TABLE credentials (
 #: Deliberately awkward: a repeated account, a negative, an unreadable balance
 #: and a row with no name at all. All four exist in databases in the wild.
 LEGACY_ROWS: tuple[tuple[str | None, str, str], ...] = (
-    ("Ezekiel", "$1,000.00", "2025-12-01 00:00:00"),
-    ("Ezekiel", "$1,100.00", "2025-12-02 00:00:00"),
+    ("Beneficiary A", "$1,000.00", "2025-12-01 00:00:00"),
+    ("Beneficiary A", "$1,100.00", "2025-12-02 00:00:00"),
     ("Fidelity - Roth", "-$50.00", "2025-12-02 00:00:00"),
     (None, "--", "2025-12-03 00:00:00"),
 )
@@ -238,7 +238,7 @@ class LegacyMigrationTests(_DbTestCase):
         db = self.open_db()
 
         names = sorted(row[2] for row in db.get_accounts())
-        self.assertEqual(names, ["Ezekiel", "Fidelity - Roth", "Unknown account"])
+        self.assertEqual(names, ["Beneficiary A", "Fidelity - Roth", "Unknown account"])
 
     def test_text_balances_become_numbers(self) -> None:
         self.write_legacy()
@@ -279,7 +279,7 @@ class LegacyMigrationTests(_DbTestCase):
 
         deltas = {(row[0], row[2]): row[5] for row in db.get_daily_change()}
 
-        self.assertEqual(deltas[("Ezekiel", "2025-12-02 00:00:00")], 100.0)
+        self.assertEqual(deltas[("Beneficiary A", "2025-12-02 00:00:00")], 100.0)
 
     def test_opening_the_same_database_twice_changes_nothing(self) -> None:
         self.write_legacy()
@@ -319,7 +319,7 @@ class LegacyMigrationTests(_DbTestCase):
         db = self.open_db()
 
         db.save_account_data(
-            account_name="Ezekiel",
+            account_name="Beneficiary A",
             balance="$1,200.00",
             timestamp="2025-12-04 00:00:00",
         )
@@ -328,8 +328,8 @@ class LegacyMigrationTests(_DbTestCase):
             len(db.get_accounts()), 3, "no new identity should have appeared"
         )
 
-        ezekiel = [row for row in db.get_snapshots() if row[1] == "Ezekiel"]
-        self.assertEqual(len(ezekiel), 3)
+        beneficiary_a = [row for row in db.get_snapshots() if row[1] == "Beneficiary A"]
+        self.assertEqual(len(beneficiary_a), 3)
 
 
 class HoldingUnitsDateMigrationTests(_DbTestCase):

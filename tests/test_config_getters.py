@@ -295,32 +295,36 @@ class SnapTradeExcludedAccountsTests(unittest.TestCase):
         body = (
             "[SNAPTRADE]\n"
             "exclude_accounts =\n"
-            "    Schwab / Ezekiel 529 Plan\n"
+            "    Schwab / Beneficiary A 529 Plan\n"
             "    Fidelity / Individual\n"
         )
 
         with config_of(body):
             self.assertEqual(
                 get_snaptrade_excluded_accounts(),
-                ["Schwab / Ezekiel 529 Plan", "Fidelity / Individual"],
+                ["Schwab / Beneficiary A 529 Plan", "Fidelity / Individual"],
             )
 
     def test_the_indentation_is_not_part_of_the_label(self) -> None:
         # The indent is what makes it a continuation line in INI, so it is
         # syntax rather than content -- but it survives into the value, and a
         # label carrying four leading spaces matches nothing.
-        body = "[SNAPTRADE]\nexclude_accounts =\n        Schwab / Ezekiel 529 Plan   \n"
+        body = (
+            "[SNAPTRADE]\n"
+            "exclude_accounts =\n"
+            "        Schwab / Beneficiary A 529 Plan   \n"
+        )
 
         with config_of(body):
             self.assertEqual(
-                get_snaptrade_excluded_accounts(), ["Schwab / Ezekiel 529 Plan"]
+                get_snaptrade_excluded_accounts(), ["Schwab / Beneficiary A 529 Plan"]
             )
 
     def test_blank_lines_between_labels_are_dropped(self) -> None:
         body = (
             "[SNAPTRADE]\n"
             "exclude_accounts =\n"
-            "    Schwab / Ezekiel 529 Plan\n"
+            "    Schwab / Beneficiary A 529 Plan\n"
             "\n"
             "    Fidelity / Individual\n"
         )
@@ -337,7 +341,7 @@ class SnapTradeExcludedAccountsTests(unittest.TestCase):
     def test_a_single_label_on_the_option_line_works(self) -> None:
         # Documented as one per line, indented -- but writing the only one
         # inline is the obvious shorthand and has to mean the same thing.
-        written = "Schwab / Ezekiel 529 Plan"
+        written = "Schwab / Beneficiary A 529 Plan"
 
         with config_of(section("SNAPTRADE", exclude_accounts=written)):
             self.assertEqual(get_snaptrade_excluded_accounts(), [written])
@@ -347,7 +351,7 @@ class SnapTradeExcludedAccountsTests(unittest.TestCase):
         # modules.snaptrade_module.normalize_label, so that both sides get the
         # same treatment. This getter must not case-fold on its own: doing it
         # here would normalize the config half only.
-        written = "SCHWAB/Ezekiel 529 Plan"
+        written = "SCHWAB/Beneficiary A 529 Plan"
 
         with config_of(section("SNAPTRADE", exclude_accounts=written)):
             self.assertEqual(get_snaptrade_excluded_accounts(), [written])
