@@ -28,6 +28,12 @@ argv is readable by every process on the machine.
     uv run python scripts/snaptrade_register.py status
     uv run python scripts/snaptrade_register.py link
 
+Only ``store`` needs those two variables, because it runs before there is
+anywhere to read them from. ``status`` and ``link`` resolve the pair the way the
+broker does -- ``clientid`` from the config, the consumer key from the keyring --
+so they work in any shell once setup is done. The environment still wins where
+it is set, which is what makes a second key testable without editing config.
+
 Verified against snaptrade-python-sdk 12.0.4.
 """
 
@@ -36,6 +42,9 @@ import os
 import sys
 from typing import Any
 
+import keyring.errors
+
+from etc.config import get_snaptrade_client_id
 from etc.secrets import get_secret, keyring_key, set_secret
 
 BROKER_NAME = "snaptrade"
@@ -51,6 +60,62 @@ def _env(name: str) -> str:
         sys.exit(f"{name} is not set -- see this file's docstring.")
 
     return value
+
+
+def _stored_client_id() -> str:
+    """
+    The clientId, from the environment or else from where the broker reads it.
+
+    Only ``store`` genuinely needs this in the environment: it runs before there
+    is a config to read. Every other command runs on a machine that has already
+    been set up, and demanding it there asked the operator to re-export a value
+    they had written into the config on the way past -- which is why the health
+    check `docs/brokers.md` recommends failed on a working install, saying
+    "SNAPTRADE_CLIENT_ID is not set" about a client id that plainly was.
+    :return: The client id, or "" when neither source has one
+    """
+
+    return (
+        os.environ.get("SNAPTRADE_CLIENT_ID", "").strip() or get_snaptrade_client_id()
+    )
+
+
+def _stored_consumer_key() -> str:
+    """
+    The consumerKey, from the environment or else from the OS keyring.
+
+    Putting it in the keyring is the entire job of ``store``, and the line
+    ``store`` prints on the way out points at ``status`` -- so requiring the
+    variable again made the command it recommends fail in any shell that had not
+    just exported it.
+
+    A machine with no keyring backend at all raises rather than returning
+    nothing, and that is a different problem from an empty keyring: it is said
+    so here, because a traceback out of a setup script reads as the script being
+    broken rather than as the machine lacking a place to keep secrets.
+    :return: The consumer key, or "" when neither source has one
+    """
+
+    from_env: str = os.environ.get("SNAPTRADE_CONSUMER_KEY", "").strip()
+
+    if from_env:
+        return from_env
+
+    try:
+        stored: str | None = get_secret(
+            key=keyring_key(broker=BROKER_NAME, username=CONSUMER_KEY_ACCOUNT)
+        )
+
+    except keyring.errors.KeyringError as e:
+        sys.exit(
+            f"Could not read the OS keyring: {e}\n"
+            "Export SNAPTRADE_CONSUMER_KEY to get this command through without "
+            "one. That is a workaround for reading, and only here: 'store' "
+            "writes to the keyring, and the broker reads from it with no such "
+            "fallback, so a machine with no backend cannot sync either way."
+        )
+
+    return stored or ""
 
 
 def _client(client_id: str, consumer_key: str) -> Any:
@@ -241,11 +306,30 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    client_id: str = _env("SNAPTRADE_CLIENT_ID")
-    consumer_key: str = _env("SNAPTRADE_CONSUMER_KEY")
-
     if args.command == "store":
-        return store(consumer_key, client_id)
+        # Required here and nowhere else: this is the command that puts them
+        # where the others look.
+        return store(_env("SNAPTRADE_CONSUMER_KEY"), _env("SNAPTRADE_CLIENT_ID"))
+
+    client_id: str = _stored_client_id()
+
+    # Before the keyring, not after: with no clientId this exits either way, and
+    # reaching for a secret on the way to saying so is what turns a missing
+    # config line into a keyring error on a machine that has no keyring.
+    if not client_id:
+        sys.exit(
+            "No SnapTrade clientId. Set 'clientid' in the [SNAPTRADE] section of "
+            "~/.stonksmith/stonksmith.conf, or export SNAPTRADE_CLIENT_ID."
+        )
+
+    consumer_key: str = _stored_consumer_key()
+
+    if not consumer_key:
+        sys.exit(
+            "No SnapTrade consumer key in the OS keyring under "
+            f"'{keyring_key(broker=BROKER_NAME, username=CONSUMER_KEY_ACCOUNT)}'. "
+            "Run this script's 'store' command, or export SNAPTRADE_CONSUMER_KEY."
+        )
 
     client: Any = _client(client_id, consumer_key)
 

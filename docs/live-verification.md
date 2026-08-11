@@ -34,26 +34,28 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*20 of 38 claims have been settled by a live run — 19 confirmed, 1 disproved. The
-remaining 18 rest on evidence no run here has produced.*
+*31 of 42 claims have been settled by a live run — 29 confirmed, 2 disproved. The
+remaining 11 rest on evidence no run here has produced: a broker with the transaction
+volume to put the question, a workspace whose brokers genuinely scraped on
+different days, a `verify tabs` run against a real spreadsheet since the
+allocation blocks acquired a check that reads them, a SnapTrade connection that has
+actually lapsed, an account whose holdings have actually gone stale, a 529 with
+more than one beneficiary on it, and the five rows of the one broker nobody has
+run. Three of those are alike and worth naming as such: a lapsed connection, stale
+holdings and a second beneficiary each need a condition to occur rather than a run
+to be made, and no amount of sitting down at the machine produces one.*
 
-**Fifteen of those eighteen are three brokers nobody has run.** Fidelity, Schwab 529
-and SnapTrade had no rows in this table at all until they were added — not `No` rows,
-no rows — so their absence read as nothing to say rather than as nothing observed.
-Every claim any of them makes rests on unit tests, which say the parser does what it
-was written to do and cannot say the site still looks that way. Two of the five
-brokers are verified; three are not, and the table now shows that instead of
-implying otherwise.
+**Four of the five brokers have been run. `fidelity` has not.** Its five rows were
+added rather than left absent, because an absent row reads as nothing to say instead
+of nothing observed — which is how this file came to imply otherwise. The Fidelity
+*accounts* SnapTrade reaches are settled, and they are a different claim: SnapTrade
+asks an API for a balance, while the `fidelity` broker drives a browser past Akamai
+Bot Manager and ThreatMetrix to scrape a summary page. Nothing about the first says
+the second still works.
 
-The other three are the ones that were already open: a broker with the transaction
-volume to put the windowing question, a workspace whose brokers genuinely scraped on
-different days, and a `verify tabs` run against a real spreadsheet since the
-allocation blocks acquired a check that reads them.
-
-**The fifteen are not blocked on anything but time.** Unlike the two data-blocked rows
-above, each needs a credential and a sitting — which makes them the largest and most
-tractable gap in this file, and the reason the procedures for all three are written
-out below.
+Unlike the six above, none of the five is blocked on a condition or on data. Each
+needs a Fidelity login and a sitting, which makes them the most tractable block of
+open claims in this table.
 
 `tests/test_live_verification_tally.py` derives those five numbers from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
@@ -79,27 +81,31 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — DFAS pay table download | Real requests through `fetch_pay_table`: the enlisted page unattended on 2026-08-10 (#116), 200 and 116,257 bytes, and the other three on 2026-08-11 (#118), 200 each. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes |
 | TSP — the contribution accrual | A live run on 2026-08-10 (#116) over the published price file and the DFAS page, both fetched by the run; all six months recomputed independently and matched on every field | Yes |
 | TSP — database write | Five runs on 2026-08-10 (#116) into a real `tsp.db`, four dates on one snapshot and the holdings summing to its value exactly; plus a genuine pre-migration database, migrated on open | Yes |
-| Fidelity — the manual sign-in hands off and the summary is reached | `tests/test_fidelity_manual_login.py`, `test_fidelity_summary_detection.py` and `test_fidelity_no_navigate_before_signin.py`. No run against the real site is recorded, so nothing here says Akamai still refuses what it refused when this was written | No |
+| Fidelity — the manual sign-in hands off and the summary is reached | `tests/test_fidelity_manual_login.py`, `test_fidelity_summary_detection.py` and `test_fidelity_no_navigate_before_signin.py`. No run of the `fidelity` broker against the real site is recorded — the Fidelity *accounts* reached through SnapTrade are a different claim, settled under SnapTrade below | No |
 | Fidelity — attaching to a browser you started yourself (`--browser cdp`) | `tests/test_fidelity_cdp_attach.py` and `test_fidelity_browser_choice.py`, over a stubbed endpoint | No |
 | Fidelity — account names, numbers and balances parse off the summary | `tests/test_fidelity_account_scrape.py`, over markup captured once rather than served. `ACCOUNT_BALANCE_SELECTORS` is a one-entry tuple, so a class rename is the whole failure | No |
 | Fidelity — the session survives to the next run | `tests/test_fidelity_refused_and_session.py` and `test_fidelity_lifecycle.py`. Ally's equivalent claim is settled the other way, which is the reason this one is worth asking | No |
 | Fidelity — database write | `tests/test_module_snapshot_writes.py` and `test_fidelity_module_capture.py` | No |
-| Schwab 529 — the form post signs in | `tests/test_schwab529_module_login_guard.py` and `test_schwab529_parser_and_login_detection.py` | No |
-| Schwab 529 — accounts and holdings parse off the overview | `tests/test_schwab529_parser_contract.py`, over captured markup. Columns are found by header, so a live page that grew one shifts nothing | No |
-| Schwab 529 — movements parse off the activity page | The same parser tests; `Processed` also answers to *process date* and *settlement date* | No |
-| Schwab 529 — a movement lands on one account or on none | `tests/test_schwab529_transaction_attribution.py`, including the masked-number reconciliation and the two-account collision | No |
-| Schwab 529 — database write, with dates stored as the source wrote them | `tests/test_module_snapshot_writes.py`; the `12/30/2025` spelling is what makes the `Transactions` tab the place the two brokers' dates have to agree | No |
-| SnapTrade — the personal key authenticates and accounts come back | `tests/test_snaptrade_broker.py` and `test_snaptrade_register_link.py`, over a stubbed SDK | No |
-| SnapTrade — balances and positions reach rows | `tests/test_snaptrade_module.py`, over recorded API shapes rather than a live call | No |
-| SnapTrade — movements parse | The same tests; one of only two transaction producers in `src/` | No |
-| SnapTrade — an expired connection is skipped, not recorded as fresh | `staleness()` and its tests, which fail closed. Untested against a really lapsed connection — and SnapTrade serves a cached balance rather than erroring, so this is the one that fails by looking like a success | No |
-| SnapTrade — excluded accounts are skipped and reported | `tests/test_snaptrade_module.py` covers the label matching; no live run has confirmed an exclusion against real account names | No |
 | The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes |
 | The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes |
 | The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes |
 | The sheet — every allocation block adding up to the total it is a share of | Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, which check that a wrong sum and a wrong share are both caught and that a refusal is not mistaken for either. Check 8 below. The row is new because the check is: every block already closed on a `Slices sum to` row and nothing read it, so no run before this one could have settled it, and the 2026-08-10 and 2026-08-11 runs predate the check rather than having passed it | No |
 | The sheet — the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py`. The 2026-08-11 run wrote the tab but settles nothing here: checks 6 and 7 are arithmetic across dates and a question about rows that are absent, and a column contract read back reaches neither. Still needs a workspace whose brokers genuinely ran on different days | No |
+| SnapTrade — a personal API key reaches the API | Four runs on 2026-08-11 against a real account, written up below. `verify_access` listed the connections and every run proceeded on the key alone — no userId, no userSecret, no browser | Yes |
+| SnapTrade — accounts and balances reach the database | The same four runs, into a real `snaptrade.db`: snapshots 168–199, eight accounts per run, each carrying an `As Of` of 2026-08-11 | Yes |
+| SnapTrade — positions reach the database | The `Holdings` tab went from 2 rows to 9 between the `--no-positions` run and the full one that followed, both on 2026-08-11 — the seven are SnapTrade's, and the two that survived the first run are other brokers' | Yes |
+| SnapTrade — transactions reach the database | The same pair of runs took movements from 9 to 10. **One movement, which is not a test of the pagination behind it** — the 20-page backstop and the follow-to-exhaustion loop are still unexercised | Yes, at one movement |
+| SnapTrade — a liability is skipped, not filed as an asset | All four runs skipped `Chase / CREDIT CARD` by name, reporting `it is a liability (LOC)`, against a real card carrying a real negative balance | Yes |
+| SnapTrade — `exclude_accounts` drops an account another broker owns | All four runs skipped the Schwab-held 529 by name, reporting `excluded, because another broker covers it`, with the label matched out of the config | Yes |
+| SnapTrade — one row per account across runs | Four runs inside five minutes: `show accounts` held at nine rows while `show snapshots` went 168 → 199, eight per run | Yes |
+| SnapTrade — a disabled connection is skipped rather than served its last balance | Unit tests over a fabricated disabled connection. No connection has lapsed here, and this cannot be staged — it needs a real expiry, which is the one thing a longer sitting does eventually produce | No |
+| SnapTrade — the holdings freshness guard fires | Unit tests over fabricated sync timestamps. Every real account was synced the same day, so `--max-age-days` has never had anything to reject | No |
+| SnapTrade — an exclusion added after a sync removes what was already written | Read off the same runs, and it does not: the 529 excluded on all four still has its account row and its pre-exclusion snapshots in `snaptrade.db`, and they still render | **Run, and it cannot** — see below |
+| Schwab 529 — the form post signs in with a stored credential | A run on 2026-08-11 against the live aggregator, by credential id rather than by password on the command line: `Login successful` | Yes |
+| Schwab 529 — the overview page parses into an account and its holdings | The same run: one holding added to the workspace, `Holdings` 9 → 10 | Yes |
+| Schwab 529 — the activity page parses into movements | The same run: one movement added, `Transactions` 10 → 11 | Yes |
+| Schwab 529 — a hint naming one of several beneficiaries is attributed to the right one | Unit tests over `match_account()`'s three rules and its collision case. The live account has a single beneficiary, so the rule that picks between them has never been asked a real question | No |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
 *one account state*: one investment account, one holding, one deposit account. So the
@@ -249,8 +255,9 @@ It is only the unattended part that does not.
 watching — a different question from whether a parser still matches a live site, and one
 this file does not answer. It makes no new claim about a live run either. Everything it
 leans on is already in the table above: the `--from-prices` path and the price feed
-behind it, TSP's rows, and the absence of any row at all for `snaptrade` and
-`schwab529plan`. This paragraph names those rows and no longer repeats their verdicts,
+behind it, TSP's rows, and — since 2026-08-11 — SnapTrade's and Schwab 529's, which
+used to be an absence a schedule was leaning on and are now rows with runs behind
+them. This paragraph names those rows and no longer repeats their verdicts,
 because restating a status in a second place is maintaining it twice and disagreeing at
 the first change — which is what happened to the copies that used to stand right here.
 That file cites the rows; this table stays the count. Step 6 below is what settled the
@@ -1094,158 +1101,97 @@ generic form of this is *Every broker* below, and it applies here unchanged.
 
 ---
 
-## Schwab 529
+## SnapTrade
 
-Five steps, and the cheapest broker here to verify: a session, a form post and two
-page reads. No browser, no session to keep, nothing to re-authorise. Nothing below
-has been run either.
+Four runs on 2026-08-11, against a real personal key with four brokerages linked —
+Schwab, Fidelity, Chase and Interactive Brokers — covering ten accounts. Two of them
+were skipped by rules that exist to skip them, and the eight that remained were written
+on every run.
 
-**What it needs.** A stored credential. Use `-id` rather than `-p`, which leaves the
-password in your shell history and in the process list:
-
-```bash
-uv run stonksmithdb        # broker schwab529plan, then: add creds <username>
+```text
+[-] Skipped Chase / CREDIT CARD: it is a liability (LOC). Pass --include-liabilities to sync it.
+[-] Skipped Schwab / <the 529>: excluded, because another broker covers it.
+[+] Syncing 8 account(s)
 ```
 
-### 1. The form post signs in
+Both skips are the interesting half. The card is a real line of credit carrying a real
+negative balance, so `LIABILITY_CATEGORIES` was matched against the thing it was written
+for rather than against a fixture; filing it as an asset would have moved the total by
+the balance twice over. The 529 exclusion matched a label out of the config against the
+label the sync builds, which is the one place `normalize_label()` earns its keep on real
+strings rather than on invented ones.
 
-```bash
-uv run stonksmith schwab529plan -M schwab529plan -id 1
-```
+**The four runs are what settle the repeat behaviour.** They landed at 17:05:08,
+17:06:05, 17:09:16 and 17:09:36; `show accounts` held at nine rows throughout while
+`show snapshots` went 168 → 199, eight per run. Nine rather than eight because the
+excluded 529 is still there — see below.
 
-```
-[*] Starting Schwab529 sync for: <username>
-```
+**Positions and transactions were separated on purpose.** The first run carried
+`--no-positions --history-days 0`, the second neither:
 
-A failure prints `Could not access Schwab529plan dashboard`. That message covers both
-a refused credential and a login page that changed shape, which are different problems
-with the same symptom — so if it appears, say which by looking at whether the
-credential still works in a browser.
+| After | Accounts | Holdings | Movements |
+| --- | --- | --- | --- |
+| `--no-positions --history-days 0` | 17 | 2 | 9 |
+| the full run | 17 | 9 | 10 |
 
-### 2. Accounts and holdings parse off the overview
+So the positions call is worth seven rows here and the transactions call one. The two
+holdings that survived the first run are other brokers'; SnapTrade contributed none,
+which is the flag doing exactly what it says and is why it now carries a warning. **One
+movement is not a test of the pagination behind it.** The follow-to-exhaustion loop and
+its 20-page backstop remain unexercised, and will stay that way until an account trades
+enough to need a second page.
 
-Against what the site shows you: every account present, every fund code, and the
-principal and earnings split that this broker fills where an API broker fills a
-symbol and a cost basis.
+### What an exclusion does not do
 
-**Columns are found by their headers, not by position.** A page that grew a column
-shifts nothing, which is the failure a positional read has and does not report — so a
-missing field here means a *heading* changed, and the fix is a spelling in
-`TRANSACTION_COLUMNS` rather than an index.
+`exclude_accounts` was added *after* SnapTrade had already synced the 529, and the rows
+from those earlier runs are still in `snaptrade.db` — account row and snapshots both. All
+four runs above skipped it correctly, and the account still renders on the tab at its
+last-synced value.
 
-### 3. Movements parse off the activity page
+That is the row settled the other way. The exclusion is a filter inside the sync; it has
+no reach into what a previous sync wrote, and nothing at the portfolio layer filters
+anything, because `load_workspace()` reads every database in the workspace. So an
+overlap resolved after the fact stays double-counted, and reads exactly like an overlap
+that was resolved. [`brokers.md`](brokers.md#neither-remedy-touches-what-is-already-on-disk)
+carries the consequence and what to do instead; there is no clean fix for a single
+stranded account today.
 
-Count them against the site. `Processed` also answers to *process date* and
-*settlement date*, so a movement whose date is blank is a heading this does not know
-yet rather than a movement without one.
-
-### 4. A movement lands on one account, or on none
-
-The check with a wrong way to pass. `match_account()` tries three rules in order: an
-exact match on normalised text, a shared trailing run of digits — Schwab masks its
-numbers, so `...4321` has to reconcile against `XXXX4321` — and a candidate name
-inside the hint, as in *Contributions for Beneficiary A*.
-
-**A hint matching two accounts returns nothing, deliberately.** So the thing to check
-is not that every movement found an account: it is that none found the *wrong* one.
-With more than one beneficiary, confirm a contribution landed on the right one, and
-record how many movements were left unattributed. Unattributed is a known state; wrong
-is indistinguishable from right once it is stored.
-
-### 5. Dates are stored as written, and the database write
-
-```bash
-uv run stonksmithdb
-broker schwab529plan
-show transactions
-```
-
-Expect `12/30/2025` — the source's own spelling, stored rather than normalised.
-That is correct here: normalisation happens on the way out, which is why the
-`Transactions` tab is where this and SnapTrade's ISO dates have to agree. A stored
-ISO date would mean something normalised on the way in, and the tab's date check
-would then be passing for the wrong reason.
-
-Then accounts and snapshots as in *Every broker* below.
+Two rows stay `No`, and neither is waiting on effort. A disabled connection needs a
+connection to actually lapse — SnapTrade goes on serving its last cached balance rather
+than erroring, which is the whole reason the guard exists and the reason it cannot be
+staged. The freshness guard needs holdings that have actually gone stale; every real
+account here had synced that morning, so `--max-age-days` has never been handed anything
+to reject.
 
 ---
 
-## SnapTrade
+## Schwab 529
 
-Five steps, no browser and no stored password. The setup is interactive and one-time;
-`brokers.md` has it. Nothing below has been run.
+One run on 2026-08-11 against the live aggregator, by stored credential id rather than
+by password on the command line:
 
-**What it needs.** A Personal API key already stored, and at least one linked
-brokerage. `scripts/snaptrade_register.py status` prints connection health and account
-names but never balances, so it is safe to paste into an issue.
-
-### 1. The key authenticates and accounts come back
-
-```bash
-uv run stonksmith snaptrade -M snaptrade
+```text
+[!] Attempting login for <username>
+[+] Login successful for <username>
+[!] Starting Schwab529 sync
+[!] Updating local broker database...
 ```
 
-```
-[*] Syncing <n> account(s)
-[+] SnapTrade sync complete.
-```
+The form post is the whole login — no browser, no session to keep, nothing to
+re-authorise — and it worked against the real site with a credential read out of the
+keyring. That is the claim this broker's place in the scheduling table rested on, and it
+rested on how the code was built until this run.
 
-A failure prints `Could not list SnapTrade accounts: <error>`. A 403 reading
-*"Authentication credentials were not provided"* is the documented shape of using a
-personal key as though it were commercial — see `brokers.md` — and means the setup,
-not the key.
+The parse added one holding and one movement to the workspace, taking it from 9 holdings
+and 10 movements to 10 and 11. Small numbers, and they settle the two parses at exactly
+that size: the overview page yielded an account and its holding, the activity page a
+movement, both from pages served that morning.
 
-### 2. Balances and positions reach rows
-
-Against the brokerage's own site: the balance, the currency, and one holding per
-position with its symbol and cost basis. This is the aggregator's number rather than
-the brokerage's own page, and the two can differ in *when* rather than in *what* —
-which is step 4.
-
-### 3. Movements parse
-
-`transaction_from_row()` here is one of only two transaction producers in `src/`.
-Count movements against the brokerage and check the dates are ISO, since this is the
-half of the `Transactions` tab's date agreement that arrives already normalised.
-
-### 4. An expired connection is skipped, not recorded as fresh
-
-**The one check here that catches a failure looking like a success, and the reason
-this broker needs verifying at all.** `brokers.md` records that a disabled connection
-does not error at the API: SnapTrade keeps serving its last cached balance. So the
-run that quietly records a stale number as a fresh one is a real possibility, and
-`staleness()` is what stands between you and it — it fails closed, treating an account
-with no successful sync recorded as stale.
-
-Let a connection lapse, or disable one in SnapTrade's portal, then run again. Expect
-the account to go *missing from the run* with a reason, rather than to appear with a
-number:
-
-```
-[!] Skipped <Brokerage / Account>: <why>. Pass --allow-stale to sync it anyway.
-```
-
-Then confirm the other half: `--allow-stale` syncs it and the row says `(STALE)` in
-its `Synced` column rather than looking like any other row.
-
-An expiry showing up as accounts going missing is the correct behaviour. An expiry
-showing up as a balance that has not moved is this check failing, and it is invisible
-without doing it on purpose.
-
-### 5. Exclusions, and the database write
-
-If another broker covers one of these accounts, name it in `exclude_accounts` and
-confirm the run says so:
-
-```
-[!] Skipped <Brokerage / Account>: excluded, because another broker covers it.
-```
-
-Every excluded account is reported, like every other skip. An exclusion that silently
-matched nothing is the failure mode — the label is `Brokerage / Account` as the sync
-prints it, and the brokerage half matters.
-
-Then accounts and snapshots as in *Every broker* below.
+**What one beneficiary cannot settle** is the rule for telling several apart.
+`match_account()` tries an exact match, then a shared trailing run of digits, then a
+candidate name inside the hint, and returns nothing on a collision — and a page with one
+beneficiary on it never reaches the second or third rule, let alone the collision. That
+row stays `No` and needs a second beneficiary rather than a second sitting.
 
 ---
 

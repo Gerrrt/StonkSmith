@@ -169,16 +169,19 @@ template.
 > [!NOTE]
 > **Not every claim here rests on a live run.** Green tests say the code does
 > what it was written to do, which is not the same as saying the site still
-> looks the way it did when the parser was written. Ally and TSP have both been
-> run against the real thing, and the sheet has been read back off a real
-> spreadsheet. **The other three brokers have not.** Fidelity, Schwab 529 and
-> SnapTrade rest entirely on unit tests, and every claim they make is written
-> down as unobserved rather than left unmentioned — which is most of the
-> eighteen open claims. Three more are open for their own reasons: whether the
-> `Transactions` tab holds every movement or only the newest five hundred, and
-> whether the `Net Worth` series carries across brokers that scraped on
-> different days, both waiting on data rather than on effort, and whether each
-> allocation block's slices add up on a real tab, which waits only on a run.
+> looks the way it did when the parser was written. Four of the five brokers
+> have been run against the real thing, and the sheet has been read back off a
+> real spreadsheet; eleven claims are still open. Five are the `fidelity`
+> broker, which has never been run — the Fidelity accounts SnapTrade reaches
+> are settled, but that is an API answering, not a browser getting past bot
+> detection to scrape a summary page. Three wait on data rather than on
+> effort — whether the `Transactions` tab holds every movement or only the
+> newest five hundred, whether the `Net Worth` series carries across brokers
+> that scraped on different days, and whether a 529 with more than one
+> beneficiary attributes its movements to the right one. Two wait on a
+> condition occurring at all: a SnapTrade connection lapsing, and an account's
+> holdings going stale. One waits only on a run, being whether each allocation
+> block's slices add up on a real tab.
 > [`docs/live-verification.md`](docs/live-verification.md) is the record of
 > which is which, claim by claim, and this note summarises it rather than being
 > maintained beside it.
