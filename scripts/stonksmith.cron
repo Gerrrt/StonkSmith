@@ -44,6 +44,25 @@
 #   so "$HOME/.local/bin" here is a literal directory that does not exist. A
 #   PATH missing uv fails every entry identically, on the first night.
 #
+#   And check the `cd`, which names a checkout that is probably not yours.
+#   ~/StonkSmith is where this file has to guess the repository is; there is no
+#   way for it to know. A `cd` that fails takes its entry down with it, because
+#   of the `&&` -- so a wrong path here fails every entry identically too, on
+#   the same first night, for a reason that reads nothing like the PATH one. In
+#   the repository, this rewrites them all to wherever you actually keep it:
+#
+#       sed -i '' "/^[0-9]/ s|cd ~/StonkSmith|cd $PWD|" scripts/stonksmith.cron
+#
+#   The /^[0-9]/ is load-bearing rather than tidy: it restricts the edit to the
+#   entries, which are the only lines starting with a minute. Without it the
+#   same command rewrites this comment too -- the line you are reading contains
+#   the string it searches for -- and the instruction destroys itself on first
+#   use. As written it is also safe to run twice.
+#
+#   (drop the '' on GNU sed). Both of these fail loudly rather than quietly,
+#   which is the good version of wrong, and neither is worth discovering by
+#   reading a week of cron mail.
+#
 # ---------------------------------------------------------------------------
 # Two absences that are deliberate
 #
