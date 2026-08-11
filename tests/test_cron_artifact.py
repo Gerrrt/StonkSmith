@@ -59,16 +59,30 @@ class TheArtifactMatchesTheRecord(unittest.TestCase):
         self.artifact_text: str = ARTIFACT.read_text(encoding="utf-8")
         self.record_text: str = RECORD.read_text(encoding="utf-8")
 
+    def cron_block(self) -> str:
+        """
+        The body of the record's fenced cron block.
+
+        `self.fail()` rather than a bare `assert`, because `python -O` strips
+        an assert and a check that disappears under an optimised interpreter is
+        worse than no check at all -- it still reads like coverage.
+        :return: The block's body, without the fences
+        """
+
+        match = CRON_FENCE.search(self.record_text)
+
+        if match is None:
+            self.fail("docs/scheduling.md has no fenced cron block to compare against")
+
+        return match.group("body")
+
     def test_the_document_has_exactly_one_cron_block(self) -> None:
         self.assertEqual(len(CRON_FENCE.findall(self.record_text)), 1)
 
     def test_the_two_schedules_are_the_same(self) -> None:
-        match = CRON_FENCE.search(self.record_text)
-        assert match is not None
-
         self.assertEqual(
             schedule(self.artifact_text),
-            schedule(match.group("body")),
+            schedule(self.cron_block()),
             "scripts/stonksmith.cron and the cron block in docs/scheduling.md "
             "have drifted apart; change both in the same pass",
         )
@@ -81,12 +95,9 @@ class TheArtifactMatchesTheRecord(unittest.TestCase):
         #
         # Only the entries are searched, never the prose around them -- the
         # record discusses Fidelity at length and has to be free to.
-        match = CRON_FENCE.search(self.record_text)
-        assert match is not None
-
         for name, text in (
             ("artifact", self.artifact_text),
-            ("record", match.group("body")),
+            ("record", self.cron_block()),
         ):
             with self.subTest(name):
                 self.assertFalse(

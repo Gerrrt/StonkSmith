@@ -23,8 +23,13 @@
 #   The sheet goes last, after every broker has written, because it renders
 #   what the databases hold at the moment it runs.
 #
-#   --quiet on every run. Cron mails on output, so a run that says nothing when
-#   it worked is a run that only mails when it did not.
+#   --quiet on every broker run. Cron mails on output, so a run that says
+#   nothing when it worked is a run that only mails when it did not.
+#
+#   The sheet step is the exception, and not by oversight: `stonksmithdb` takes
+#   no --quiet, and reports through its exit status instead -- 0 when the tabs
+#   were rewritten, 1 when the sheet was unreachable, a tab refused, or a
+#   broker database could not be read.
 #
 #   PATH is set because cron's is short and `uv` is usually not on it. `cd`
 #   because the project is a uv workspace and `uv run` resolves it from the
