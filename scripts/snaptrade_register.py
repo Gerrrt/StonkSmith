@@ -109,7 +109,10 @@ def _stored_consumer_key() -> str:
     except keyring.errors.KeyringError as e:
         sys.exit(
             f"Could not read the OS keyring: {e}\n"
-            "Export SNAPTRADE_CONSUMER_KEY to work without it."
+            "Export SNAPTRADE_CONSUMER_KEY to get this command through without "
+            "one. That is a workaround for reading, and only here: 'store' "
+            "writes to the keyring, and the broker reads from it with no such "
+            "fallback, so a machine with no backend cannot sync either way."
         )
 
     return stored or ""
