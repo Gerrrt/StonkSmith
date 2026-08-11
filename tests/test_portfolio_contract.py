@@ -446,6 +446,98 @@ class TotalTests(unittest.TestCase):
         self.assertEqual(portfolio.total(), 10.0)
 
 
+class InvestedTests(unittest.TestCase):
+    """
+    What the positions add up to, and why it is not the same number.
+
+    ``total`` and ``invested`` differ by whatever is sitting in a balance and in
+    no holding, which is the whole reason there are two row shapes. Anything
+    drawing a breakdown needs both: a share computed over ``invested`` alone
+    leaves the cash out silently, overstates every slice, and still adds to
+    100%.
+    """
+
+    def test_an_empty_portfolio_invests_a_float(self) -> None:
+        invested = Portfolio().invested()
+
+        self.assertEqual(invested, 0.0)
+        self.assertIsInstance(invested, float)
+
+    def test_it_reads_the_holdings_and_not_the_accounts(self) -> None:
+        portfolio = Portfolio(
+            accounts=(
+                AccountRow(
+                    broker="a", source="a", account="a", account_key="a", value=100.0
+                ),
+            ),
+            holdings=(
+                HoldingRow(
+                    broker="a",
+                    source="a",
+                    account="a",
+                    account_key="a",
+                    symbol="X",
+                    value=70.0,
+                ),
+            ),
+        )
+
+        self.assertEqual(portfolio.invested(), 70.0)
+
+        # The gap: 30 of uninvested cash, in a balance and in no position.
+        self.assertEqual(portfolio.total() - portfolio.invested(), 30.0)
+
+    def test_only_the_asked_for_currency_counts(self) -> None:
+        # Same rule as total, for the same reason: nothing here knows a rate.
+        portfolio = Portfolio(
+            holdings=(
+                HoldingRow(
+                    broker="a",
+                    source="a",
+                    account="a",
+                    account_key="a",
+                    symbol="X",
+                    value=10.0,
+                ),
+                HoldingRow(
+                    broker="b",
+                    source="b",
+                    account="b",
+                    account_key="b",
+                    symbol="Y",
+                    value=99.0,
+                    currency="EUR",
+                ),
+            )
+        )
+
+        self.assertEqual(portfolio.invested(), 10.0)
+        self.assertEqual(portfolio.invested(currency="EUR"), 99.0)
+
+    def test_a_holding_with_no_value_does_not_break_it(self) -> None:
+        portfolio = Portfolio(
+            holdings=(
+                HoldingRow(
+                    broker="a",
+                    source="a",
+                    account="a",
+                    account_key="a",
+                    symbol="X",
+                    value=10.0,
+                ),
+                HoldingRow(
+                    broker="b",
+                    source="b",
+                    account="b",
+                    account_key="b",
+                    symbol="Y",
+                ),
+            )
+        )
+
+        self.assertEqual(portfolio.invested(), 10.0)
+
+
 class FailureReasonTests(unittest.TestCase):
     """A reported failure has to actually report something."""
 
