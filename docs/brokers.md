@@ -408,6 +408,56 @@ aggregator does not — closed ones, or ones outside its coverage — and moving
 file drops those too. `stonksmithdb`, `broker <name>`, `show accounts` is the
 list to read before deciding.
 
+### The database comes back, and that is not the move failing
+
+The very next command says so, which is alarming in the moment and worth
+knowing in advance:
+
+```text
+    [!] Initializing FIDELITY database
+[*] Refreshed: 12 accounts, 10 holdings, 11 movements from ally, fidelity, schwab529plan, snaptrade, tsp.
+```
+
+`initialize_db()` creates an empty database for every broker that ships a
+`database.py`, so those files exist again after the next `stonksmithdb` run.
+**Nothing is restored with them.** The file is empty, the accounts are gone, and
+the totals and the staleness report are gone with them — which is exactly what
+the move was for. Do not run the move again.
+
+It does this in the `default` workspace and nowhere else, whatever workspace is
+configured — the path is fixed rather than read from config. So retire a broker
+on any other workspace and the file simply stays gone, and the paragraph above
+does not apply to you. Worth knowing mainly so that two machines behaving
+differently reads as the workspace it is rather than as one of them being
+broken.
+
+The name stays in that source list for the same reason it appeared in the first
+place: the list names the databases that were *read*, not the ones that had
+anything in them, so an empty database is a database that was read. It is on the
+sheet as well as on the line above. Nothing in the config or on the command line
+takes a bundled broker's name off it — deleting its package from the
+installation would, and that is not a supported operation — and there is no
+reason to want one badly enough to make an empty database read as a failure: an
+empty database that should *not* be empty is a broker whose run wrote nothing,
+and that has to stay loud.
+
+**So the file's absence is not the thing to check, because the file will not be
+absent.** The account count and `stonksmithdb stale` are. Against the workspace
+this section was written from, retiring one scraper that SnapTrade had come to
+cover moved both at once:
+
+```text
+before   [*] Freshness in 'default': 17 accounts, nothing older than 2026-08-04 (7 days).
+         [-] 5 of 17 accounts are stale.
+after    [*] Freshness in 'default': 12 accounts, nothing older than 2026-08-04 (7 days).
+         [+] 0 of 12 accounts are stale.
+```
+
+Five accounts left the workspace and the five stale ones went with them, because
+they were the same five: nothing had refreshed them since the broker stopped
+running, which is what retiring a broker without retiring its data looks like
+from the outside.
+
 There is no equivalent for a single stranded account, because nothing removes an
 account and its snapshots from a database that is otherwise still in use;
 `delete snapshot <id>` takes one mark at a time. An account excluded after it was
