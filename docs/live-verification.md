@@ -34,7 +34,9 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*31 of 42 claims have been settled by a live run — 29 confirmed, 2 disproved. The
+*As of 2026-08-11: 31 of 42 claims have been settled by a live run — 29 confirmed,
+2 disproved. 0 of those were settled more than six months before that date, and 0
+carry no date at all. The
 remaining 11 rest on evidence no run here has produced: a broker with the transaction
 volume to put the question, a workspace whose brokers genuinely scraped on
 different days, a `verify tabs` run against a real spreadsheet since the
@@ -44,6 +46,39 @@ more than one beneficiary on it, and the five rows of the one broker nobody has
 run. Three of those are alike and worth naming as such: a lapsed connection, stale
 holdings and a second beneficiary each need a condition to occur rather than a run
 to be made, and no amount of sitting down at the machine produces one.*
+
+**A settled claim does not stay settled, and the dates are why.** This file opens by
+saying green tests cannot tell you the site still looks the way it did. A run has the
+same problem one day later: it proves what the site was, and it proves less about what
+the site is with every week that passes. A table of `Yes` with no dates on it reads as
+finished work, which is the one thing it is not — so every settled row now carries the
+date of the run that settled it, and **a claim settled more than six months ago should
+be read as due for a re-run rather than as done.**
+
+**Two rows arrived here carrying no date, and both were bounded rather than guessed.**
+*TSP — statement parser* and *TSP — the mark, and the balance inversion* each cited a
+real run without saying when it happened, which left them unageable — the same
+objection this file makes to a balance with no as-of date. Neither could be re-run to
+find out, so each was dated from the commits either side: the code it exercises landed
+on 2026-08-06 and the claim was recorded settled on 2026-08-07, which puts the run in
+a one-day window. **The earlier bound is the one taken**, because an interval read the
+other way makes a claim look fresher than it is, and this column exists to stop
+exactly that. Both cells say so, so a reader can see the date is inferred rather than
+observed.
+
+`not recorded` stays a legal value for the next row that needs it. A run whose date
+nobody wrote down is a thing that will happen again, and the column has to be able to
+say so rather than tempt somebody into a plausible number.
+
+**The count above dates itself for the same reason.** It says what was true on a
+stated day rather than what is true now, so a reader who arrives a year later can see
+that the summary is a year old instead of trusting it. That is also what keeps
+`tests/test_live_verification_tally.py` honest: it checks the arithmetic *against the
+stated date*, never against today, so the suite cannot go red purely because time
+passed. A test that fails on an untouched repository is one that gets muted, and this
+project has already written down what muting costs — see
+[`scheduling.md`](scheduling.md). Bump the date when you record a result, and the
+count comes with it.
 
 **Four of the five brokers have been run. `fidelity` has not.** Its five rows were
 added rather than left absent, because an absent row reads as nothing to say instead
@@ -62,50 +97,50 @@ and fails if this sentence disagrees with them. It exists because this paragraph
 nineteen for four commits after the table reached twenty rows: the instruction to update
 it lives under *Recording a result*, and an instruction is not a mechanism.
 
-| Claim | Rests on | Observed live |
-| --- | --- | --- |
-| Ally — sign-in hand-off to `live.invest.ally.com` | Nine runs against a real account, 2026-08-07; unit tests over the URL predicate | Yes |
-| Ally — holdings, totals and sidebar parse | The same nine runs; `tests/ally_holdings.html` is one redacted DOM from that same account | Yes |
-| Ally — masked sidebar number matches the full one | The same nine runs; `masked_matches("...0111", "1AB20111")` in unit tests | Yes |
-| Ally — Ally Bank deposit accounts skipped, not filed as brokerage | The same nine runs | Yes |
-| Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one. The `units_as_of` stamp on each holding postdates those runs and has not been written to a real one | Yes |
-| Ally — one row per account across runs | Two signed-in runs on 2026-08-10, 21:57:58 and 22:03:26, written up below: `show accounts` held at one row while `show snapshots` went 26 → 27 → 28 | Yes |
-| Ally — valuing from published prices without a login | Three price runs on 2026-08-10 against a real account with no sign-in, written up under step 6: the price date reached `as_of`, and the units' stamp held at `22:03:26` across snapshots 29, 30 and 31 while the newest snapshot's own time moved under it | Yes |
-| Ally — the published price feed answers | A real request on 2026-08-09, written up below: 200 and 3,612 bytes of JSON for one symbol, read by `daily_closes()` into 23 dated closes | Yes |
-| Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below |
-| TSP — statement parser | Real statements, read as issued through `-o STATEMENT=` | Yes, against real files |
-| TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files |
-| TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes |
-| TSP — share price download | A real request on 2026-08-07 written up in #48, and again unattended on 2026-08-10 (#116): 200 and 555,142 bytes, fetched by the run itself rather than by hand | Yes |
-| TSP — DFAS pay table parse | All four published pages, parsed as served: the enlisted one on 2026-08-10 (#116) into all nine grades, and the officer, prior-service and warrant pages on 2026-08-11 (#118) into O-1..O-10, O-1E..O-3E and W-1..W-5. Every fixture in `tests/` is now a served page; the enlisted reconstruction read **zero** grades off the real one, and the prior-service reconstruction's rates were invented outright | Yes |
-| TSP — DFAS pay table download | Real requests through `fetch_pay_table`: the enlisted page unattended on 2026-08-10 (#116), 200 and 116,257 bytes, and the other three on 2026-08-11 (#118), 200 each. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes |
-| TSP — the contribution accrual | A live run on 2026-08-10 (#116) over the published price file and the DFAS page, both fetched by the run; all six months recomputed independently and matched on every field | Yes |
-| TSP — database write | Five runs on 2026-08-10 (#116) into a real `tsp.db`, four dates on one snapshot and the holdings summing to its value exactly; plus a genuine pre-migration database, migrated on open | Yes |
-| Fidelity — the manual sign-in hands off and the summary is reached | `tests/test_fidelity_manual_login.py`, `test_fidelity_summary_detection.py` and `test_fidelity_no_navigate_before_signin.py`. No run of the `fidelity` broker against the real site is recorded — the Fidelity *accounts* reached through SnapTrade are a different claim, settled under SnapTrade below | No |
-| Fidelity — attaching to a browser you started yourself (`--browser cdp`) | `tests/test_fidelity_cdp_attach.py` and `test_fidelity_browser_choice.py`, over a stubbed endpoint | No |
-| Fidelity — account names, numbers and balances parse off the summary | `tests/test_fidelity_account_scrape.py`, over markup captured once rather than served. `ACCOUNT_BALANCE_SELECTORS` is a one-entry tuple, so a class rename is the whole failure | No |
-| Fidelity — the session survives to the next run | `tests/test_fidelity_refused_and_session.py` and `test_fidelity_lifecycle.py`. Ally's equivalent claim is settled the other way, which is the reason this one is worth asking | No |
-| Fidelity — database write | `tests/test_module_snapshot_writes.py` and `test_fidelity_module_capture.py` | No |
-| The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes |
-| The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No |
-| The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes |
-| The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes |
-| The sheet — every allocation block adding up to the total it is a share of | Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, which check that a wrong sum and a wrong share are both caught and that a refusal is not mistaken for either. Check 8 below. The row is new because the check is: every block already closed on a `Slices sum to` row and nothing read it, so no run before this one could have settled it, and the 2026-08-10 and 2026-08-11 runs predate the check rather than having passed it | No |
-| The sheet — the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py`. The 2026-08-11 run wrote the tab but settles nothing here: checks 6 and 7 are arithmetic across dates and a question about rows that are absent, and a column contract read back reaches neither. Still needs a workspace whose brokers genuinely ran on different days | No |
-| SnapTrade — a personal API key reaches the API | Four runs on 2026-08-11 against a real account, written up below. `verify_access` listed the connections and every run proceeded on the key alone — no userId, no userSecret, no browser | Yes |
-| SnapTrade — accounts and balances reach the database | The same four runs, into a real `snaptrade.db`: snapshots 168–199, eight accounts per run, each carrying an `As Of` of 2026-08-11 | Yes |
-| SnapTrade — positions reach the database | The `Holdings` tab went from 2 rows to 9 between the `--no-positions` run and the full one that followed, both on 2026-08-11 — the seven are SnapTrade's, and the two that survived the first run are other brokers' | Yes |
-| SnapTrade — transactions reach the database | The same pair of runs took movements from 9 to 10. **One movement, which is not a test of the pagination behind it** — the 20-page backstop and the follow-to-exhaustion loop are still unexercised | Yes, at one movement |
-| SnapTrade — a liability is skipped, not filed as an asset | All four runs skipped `Chase / CREDIT CARD` by name, reporting `it is a liability (LOC)`, against a real card carrying a real negative balance | Yes |
-| SnapTrade — `exclude_accounts` drops an account another broker owns | All four runs skipped the Schwab-held 529 by name, reporting `excluded, because another broker covers it`, with the label matched out of the config | Yes |
-| SnapTrade — one row per account across runs | Four runs inside five minutes: `show accounts` held at nine rows while `show snapshots` went 168 → 199, eight per run | Yes |
-| SnapTrade — a disabled connection is skipped rather than served its last balance | Unit tests over a fabricated disabled connection. No connection has lapsed here, and this cannot be staged — it needs a real expiry, which is the one thing a longer sitting does eventually produce | No |
-| SnapTrade — the holdings freshness guard fires | Unit tests over fabricated sync timestamps. Every real account was synced the same day, so `--max-age-days` has never had anything to reject | No |
-| SnapTrade — an exclusion added after a sync removes what was already written | Read off the same runs, and it does not: the 529 excluded on all four still has its account row and its pre-exclusion snapshots in `snaptrade.db`, and they still render | **Run, and it cannot** — see below |
-| Schwab 529 — the form post signs in with a stored credential | A run on 2026-08-11 against the live aggregator, by credential id rather than by password on the command line: `Login successful` | Yes |
-| Schwab 529 — the overview page parses into an account and its holdings | The same run: one holding added to the workspace, `Holdings` 9 → 10 | Yes |
-| Schwab 529 — the activity page parses into movements | The same run: one movement added, `Transactions` 10 → 11 | Yes |
-| Schwab 529 — a hint naming one of several beneficiaries is attributed to the right one | Unit tests over `match_account()`'s three rules and its collision case. The live account has a single beneficiary, so the rule that picks between them has never been asked a real question | No |
+| Claim | Rests on | Observed live | Settled on |
+| --- | --- | --- | --- |
+| Ally — sign-in hand-off to `live.invest.ally.com` | Nine runs against a real account, 2026-08-07; unit tests over the URL predicate | Yes | 2026-08-07 |
+| Ally — holdings, totals and sidebar parse | The same nine runs; `tests/ally_holdings.html` is one redacted DOM from that same account | Yes | 2026-08-07 |
+| Ally — masked sidebar number matches the full one | The same nine runs; `masked_matches("...0111", "1AB20111")` in unit tests | Yes | 2026-08-07 |
+| Ally — Ally Bank deposit accounts skipped, not filed as brokerage | The same nine runs | Yes | 2026-08-07 |
+| Ally — database write | The same nine runs, which wrote to a real `ally.db`; the unit tests behind this only ever write to a fake one. The `units_as_of` stamp on each holding postdates those runs and has not been written to a real one | Yes | 2026-08-07 |
+| Ally — one row per account across runs | Two signed-in runs on 2026-08-10, 21:57:58 and 22:03:26, written up below: `show accounts` held at one row while `show snapshots` went 26 → 27 → 28 | Yes | 2026-08-10 |
+| Ally — valuing from published prices without a login | Three price runs on 2026-08-10 against a real account with no sign-in, written up under step 6: the price date reached `as_of`, and the units' stamp held at `22:03:26` across snapshots 29, 30 and 31 while the newest snapshot's own time moved under it | Yes | 2026-08-10 |
+| Ally — the published price feed answers | A real request on 2026-08-09, written up below: 200 and 3,612 bytes of JSON for one symbol, read by `daily_closes()` into 23 dated closes | Yes | 2026-08-09 |
+| Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below | 2026-08-07 |
+| TSP — statement parser | Real statements, read as issued through `-o STATEMENT=`. The run itself was never dated; the date below is bounded by the commits either side of it — the reader landed in `4f1b2b1` on 2026-08-06 and the claim was recorded settled in `123af7e` on 2026-08-07, so the earlier bound is taken | Yes, against real files | 2026-08-06 |
+| TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files | 2026-08-07 |
+| TSP — the mark, and the balance inversion | Checked against what the site itself reports: `0bc6668` carries a balance and date read off it, `--balance 7810.84 --balance-as-of 2026-08-05`. Bounded the same way as the row above — inversion landed 2026-08-06, recorded settled 2026-08-07 | Yes | 2026-08-06 |
+| TSP — share price download | A real request on 2026-08-07 written up in #48, and again unattended on 2026-08-10 (#116): 200 and 555,142 bytes, fetched by the run itself rather than by hand | Yes | 2026-08-10 |
+| TSP — DFAS pay table parse | All four published pages, parsed as served: the enlisted one on 2026-08-10 (#116) into all nine grades, and the officer, prior-service and warrant pages on 2026-08-11 (#118) into O-1..O-10, O-1E..O-3E and W-1..W-5. Every fixture in `tests/` is now a served page; the enlisted reconstruction read **zero** grades off the real one, and the prior-service reconstruction's rates were invented outright | Yes | 2026-08-11 |
+| TSP — DFAS pay table download | Real requests through `fetch_pay_table`: the enlisted page unattended on 2026-08-10 (#116), 200 and 116,257 bytes, and the other three on 2026-08-11 (#118), 200 each. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes | 2026-08-11 |
+| TSP — the contribution accrual | A live run on 2026-08-10 (#116) over the published price file and the DFAS page, both fetched by the run; all six months recomputed independently and matched on every field | Yes | 2026-08-10 |
+| TSP — database write | Five runs on 2026-08-10 (#116) into a real `tsp.db`, four dates on one snapshot and the holdings summing to its value exactly; plus a genuine pre-migration database, migrated on open | Yes | 2026-08-10 |
+| Fidelity — the manual sign-in hands off and the summary is reached | `tests/test_fidelity_manual_login.py`, `test_fidelity_summary_detection.py` and `test_fidelity_no_navigate_before_signin.py`. No run of the `fidelity` broker against the real site is recorded — the Fidelity *accounts* reached through SnapTrade are a different claim, settled under SnapTrade below | No | — |
+| Fidelity — attaching to a browser you started yourself (`--browser cdp`) | `tests/test_fidelity_cdp_attach.py` and `test_fidelity_browser_choice.py`, over a stubbed endpoint | No | — |
+| Fidelity — account names, numbers and balances parse off the summary | `tests/test_fidelity_account_scrape.py`, over markup captured once rather than served. `ACCOUNT_BALANCE_SELECTORS` is a one-entry tuple, so a class rename is the whole failure | No | — |
+| Fidelity — the session survives to the next run | `tests/test_fidelity_refused_and_session.py` and `test_fidelity_lifecycle.py`. Ally's equivalent claim is settled the other way, which is the reason this one is worth asking | No | — |
+| Fidelity — database write | `tests/test_module_snapshot_writes.py` and `test_fidelity_module_capture.py` | No | — |
+| The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes | 2026-08-10 |
+| The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No | — |
+| The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes | 2026-08-10 |
+| The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes | 2026-08-11 |
+| The sheet — every allocation block adding up to the total it is a share of | Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, which check that a wrong sum and a wrong share are both caught and that a refusal is not mistaken for either. Check 8 below. The row is new because the check is: every block already closed on a `Slices sum to` row and nothing read it, so no run before this one could have settled it, and the 2026-08-10 and 2026-08-11 runs predate the check rather than having passed it | No | — |
+| The sheet — the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py`. The 2026-08-11 run wrote the tab but settles nothing here: checks 6 and 7 are arithmetic across dates and a question about rows that are absent, and a column contract read back reaches neither. Still needs a workspace whose brokers genuinely ran on different days | No | — |
+| SnapTrade — a personal API key reaches the API | Four runs on 2026-08-11 against a real account, written up below. `verify_access` listed the connections and every run proceeded on the key alone — no userId, no userSecret, no browser | Yes | 2026-08-11 |
+| SnapTrade — accounts and balances reach the database | The same four runs, into a real `snaptrade.db`: snapshots 168–199, eight accounts per run, each carrying an `As Of` of 2026-08-11 | Yes | 2026-08-11 |
+| SnapTrade — positions reach the database | The `Holdings` tab went from 2 rows to 9 between the `--no-positions` run and the full one that followed, both on 2026-08-11 — the seven are SnapTrade's, and the two that survived the first run are other brokers' | Yes | 2026-08-11 |
+| SnapTrade — transactions reach the database | The same pair of runs took movements from 9 to 10. **One movement, which is not a test of the pagination behind it** — the 20-page backstop and the follow-to-exhaustion loop are still unexercised | Yes, at one movement | 2026-08-11 |
+| SnapTrade — a liability is skipped, not filed as an asset | All four runs skipped `Chase / CREDIT CARD` by name, reporting `it is a liability (LOC)`, against a real card carrying a real negative balance | Yes | 2026-08-11 |
+| SnapTrade — `exclude_accounts` drops an account another broker owns | All four runs skipped the Schwab-held 529 by name, reporting `excluded, because another broker covers it`, with the label matched out of the config | Yes | 2026-08-11 |
+| SnapTrade — one row per account across runs | Four runs inside five minutes: `show accounts` held at nine rows while `show snapshots` went 168 → 199, eight per run | Yes | 2026-08-11 |
+| SnapTrade — a disabled connection is skipped rather than served its last balance | Unit tests over a fabricated disabled connection. No connection has lapsed here, and this cannot be staged — it needs a real expiry, which is the one thing a longer sitting does eventually produce | No | — |
+| SnapTrade — the holdings freshness guard fires | Unit tests over fabricated sync timestamps. Every real account was synced the same day, so `--max-age-days` has never had anything to reject | No | — |
+| SnapTrade — an exclusion added after a sync removes what was already written | Read off the same runs, and it does not: the 529 excluded on all four still has its account row and its pre-exclusion snapshots in `snaptrade.db`, and they still render | **Run, and it cannot** — see below | 2026-08-11 |
+| Schwab 529 — the form post signs in with a stored credential | A run on 2026-08-11 against the live aggregator, by credential id rather than by password on the command line: `Login successful` | Yes | 2026-08-11 |
+| Schwab 529 — the overview page parses into an account and its holdings | The same run: one holding added to the workspace, `Holdings` 9 → 10 | Yes | 2026-08-11 |
+| Schwab 529 — the activity page parses into movements | The same run: one movement added, `Transactions` 10 → 11 | Yes | 2026-08-11 |
+| Schwab 529 — a hint naming one of several beneficiaries is attributed to the right one | Unit tests over `match_account()`'s three rules and its collision case. The live account has a single beneficiary, so the rule that picks between them has never been asked a real question | No | — |
 
 The Ally rows are the ones worth reading twice. Those nine runs were nine runs against
 *one account state*: one investment account, one holding, one deposit account. So the
@@ -1792,6 +1827,12 @@ only you can say whether the configured fund is the right one.
 ---
 
 ## Recording a result
+
+**Date it.** The row's `Settled on` cell takes the day the run happened, and the
+`As of` date above the table moves to that day in the same edit. Both are checked, so
+a result recorded without them is a failing test rather than a sentence nobody
+re-reads — which is the whole reason the count is derived rather than typed. A run
+that settles a row whose date was `not recorded` fixes that row for good.
 
 Add the observation to the table at the top, and to the issue tracking the run. Write
 down what was returned, not just whether it passed — the #48 write-up is the model:
