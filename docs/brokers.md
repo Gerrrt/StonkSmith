@@ -373,6 +373,46 @@ config rather than replacing it. The config is the right home for a standing
 overlap — a run from cron has nobody to remember the flag. Every excluded
 account is reported, like every other skip.
 
+### Neither remedy touches what is already on disk
+
+**Both of the above stop a broker *writing*. Neither removes a row it has
+already written, and the sheet renders rows rather than runs.**
+`load_workspace()` ends in `read_databases(sorted(directory.glob("*.db")))`, so
+every database in the workspace is read every time, whether or not its broker
+has run this year. There is no exclusion at that layer at all — the one in
+config is a filter inside the SnapTrade sync.
+
+So both halves of the advice above have a second step:
+
+- **Stopping the scraper freezes its accounts, it does not retire them.** They
+  keep appearing on the `Accounts` tab at whatever they were last worth, and
+  keep being added into the total, indefinitely. Because nothing refreshes them
+  they also stop having a defensible `As Of`, which is what makes
+  `stonksmithdb stale` the place this shows up first.
+- **`exclude_accounts` is not retroactive.** An account SnapTrade synced before
+  the line was added keeps the rows from those runs. The exclusion is honoured
+  from then on, which reads exactly like the problem being solved while the old
+  rows go on being counted.
+
+Retiring a broker properly means taking its database out of the workspace. Move
+it rather than deleting it — it is the only copy of that history:
+
+```bash
+mkdir -p ~/.stonksmith/retired
+mv ~/.stonksmith/workspaces/default/fidelity.db ~/.stonksmith/retired/
+uv run stonksmithdb sheet && uv run stonksmithdb stale
+```
+
+Check first what only that database holds. A scraper often reached accounts the
+aggregator does not — closed ones, or ones outside its coverage — and moving the
+file drops those too. `stonksmithdb`, `broker <name>`, `show accounts` is the
+list to read before deciding.
+
+There is no equivalent for a single stranded account, because nothing removes an
+account and its snapshots from a database that is otherwise still in use;
+`delete snapshot <id>` takes one mark at a time. An account excluded after it was
+already synced is the case with no clean answer today.
+
 **This setting is permanent, not a workaround.** The reasonable-sounding hope is
 that a single reader over all the databases would make it unnecessary — that it
 could recognise the duplicate and drop one. It cannot, and the reason is

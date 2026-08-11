@@ -145,6 +145,16 @@ the money twice. The tab has a total on it, and that total is wrong in the direc
 looks good. Pick one owner — for Fidelity that is SnapTrade — and drop the other from the
 schedule.
 
+**Dropping it from the schedule is half the job, and the half that does not fix the
+total.** The sheet reads every database in the workspace rather than every broker that
+ran, so a retired scraper keeps contributing its last values forever — the accounts stay
+on the tab, stay in the total, and stop having an `As Of` anyone can defend. A crontab
+with no `fidelity` line and a `fidelity.db` still in the workspace double-counts exactly
+as much as one that runs it nightly. The database has to leave the workspace;
+[*Neither remedy touches what is already on
+disk*](brokers.md#neither-remedy-touches-what-is-already-on-disk) is the procedure, and
+`stonksmithdb stale` is where the leftovers announce themselves.
+
 ---
 
 ## A worked crontab
@@ -325,11 +335,18 @@ What that file already says, and what it means here:
   was — it stalls the accrual rather than corrupting the number — but the way back is
   `--pay-table` with a page saved from a browser, which is a human. A schedule that starts
   mailing about the pay table is asking for that, not for a retry.
-- **`snaptrade` and `schwab529plan` have no rows at all.** Neither has been run against a
-  real account through StonkSmith. Their place in the table above rests on how they are
-  built — an API key, a form post, no session to lose — rather than on an observed run.
-  That is a weaker kind of evidence and it is worth saying so before a crontab is written
-  around it.
+- **`snaptrade` and `schwab529plan` were run for real on 2026-08-11, and their place in
+  the table above no longer rests on how they are built.** Four SnapTrade runs settled
+  the key reaching the API, accounts and balances and positions reaching the database,
+  the liability and exclusion skips firing against a real card and a real overlap, and
+  nine account rows holding steady while snapshots went 168 → 199. One Schwab 529 run
+  settled the form-post login, both parses and the write. What those runs did *not*
+  settle is worth carrying into a crontab as much as what they did: SnapTrade's
+  transaction path has been exercised at one movement, so the pagination behind it has
+  not been exercised at all, and neither the disabled-connection skip nor the freshness
+  guard has ever had a real case to fire on. Those two wait on a connection lapsing
+  rather than on anybody running anything.
 
 None of that argues against scheduling them. It argues for reading the first week of cron
-mail rather than assuming silence means success.
+mail rather than assuming silence means success — and for knowing that the first lapsed
+SnapTrade connection will be the first time that path runs anywhere but in a unit test.
