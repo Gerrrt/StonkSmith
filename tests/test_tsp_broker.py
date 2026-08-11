@@ -21,7 +21,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 from unittest.mock import MagicMock
 
 from bs4 import BeautifulSoup
@@ -339,10 +339,10 @@ class TspPayTableTests(unittest.TestCase):
             def __init__(self, **kwargs: Any) -> None:
                 captured["client"] = kwargs
 
-            def __enter__(self) -> _Client:
+            def __enter__(self) -> Self:
                 return self
 
-            def __exit__(self, *_: Any) -> None:
+            def __exit__(self, *_: object) -> None:
                 return None
 
             def get(self, url: str, headers: dict[str, str]) -> MagicMock:

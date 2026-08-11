@@ -34,10 +34,9 @@ def _top_level_owners() -> dict[str, set[str]]:
         for entry in dist.files or []:
             path = str(entry)
             if (
-                path.startswith("..")
+                path.startswith(("..", "__pycache__", "__editable__"))
                 or ".dist-info" in path
                 or ".data/" in path
-                or path.startswith(("__pycache__", "__editable__"))
             ):
                 continue
 
