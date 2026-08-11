@@ -26,6 +26,19 @@
     `launchctl kickstart -p gui/$(id -u)/com.stonksmith.nightly` runs it now
     rather than waiting for the evening, which is how to test it.
 
+    Read the log from the bottom. StandardOutPath appends rather than
+    truncating, so every run this agent has ever made is in that one file, and
+    last week's failure sits above this week's success looking exactly as
+    current. The runner echoes each step before running it, so the newest run
+    starts at the last line naming `uv run stonksmith tsp`:
+
+        tail -n 40 /tmp/stonksmith-nightly.log
+
+    Nothing rotates it. macOS sweeps /tmp on its own schedule so it will not
+    grow without bound, which is also to say the history is not somewhere to
+    keep anything: pipe a copy elsewhere if a night's output is worth having
+    next month.
+
     gui/$(id -u) rather than `launchctl load` is the point of the whole file: it
     bootstraps the agent into the GUI login session, which is the context that
     can read the login keychain. A system-level agent, or cron, cannot.
