@@ -181,6 +181,38 @@ an oversight to be corrected by adding a sixth entry.
 `PATH` is set because cron's is short and `uv` usually is not on it. `cd` because the
 project is a `uv` workspace and `uv run` resolves it from the working directory.
 
+That same schedule is committed as [`scripts/stonksmith.cron`](../scripts/stonksmith.cron),
+commented, so it can be pasted into `crontab -e` rather than retyped. Paste it; do not
+run `crontab scripts/stonksmith.cron` unless you mean to replace your whole crontab.
+
+### Before the first night
+
+Every line above is a no-op, or a nightly failure, until its broker is set up. None of
+this is new — it is [`brokers.md`](brokers.md) read in the order a crontab needs it —
+but a schedule is exactly where a half-finished setup stops being visible, because the
+run that would have told you is the one `--quiet` silenced.
+
+- **`tsp`** — `fund`, `units` and `units_as_of` filled in under `[TSP]`, or the run has
+  no unit count and values nothing. The four DFAS keys are optional and go in together
+  or not at all.
+- **`snaptrade`** — `clientid` in config, the consumer key in the keyring, and a linked
+  connection. `scripts/snaptrade_register.py status` is the check.
+- **`schwab529plan`** — the credential actually stored, and `-id 1` actually being its
+  id. `uv run stonksmithdb`, broker `schwab529plan`, then `add creds`.
+- **`ally`** — **a `--manual-login` run must have happened first.** This is the one that
+  bites, because `--from-prices` reads units out of the database: against one no
+  signed-in run has written it refuses and exits `1`, so an unseeded install fails every
+  night rather than once.
+- **the sheet** — the spreadsheet reachable and authorized. It creates its own tabs.
+
+And two standing facts a schedule cannot state for itself. Where one account is
+reachable by two brokers — a Schwab-held 529 that `schwab529plan` scrapes and SnapTrade
+also reports — `exclude_accounts` has to name it, or the `Accounts` tab holds the money
+twice; see [*When two brokers can reach the same
+account*](brokers.md#when-two-brokers-can-reach-the-same-account). And a SnapTrade
+connection expires every few weeks, which surfaces as accounts quietly going missing
+from a run rather than as an error.
+
 ### The sheet step reports
 
 `stonksmithdb sheet` runs the one command and exits: `0` when the tabs were rewritten, `1`

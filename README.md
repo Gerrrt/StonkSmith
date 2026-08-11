@@ -375,10 +375,16 @@ were rewritten and `1` when the sheet was unreachable, a tab refused, or a broke
 database could not be read — a total short by a whole broker being the failure
 that must not be quiet.
 
+That schedule is committed as [`scripts/stonksmith.cron`](scripts/stonksmith.cron),
+commented and ready to paste into `crontab -e`. Every line in it is a no-op or a
+nightly failure until its broker is set up — Ally in particular refuses and exits
+`1` until a `--manual-login` run has recorded some units — so read *Before the
+first night* before installing it.
+
 [`docs/scheduling.md`](docs/scheduling.md) is the record: what each broker can
-do unattended, what `--from-prices` is and is not, and which of these claims a
-live run has actually settled. This section summarises it rather than being
-maintained beside it.
+do unattended, what `--from-prices` is and is not, what has to be true before the
+first night, and which of these claims a live run has actually settled. This
+section summarises it rather than being maintained beside it.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
