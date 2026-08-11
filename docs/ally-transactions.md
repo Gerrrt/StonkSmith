@@ -6,8 +6,9 @@ docstring, a column that explains itself, a flag with a help string. A feature t
 gets re-derived by the next person to notice the gap. #89 assumed Ally writes transactions;
 it does not, and after investigation it should stay that way for now.
 
-**This file is the record.** The README summarises it in one place — the end of *What an
-Ally run writes down* — and that paragraph is derived from here rather than maintained
+**This file is the record.** One place summarises it — the end of
+[*What an Ally run writes down*](brokers.md#what-an-ally-run-writes-down) — and
+that paragraph is derived from here rather than maintained
 beside it. Unlike the summaries `docs/live-verification.md` governs, this one is not
 continuous: it states a decision that either stands or is reopened, so it changes exactly
 once, on the day one of the conditions below fires.
@@ -43,8 +44,9 @@ The reasons are all upstream, and there are four of them.
 **There is no second source.** `scripts/snaptrade_coverage.py` asks the authoritative
 `/brokerages` endpoint what SnapTrade actually covers, and the 2026-08-05 run recorded in its
 docstring found **no Ally Invest at all**. That matters more than it looks: SnapTrade is
-exactly what takes Fidelity from attended to unattended, as *When two brokers can reach the
-same account* in the README describes. For Ally that route does not exist, so there is no
+exactly what takes Fidelity from attended to unattended, as
+[*When two brokers can reach the same account*](brokers.md#when-two-brokers-can-reach-the-same-account)
+describes. For Ally that route does not exist, so there is no
 aggregator to fall back to and no path to transactions that does not go through the scraper.
 
 **No activity endpoint has ever been observed.** `src/modules/ally_module.py` navigates one
@@ -91,7 +93,8 @@ signed-in account.
 extra cost and with nothing new to remember:
 
 - **armed before the CDP branch**, in `src/brokers/ally/broker.py`, so `--browser cdp`
-  records at all — it previously recorded nothing, and it is the path the README recommends
+  records at all — it previously recorded nothing, and it is the path
+  [`brokers.md`](brokers.md) recommends
 - **written on every exit**, from `BrowserConnection.teardown()` to
   `~/.stonksmith/logs/ally-data-calls-<stamp>.log`, rather than only after a failure
 - **carrying each endpoint's parameter names**, via `query_shape()` in
@@ -122,8 +125,9 @@ grep -Ei 'activity|history|orders|transaction' ~/.stonksmith/logs/ally-data-call
 A hit settles the whole discovery question at once — that a feed exists, whether it is
 per-account, and whether it takes a date window are all readable off the one line.
 
-**Match against your log, not against the README.** The sample line in *What an Ally run
-writes down* is an illustration of the format, written out so a real one can be recognised.
+**Match against your log, not against the documented one.** The sample line in
+[*What an Ally run writes down*](brokers.md#what-an-ally-run-writes-down) is an illustration
+of the format, written out so a real one can be recognised.
 It is not a capture, and mistaking it for one would fire this condition on evidence that
 does not exist.
 
@@ -157,12 +161,13 @@ two brokers can reach the same account* for how to pick an owner.
 that file records as settled, and attach the data-calls log rather than a count.
 
 **What would remain.** More than transactions. That row is the unattended answer for the
-whole broker, so a change there is written up in `docs/live-verification.md` first and
-changes the README's Ally section with it. The transactions question sits downstream of it
+whole broker, so a change there is written up in
+[`live-verification.md`](live-verification.md) first and changes
+[the Ally chapter](brokers.md#ally-invest) with it. The transactions question sits downstream of it
 and still needs condition 1 as well: a session that persists is no use against an endpoint
 nobody has found.
 
-Whichever one fires, change this file and the README paragraph that summarises it in the same
+Whichever one fires, change this file and the paragraph that summarises it in the same
 pass, and say which run settled it. A condition that has come true and been left reading as
 open sends the next reader off to re-derive an answer that already exists, which is the exact
 state this file was written to end.
@@ -181,7 +186,7 @@ never duplicates.
 
 Both current producers fetch a date window whole, so a same-day group cannot straddle one.
 **A paginated activity feed is precisely the case that cannot promise that** — which is why
-`pageSize`, in the illustrated line the README shows, is not idle detail. The endpoint that
+`pageSize`, in the illustrated line [`brokers.md`](brokers.md) shows, is not idle detail. The endpoint that
 would reopen this decision may be the same endpoint that makes a derived key insufficient.
 
 So "only a parser and a flag remain" is optimistic by one decision, and the decision is

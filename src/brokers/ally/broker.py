@@ -257,7 +257,7 @@ class Ally(BrowserConnection):
         # it does not touch the request the CDP rule below is protecting.
         #
         # It used to sit inside the else, which meant --browser cdp recorded
-        # nothing at all. That is the path the README recommends for surviving
+        # nothing at all. That is the path docs/brokers.md recommends for surviving
         # Ally's bot protection, so the runs most likely to be worth reading
         # were the ones producing no evidence. The listener outlives the manual
         # sign-in, so arming here catches the whole session either way.
