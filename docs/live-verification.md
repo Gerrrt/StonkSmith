@@ -35,7 +35,7 @@ run are not the same evidence. A row can also be settled the other way: **Run, a
 cannot** is an observation, not a gap.
 
 *As of 2026-08-11: 31 of 42 claims have been settled by a live run — 29 confirmed,
-2 disproved. 0 of those were settled more than six months before that date, and 2
+2 disproved. 0 of those were settled more than six months before that date, and 0
 carry no date at all. The
 remaining 11 rest on evidence no run here has produced: a broker with the transaction
 volume to put the question, a workspace whose brokers genuinely scraped on
@@ -55,12 +55,20 @@ finished work, which is the one thing it is not — so every settled row now car
 date of the run that settled it, and **a claim settled more than six months ago should
 be read as due for a re-run rather than as done.**
 
-**Two settled rows carry no date at all**, and that is a real gap rather than a
-formatting one: *TSP — statement parser* and *TSP — the mark, and the balance
-inversion* each cite a real run without saying when it happened. Their age cannot be
-computed, so they cannot be known to be current, and this file already has a name for
-that failure — it is the same objection it makes to a balance with no as-of date. Fix
-them by dating them the next time either is run, not by guessing now.
+**Two rows arrived here carrying no date, and both were bounded rather than guessed.**
+*TSP — statement parser* and *TSP — the mark, and the balance inversion* each cited a
+real run without saying when it happened, which left them unageable — the same
+objection this file makes to a balance with no as-of date. Neither could be re-run to
+find out, so each was dated from the commits either side: the code it exercises landed
+on 2026-08-06 and the claim was recorded settled on 2026-08-07, which puts the run in
+a one-day window. **The earlier bound is the one taken**, because an interval read the
+other way makes a claim look fresher than it is, and this column exists to stop
+exactly that. Both cells say so, so a reader can see the date is inferred rather than
+observed.
+
+`not recorded` stays a legal value for the next row that needs it. A run whose date
+nobody wrote down is a thing that will happen again, and the column has to be able to
+say so rather than tempt somebody into a plausible number.
 
 **The count above dates itself for the same reason.** It says what was true on a
 stated day rather than what is true now, so a reader who arrives a year later can see
@@ -100,9 +108,9 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | Ally — valuing from published prices without a login | Three price runs on 2026-08-10 against a real account with no sign-in, written up under step 6: the price date reached `as_of`, and the units' stamp held at `22:03:26` across snapshots 29, 30 and 31 while the newest snapshot's own time moved under it | Yes | 2026-08-10 |
 | Ally — the published price feed answers | A real request on 2026-08-09, written up below: 200 and 3,612 bytes of JSON for one symbol, read by `daily_closes()` into 23 dated closes | Yes | 2026-08-09 |
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below | 2026-08-07 |
-| TSP — statement parser | Real statements, read as issued through `-o STATEMENT=` | Yes, against real files | not recorded |
+| TSP — statement parser | Real statements, read as issued through `-o STATEMENT=`. The run itself was never dated; the date below is bounded by the commits either side of it — the reader landed in `4f1b2b1` on 2026-08-06 and the claim was recorded settled in `123af7e` on 2026-08-07, so the earlier bound is taken | Yes, against real files | 2026-08-06 |
 | TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files | 2026-08-07 |
-| TSP — the mark, and the balance inversion | Checked against what the site itself reports | Yes | not recorded |
+| TSP — the mark, and the balance inversion | Checked against what the site itself reports: `0bc6668` carries a balance and date read off it, `--balance 7810.84 --balance-as-of 2026-08-05`. Bounded the same way as the row above — inversion landed 2026-08-06, recorded settled 2026-08-07 | Yes | 2026-08-06 |
 | TSP — share price download | A real request on 2026-08-07 written up in #48, and again unattended on 2026-08-10 (#116): 200 and 555,142 bytes, fetched by the run itself rather than by hand | Yes | 2026-08-10 |
 | TSP — DFAS pay table parse | All four published pages, parsed as served: the enlisted one on 2026-08-10 (#116) into all nine grades, and the officer, prior-service and warrant pages on 2026-08-11 (#118) into O-1..O-10, O-1E..O-3E and W-1..W-5. Every fixture in `tests/` is now a served page; the enlisted reconstruction read **zero** grades off the real one, and the prior-service reconstruction's rates were invented outright | Yes | 2026-08-11 |
 | TSP — DFAS pay table download | Real requests through `fetch_pay_table`: the enlisted page unattended on 2026-08-10 (#116), 200 and 116,257 bytes, and the other three on 2026-08-11 (#118), 200 each. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes | 2026-08-11 |
