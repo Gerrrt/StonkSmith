@@ -120,6 +120,50 @@ class FreshDatabaseTests(_DbTestCase):
 
         self.assertNotIn(LEGACY_ACCOUNTS_TABLE, self.table_names())
 
+    def test_shutdown_returns_the_connections_to_the_system(self) -> None:
+        """
+        shutdown_db() disposes the engine, not only the session.
+
+        Closing the session hands its connection back to the pool, which holds
+        it open. Every such connection then survived until the garbage collector
+        finalised the engine, and sqlite3 reported it from a context where no
+        test was running to fail -- so the suite stayed green while leaking one
+        connection per database opened.
+
+        Asserted on the pool rather than on the warning, because the warning is
+        raised during finalisation and cannot be attributed to anything by then.
+        """
+
+        db = self.open_db()
+        db.get_credentials()
+
+        # Closing the session alone -- what shutdown_db() used to do -- moves
+        # the connection from checked-out to idle-in-pool. Idle, not closed.
+        db.sess.close()
+        self.assertEqual(
+            db.db_engine.pool.checkedin(), 1, "the leak this test exists for"
+        )
+
+        db.shutdown_db()
+
+        # dispose() swaps in a fresh pool, so what the old one held is closed
+        # rather than merely idle.
+        self.assertEqual(db.db_engine.pool.checkedin(), 0)
+
+    def test_shutdown_twice_is_harmless(self) -> None:
+        """
+        main.py and portfolio.py dispose the engine themselves, and both still
+        do; the second call has to be a no-op rather than an error.
+        """
+
+        db = self.open_db()
+        db.shutdown_db()
+        db.shutdown_db()
+
+        # And the engine is still usable afterwards, which is what makes
+        # disposing from inside the database safe at all.
+        self.assertIsNotNone(db.get_credentials())
+
     def test_accounts_holds_identity_not_balances(self) -> None:
         db = self.open_db()
 

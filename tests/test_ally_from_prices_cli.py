@@ -31,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from home_isolation import isolated_home_env
@@ -134,7 +135,12 @@ class TheRefusalOnTheCommandLine(unittest.TestCase):
 
         self.assertTrue(db.is_file(), self.said)
 
-        with sqlite3.connect(database=db) as conn:
+        # closing(), because sqlite3's own context manager commits the
+        # transaction and leaves the connection open. Without it this is the
+        # last unclosed database in the suite, and it surfaces as a
+        # ResourceWarning against whichever test the collector happens to
+        # interrupt.
+        with closing(sqlite3.connect(database=db)) as conn:
             counts = {
                 table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                 for table in ("accounts", "account_snapshots", "holdings")

@@ -1325,10 +1325,25 @@ class BrokerDatabase:
 
     def shutdown_db(self) -> None:
         """
-        Close the session.
+        Close the session and return the engine's connections to the system.
+
+        Closing the session only hands its connection back to the pool, which
+        keeps it open. Every sqlite connection made through this database then
+        stayed open until the garbage collector finalised the engine, at which
+        point sqlite3 raised ResourceWarning from a context where nothing could
+        report it -- 163 per test run, and once per broker per invocation in
+        stonksmithdb's verify and initialise paths.
+
+        Safe to do here because no engine is shared: every create_db_engine()
+        call in this project hands its engine to exactly one database. Safe to
+        do twice because dispose() is idempotent and leaves the engine usable --
+        it swaps in a fresh pool, and a later query fills it -- so the explicit
+        dispose() calls in main.py and portfolio.py still read as the ownership
+        they always described.
         """
 
         self.sess.close()
+        self.db_engine.dispose()
 
 
 def _utc_now() -> str:
