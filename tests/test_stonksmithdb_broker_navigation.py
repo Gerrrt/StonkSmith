@@ -12,12 +12,12 @@ class StonkSmithDBNavigationTests(unittest.TestCase):
     callable (the previous bug: nav_class(self, db_instance(engine), broker)).
     """
 
-    @patch("etc.stonksmithdb.create_db_engine")
+    @patch("stonksmith.etc.stonksmithdb.create_db_engine")
     def test_do_broker_passes_db_instance_to_navigator(
         self,
         mock_create_engine: MagicMock,
     ) -> None:
-        from etc.stonksmithdb import StonkSmithDBMenu
+        from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
 
         mock_engine = MagicMock()
         mock_create_engine.return_value: MagicMock = mock_engine
@@ -60,7 +60,7 @@ class StonkSmithDBNavigationTests(unittest.TestCase):
         fake_db_file.__truediv__ = MagicMock(return_value=fake_db_file)
         fake_db_file.exists.return_value = True
 
-        with patch("etc.stonksmithdb.Path", return_value=fake_db_file):
+        with patch("stonksmith.etc.stonksmithdb.Path", return_value=fake_db_file):
             menu.do_broker(broker=broker_name)
 
         self.assertEqual(

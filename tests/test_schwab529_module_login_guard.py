@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from modules.schwab529plan_module import Schwab529Module
+from stonksmith.modules.schwab529plan_module import Schwab529Module
 
 
 class _StubResponse:
@@ -100,8 +100,8 @@ class Schwab529ModuleDbContractTests(unittest.TestCase):
         resp.text = '<div id="txHistDiv">transactions</div>'
         return resp
 
-    @patch("modules.schwab529plan_module.sync")
-    @patch("modules.schwab529plan_module.Parser")
+    @patch("stonksmith.modules.schwab529plan_module.sync")
+    @patch("stonksmith.modules.schwab529plan_module.Parser")
     def test_on_login_saves_balances_with_valid_db_contract(
         self, MockParser: MagicMock, mock_sync: MagicMock
     ) -> None:
@@ -125,8 +125,8 @@ class Schwab529ModuleDbContractTests(unittest.TestCase):
         self.assertEqual(account_name, "529 Balance")
         self.assertEqual(balance, "1000.00")
 
-    @patch("modules.schwab529plan_module.sync")
-    @patch("modules.schwab529plan_module.Parser")
+    @patch("stonksmith.modules.schwab529plan_module.sync")
+    @patch("stonksmith.modules.schwab529plan_module.Parser")
     def test_on_login_fails_cleanly_when_db_missing_save_account_data(
         self, MockParser: MagicMock, mock_sync: MagicMock
     ) -> None:

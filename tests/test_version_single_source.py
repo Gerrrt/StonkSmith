@@ -27,12 +27,11 @@ from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from unittest.mock import patch
 
-import etc.cli
-from etc.cli import CODENAME, UNKNOWN_VERSION, get_version
+import stonksmith.etc.cli as etc_cli
+from package_tree import PACKAGE, REPO
+from stonksmith.etc.cli import CODENAME, UNKNOWN_VERSION, get_version
 
-REPO = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO / "pyproject.toml"
-SRC = REPO / "src"
 
 
 def declared() -> str:
@@ -68,7 +67,7 @@ class SingleSourceTests(unittest.TestCase):
         # the metadata says what is installed and actually running, and it is the
         # running one a bug report needs. Patching the metadata is what tells
         # them apart, because pyproject.toml on disk does not move.
-        with patch.object(etc.cli, "installed_version", return_value="7.7.7"):
+        with patch.object(etc_cli, "installed_version", return_value="7.7.7"):
             self.assertEqual(get_version(), "7.7.7")
             self.assertNotEqual(get_version(), declared())
 
@@ -77,7 +76,7 @@ class SingleSourceTests(unittest.TestCase):
         # Every number this could fall back to would be a guess presented as a
         # fact, and a version is only worth printing if it is the one running.
         with patch.object(
-            etc.cli, "installed_version", side_effect=PackageNotFoundError("stonksmith")
+            etc_cli, "installed_version", side_effect=PackageNotFoundError("stonksmith")
         ):
             self.assertEqual(get_version(), UNKNOWN_VERSION)
 
@@ -139,8 +138,8 @@ class UserAgentTests(unittest.TestCase):
 
     #: The files, and the name each keeps its User-Agent under.
     AGENTS: tuple[tuple[Path, str], ...] = (
-        (SRC / "brokers" / "tsp" / "broker.py", "PRICE_USER_AGENT"),
-        (SRC / "modules" / "ally_module.py", "QUOTE_USER_AGENT"),
+        (PACKAGE / "brokers" / "tsp" / "broker.py", "PRICE_USER_AGENT"),
+        (PACKAGE / "modules" / "ally_module.py", "QUOTE_USER_AGENT"),
     )
 
     def test_the_user_agents_are_literals_rather_than_derived(self) -> None:
@@ -178,8 +177,8 @@ class UserAgentTests(unittest.TestCase):
         # The source check above is only worth having if the assignment it found
         # is the one in effect -- a second assignment further down would make it
         # read the wrong line and pass on a file it had misread.
-        from brokers.tsp.broker import PRICE_USER_AGENT
-        from modules.ally_module import QUOTE_USER_AGENT
+        from stonksmith.brokers.tsp.broker import PRICE_USER_AGENT
+        from stonksmith.modules.ally_module import QUOTE_USER_AGENT
 
         held: dict[str, str] = {
             "PRICE_USER_AGENT": PRICE_USER_AGENT,

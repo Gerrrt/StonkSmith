@@ -28,7 +28,7 @@ from unittest.mock import patch
 import keyring
 import pytest
 
-import etc.config
+import stonksmith.etc.config as etc_config
 
 # Only the helper below needs this. keyring and pytest are installed, and
 # etc.config is already importable via [tool.pytest.ini_options] pythonpath, so
@@ -78,18 +78,18 @@ def user_config() -> Iterator[Callable[[str], Path]]:
     with tempfile.TemporaryDirectory() as home:
         path = Path(home) / "stonksmith.conf"
 
-        with patch.object(etc.config, "user_cfg_path", path):
+        with patch.object(etc_config, "user_cfg_path", path):
             # The merged config lives in a process global. Patching the path
             # without dropping the cache reads whatever an earlier test loaded,
             # and leaks this body to whatever runs next.
-            etc.config.reset_config_cache()
+            etc_config.reset_config_cache()
 
             def write(body: str = "") -> Path:
                 if body:
                     path.write_text(data=body)
-                etc.config.reset_config_cache()
+                etc_config.reset_config_cache()
                 return path
 
             yield write
 
-            etc.config.reset_config_cache()
+            etc_config.reset_config_cache()

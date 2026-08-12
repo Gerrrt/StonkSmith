@@ -25,7 +25,7 @@ number invented on top.
 
 import unittest
 
-from etc.portfolio import (
+from stonksmith.etc.portfolio import (
     CARRIED,
     CARRY_DAYS,
     OBSERVED,

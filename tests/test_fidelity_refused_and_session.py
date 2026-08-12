@@ -18,9 +18,8 @@ from unittest.mock import MagicMock, patch
 
 from playwright.sync_api import Error as PlaywrightError
 
-import etc.browser_connection as browser_mod
-
-SRC = Path(__file__).resolve().parents[1] / "src"
+import stonksmith.etc.browser_connection as browser_mod
+from package_tree import PACKAGE
 
 REFUSED_PAGE = """
 <html><head><title>Log in to Fidelity</title></head><body>
@@ -46,7 +45,7 @@ TWO_FACTOR_PAGE = """
 
 def _load_fidelity():
     spec = importlib.util.spec_from_file_location(
-        "fidelity_broker_refused", SRC / "brokers/fidelity/broker.py"
+        "fidelity_broker_refused", PACKAGE / "brokers/fidelity/broker.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

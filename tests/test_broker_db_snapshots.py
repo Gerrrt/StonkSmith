@@ -25,10 +25,10 @@ from unittest.mock import patch
 
 from sqlalchemy import text
 
-from etc.broker_db import BrokerDatabase, natural_keys
-from etc.infrastructure import create_db_engine
-from etc.records import AccountIdentity, Holding, Transaction
 from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.broker_db import BrokerDatabase, natural_keys
+from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.records import AccountIdentity, Holding, Transaction
 
 BENEFICIARY_A = AccountIdentity(
     account_key="Beneficiary A",

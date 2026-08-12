@@ -27,9 +27,9 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
-from etc.cli import gen_cli_args
-from etc.infrastructure import set_logging_level
-from loaders.brokerloader import BrokerLoader
+from stonksmith.etc.cli import gen_cli_args
+from stonksmith.etc.infrastructure import set_logging_level
+from stonksmith.loaders.brokerloader import BrokerLoader
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -50,7 +50,7 @@ class _RepoOnlyLoader(BrokerLoader):
 def _parse(*argv: str) -> Namespace:
     with (
         patch.object(sys, "argv", ["stonksmith", *argv]),
-        patch("etc.cli.BrokerLoader", _RepoOnlyLoader),
+        patch("stonksmith.etc.cli.BrokerLoader", _RepoOnlyLoader),
     ):
         return gen_cli_args()
 

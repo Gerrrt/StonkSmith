@@ -27,8 +27,8 @@ import datetime as dt
 import json
 import unittest
 
-from etc.records import Holding
-from helpers.quotes import (
+from stonksmith.etc.records import Holding
+from stonksmith.helpers.quotes import (
     QuotesUnavailable,
     close_on,
     daily_closes,

@@ -9,9 +9,9 @@ import unittest
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
-from etc.broker_nav import BrokerNavigator
-from etc.exceptions import SwitchBroker, UserExitedProto
-from etc.stonksmithdb import StonkSmithDBMenu
+from stonksmith.etc.broker_nav import BrokerNavigator
+from stonksmith.etc.exceptions import SwitchBroker, UserExitedProto
+from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
 
 
 class SubShellRequestsASwitchTests(unittest.TestCase):

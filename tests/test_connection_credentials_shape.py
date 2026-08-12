@@ -2,8 +2,8 @@ import unittest
 from argparse import Namespace
 from typing import cast
 
-from etc.connection import Connection
-from etc.logger import StonkSmithAdapter
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.logger import StonkSmithAdapter
 
 
 class _StubLogger:

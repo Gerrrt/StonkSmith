@@ -25,9 +25,8 @@ from unittest.mock import MagicMock
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-import etc.browser_connection as browser_mod
-
-SRC = Path(__file__).resolve().parents[1] / "src"
+import stonksmith.etc.browser_connection as browser_mod
+from package_tree import PACKAGE
 
 BANK_URL = "https://secure.ally.com/dashboard"
 INVEST_URL = "https://live.invest.ally.com/accounts/holdings-balances/abc123/overview"
@@ -48,7 +47,7 @@ LOGIN_BODY = (
 
 def _load_ally():
     spec = importlib.util.spec_from_file_location(
-        "ally_broker", SRC / "brokers/ally/broker.py"
+        "ally_broker", PACKAGE / "brokers/ally/broker.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

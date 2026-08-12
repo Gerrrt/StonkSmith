@@ -17,11 +17,13 @@ from home_isolation import isolated_home_env
 REPO = Path(__file__).resolve().parents[1]
 
 IMPORT_EVERYTHING = (
-    "import etc.paths, etc.config, etc.connection, etc.stonksmithdb, "
+    "import stonksmith.etc.paths, stonksmith.etc.config, "
+    "stonksmith.etc.connection, stonksmith.etc.stonksmithdb, "
     # Imported by all five modules on every run, and it pulls gspread and
     # google-auth in behind it. Neither may reach for a token at import.
-    "etc.portfolio, etc.portfolio_sheet, "
-    "loaders.moduleloader, loaders.brokerloader, main; print('ok')"
+    "stonksmith.etc.portfolio, stonksmith.etc.portfolio_sheet, "
+    "stonksmith.loaders.moduleloader, stonksmith.loaders.brokerloader, "
+    "stonksmith.main; print('ok')"
 )
 
 
@@ -52,7 +54,7 @@ class ImportSideEffectTests(unittest.TestCase):
         # get_config() falls back to the packaged defaults when the user file is
         # absent; it must not be the thing that writes it.
         code = (
-            "from etc.config import get_workspace, get_audit_mode; "
+            "from stonksmith.etc.config import get_workspace, get_audit_mode; "
             "print(get_workspace(), get_audit_mode())"
         )
 
@@ -70,7 +72,7 @@ class ImportSideEffectTests(unittest.TestCase):
         # get_config() backfills missing options in memory, but only writes (and
         # only reports) when the file already exists. Logging on a fresh install
         # claimed a write that never happened.
-        code = "from etc.config import get_workspace; print(get_workspace())"
+        code = "from stonksmith.etc.config import get_workspace; print(get_workspace())"
 
         with tempfile.TemporaryDirectory() as home:
             result = self._run(code, home)
@@ -79,7 +81,7 @@ class ImportSideEffectTests(unittest.TestCase):
             self.assertNotIn("Adding missing option", result.stdout + result.stderr)
 
     def test_existing_config_is_backfilled_and_reported(self) -> None:
-        code = "from etc.config import get_workspace; print(get_workspace())"
+        code = "from stonksmith.etc.config import get_workspace; print(get_workspace())"
 
         with tempfile.TemporaryDirectory() as home:
             config_dir = Path(home) / ".stonksmith"
@@ -96,8 +98,8 @@ class ImportSideEffectTests(unittest.TestCase):
 
     def test_setup_tool_still_provisions_everything(self) -> None:
         code = (
-            "from etc.logger import stonksmith_logger; "
-            "from etc.tool_setup import setup_tool; "
+            "from stonksmith.etc.logger import stonksmith_logger; "
+            "from stonksmith.etc.tool_setup import setup_tool; "
             "setup_tool(logger=stonksmith_logger); print('ok')"
         )
 

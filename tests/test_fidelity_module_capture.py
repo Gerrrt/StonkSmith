@@ -9,7 +9,7 @@ not something selectors can be fixed from.
 import unittest
 from unittest.mock import MagicMock
 
-from modules.fidelity_module import FidelityModule, capture_summary
+from stonksmith.modules.fidelity_module import FidelityModule, capture_summary
 
 
 class CaptureSummaryTests(unittest.TestCase):

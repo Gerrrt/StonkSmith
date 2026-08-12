@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import gspread.exceptions
 
-from etc.portfolio_sheet import (
+from stonksmith.etc.portfolio_sheet import (
     ACCOUNTS_TAB,
     BANNER,
     BANNER_CELL,
@@ -25,7 +25,7 @@ from etc.portfolio_sheet import (
     check_ownership_guard,
     claim,
 )
-from helpers.sheets import SheetNotOwned, SheetsUnavailable
+from stonksmith.helpers.sheets import SheetNotOwned, SheetsUnavailable
 
 #: The five tabs the savers used to own. Never opened again, and named here so
 #: that a tab quietly reappearing in MACHINE_OWNED_TABS fails rather than syncs.
@@ -189,7 +189,9 @@ class OwnershipCheckTests(unittest.TestCase):
         book = FakeBook()
 
         with (
-            patch("etc.portfolio_sheet.claim", side_effect=RuntimeError("boom")),
+            patch(
+                "stonksmith.etc.portfolio_sheet.claim", side_effect=RuntimeError("boom")
+            ),
             self.assertRaises(RuntimeError),
         ):
             check_ownership_guard(book=book)
@@ -202,7 +204,7 @@ class OwnershipCheckTests(unittest.TestCase):
         # somebody's work: claim() waving through a tab it should have refused.
         book = FakeBook()
 
-        with patch("etc.portfolio_sheet.claim", return_value=None):
+        with patch("stonksmith.etc.portfolio_sheet.claim", return_value=None):
             cases = check_ownership_guard(book=book)
 
         refusals = [case for case in cases if case.expected == "refused"]

@@ -19,7 +19,7 @@ import datetime as dt
 import unittest
 from pathlib import Path
 
-from helpers.tsp import (
+from stonksmith.helpers.tsp import (
     CLOSING_BALANCE_LABEL,
     CLOSING_UNITS_LABEL,
     CONTRIBUTIONS_LABEL,

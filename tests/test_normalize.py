@@ -20,7 +20,7 @@ import datetime
 import unittest
 from decimal import Decimal
 
-from helpers.normalize import (
+from stonksmith.helpers.normalize import (
     format_amount,
     format_units,
     to_amount,

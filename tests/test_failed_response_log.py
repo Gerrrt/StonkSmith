@@ -29,7 +29,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import etc.browser_connection as browser_mod
+import stonksmith.etc.browser_connection as browser_mod
 
 
 class FakeRequest:

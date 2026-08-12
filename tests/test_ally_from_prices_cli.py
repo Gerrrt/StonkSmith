@@ -56,7 +56,7 @@ SECONDS_BEFORE_SOMETHING_IS_WRONG = 120
 INVOKE = (
     "import sys; "
     "sys.argv = ['stonksmith', 'ally', '-M', 'ally', '--from-prices']; "
-    "from main import cli_entry; sys.exit(cli_entry())"
+    "from stonksmith.main import cli_entry; sys.exit(cli_entry())"
 )
 
 

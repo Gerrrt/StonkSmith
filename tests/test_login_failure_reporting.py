@@ -11,7 +11,7 @@ import unittest
 from argparse import Namespace
 from unittest.mock import MagicMock
 
-from etc.connection import Connection
+from stonksmith.etc.connection import Connection
 
 
 class _CaptureHandler(logging.Handler):

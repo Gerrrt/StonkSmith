@@ -12,16 +12,14 @@ and no record carries it.
 
 import importlib.util
 import unittest
-from pathlib import Path
 from typing import Any
 
-from helpers.schwab529plan import holding_from_row, transaction_from_row
-
-SRC = Path(__file__).resolve().parents[1] / "src"
+from package_tree import PACKAGE
+from stonksmith.helpers.schwab529plan import holding_from_row, transaction_from_row
 
 
 def _load(name: str, relative: str):
-    spec = importlib.util.spec_from_file_location(name, SRC / relative)
+    spec = importlib.util.spec_from_file_location(name, PACKAGE / relative)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -14,10 +14,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from loaders.brokerloader import BrokerLoader
-
-REPO = Path(__file__).resolve().parents[1]
-SRC = REPO / "src"
+from package_tree import BROKERS, PACKAGE, REPO, SRC
+from stonksmith.loaders.brokerloader import BrokerLoader
 
 EXPECTED_KEYS = {"path", "dbpath", "nvpath", "argspath"}
 SHIPPED = ("ally", "fidelity", "schwab529plan", "snaptrade", "tsp")
@@ -91,7 +89,26 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
     def test_no_flat_module_shadows_a_broker_package(self) -> None:
         # The bug this layout closed: brokers/fidelity.py beside brokers/fidelity/
         # made `import brokers.fidelity` and BrokerLoader resolve different objects.
-        strays = sorted(p.name for p in (SRC / "brokers").glob("[!_]*.py"))
+        #
+        # Check the directory holds what it should before asserting a glob over it
+        # is empty. glob() on a directory that does not exist yields nothing, so
+        # the assertion below passes on a path that has gone stale -- which is
+        # precisely what happened to this test when the package moved under
+        # src/stonksmith/ and BROKERS was still spelled src/brokers.
+        packages = sorted(
+            p.name
+            for p in BROKERS.iterdir()
+            if p.is_dir() and not p.name.startswith((".", "_"))
+        )
+
+        self.assertEqual(
+            packages,
+            sorted(SHIPPED),
+            f"{BROKERS} is not the broker directory this test thinks it is, so "
+            "the emptiness assertion below would pass without testing anything.",
+        )
+
+        strays = sorted(p.name for p in BROKERS.glob("[!_]*.py"))
 
         self.assertEqual(
             strays,
@@ -103,11 +120,11 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
     def test_the_package_export_matches_the_path_loaded_class(self) -> None:
         # Not assertIs: load_broker never registers in sys.modules, so the
         # path-loaded class is a distinct object from the imported one.
-        from brokers.ally import Ally
-        from brokers.fidelity import Fidelity
-        from brokers.schwab529plan import Schwab529plan
-        from brokers.snaptrade import SnapTradeBroker
-        from brokers.tsp import Tsp
+        from stonksmith.brokers.ally import Ally
+        from stonksmith.brokers.fidelity import Fidelity
+        from stonksmith.brokers.schwab529plan import Schwab529plan
+        from stonksmith.brokers.snaptrade import SnapTradeBroker
+        from stonksmith.brokers.tsp import Tsp
 
         brokers = _fresh_loader().get_brokers()
 
@@ -125,10 +142,10 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
                 self.assertEqual(module.Broker.__qualname__, exported.__qualname__)
 
     def test_an_unknown_package_attribute_still_raises(self) -> None:
-        import brokers.fidelity
+        import stonksmith.brokers.fidelity
 
         with self.assertRaises(AttributeError):
-            _ = brokers.fidelity.NoSuchThing
+            _ = stonksmith.brokers.fidelity.NoSuchThing
 
 
 class DiscoveryRulesTests(unittest.TestCase):
@@ -180,7 +197,7 @@ class DiscoveryRulesTests(unittest.TestCase):
 
             path = _fresh_loader(Path(tmp)).get_brokers()["fidelity"]["path"]
 
-            self.assertTrue(Path(path).is_relative_to(SRC))
+            self.assertTrue(Path(path).is_relative_to(PACKAGE))
 
     def test_a_missing_search_root_is_not_fatal(self) -> None:
         brokers = _fresh_loader(REPO / "definitely-absent").get_brokers()
@@ -223,13 +240,17 @@ class LazyExportTests(unittest.TestCase):
     def test_the_sheet_writer_does_not_drag_in_playwright(self) -> None:
         self.assertIn(
             "False",
-            self._import_in_subprocess("etc.portfolio_sheet", "playwright_stealth"),
+            self._import_in_subprocess(
+                "stonksmith.etc.portfolio_sheet", "playwright_stealth"
+            ),
         )
 
     def test_the_sheet_writer_does_not_drag_in_the_snaptrade_sdk(self) -> None:
         self.assertIn(
             "False",
-            self._import_in_subprocess("etc.portfolio_sheet", "snaptrade_client"),
+            self._import_in_subprocess(
+                "stonksmith.etc.portfolio_sheet", "snaptrade_client"
+            ),
         )
 
     def test_the_sheet_writer_does_not_open_a_broker_package(self) -> None:
@@ -238,7 +259,9 @@ class LazyExportTests(unittest.TestCase):
         # read does not import five broker packages and their optional deps.
         self.assertIn(
             "False",
-            self._import_in_subprocess("etc.portfolio_sheet", "brokers.fidelity"),
+            self._import_in_subprocess(
+                "stonksmith.etc.portfolio_sheet", "stonksmith.brokers.fidelity"
+            ),
         )
 
 

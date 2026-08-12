@@ -10,9 +10,9 @@ import unittest
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
-from etc.broker_nav import BrokerNavigator
-from etc.logger import stonksmith_logger
-from etc.stonksmithdb import StonkSmithDBMenu
+from stonksmith.etc.broker_nav import BrokerNavigator
+from stonksmith.etc.logger import stonksmith_logger
+from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
 
 
 class _CaptureHandler(logging.Handler):

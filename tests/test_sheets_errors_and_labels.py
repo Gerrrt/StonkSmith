@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 import gspread.exceptions
 from google.auth.exceptions import RefreshError
 
-from helpers.schwab529plan import account_label, strip_label
-from helpers.sheets import SheetsUnavailable, open_worksheet
+from stonksmith.helpers.schwab529plan import account_label, strip_label
+from stonksmith.helpers.sheets import SheetsUnavailable, open_worksheet
 
 
 class OpenWorksheetErrorTests(unittest.TestCase):
@@ -24,7 +24,7 @@ class OpenWorksheetErrorTests(unittest.TestCase):
         )
 
         with (
-            patch("helpers.sheets.gspread.oauth", side_effect=failure),
+            patch("stonksmith.helpers.sheets.gspread.oauth", side_effect=failure),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_worksheet(worksheet_name="529 Plan")
@@ -43,7 +43,7 @@ class OpenWorksheetErrorTests(unittest.TestCase):
         )
 
         with (
-            patch("helpers.sheets.gspread.oauth", side_effect=failure),
+            patch("stonksmith.helpers.sheets.gspread.oauth", side_effect=failure),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_worksheet(worksheet_name="529 Plan")
@@ -70,7 +70,7 @@ class OpenWorksheetErrorTests(unittest.TestCase):
         )
 
         with (
-            patch("helpers.sheets.gspread.oauth", return_value=client),
+            patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_worksheet(worksheet_name="529 Plan")
@@ -84,7 +84,7 @@ class OpenWorksheetErrorTests(unittest.TestCase):
         failure = RefreshError("Failed to retrieve token", {})
 
         with (
-            patch("helpers.sheets.gspread.oauth", side_effect=failure),
+            patch("stonksmith.helpers.sheets.gspread.oauth", side_effect=failure),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_worksheet(worksheet_name="529 Plan")
@@ -104,7 +104,7 @@ class OpenWorksheetErrorTests(unittest.TestCase):
         client.open.side_effect = gspread.exceptions.SpreadsheetNotFound("nope")
 
         with (
-            patch("helpers.sheets.gspread.oauth", return_value=client),
+            patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_worksheet(worksheet_name="529 Plan", spreadsheet="Missing Book")
@@ -118,7 +118,7 @@ class OpenWorksheetErrorTests(unittest.TestCase):
         )
 
         with (
-            patch("helpers.sheets.gspread.oauth", return_value=client),
+            patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_worksheet(worksheet_name="529 Plan")
@@ -129,7 +129,7 @@ class OpenWorksheetErrorTests(unittest.TestCase):
         client = MagicMock()
         sentinel = client.open.return_value.worksheet.return_value
 
-        with patch("helpers.sheets.gspread.oauth", return_value=client):
+        with patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client):
             self.assertIs(open_worksheet(worksheet_name="529 Plan"), sentinel)
 
 
@@ -186,12 +186,12 @@ class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
     # the decision not to fail the run both live inside sync() now, so patching
     # sync() would remove the behaviour this is here to check. Faulting the read
     # underneath it exercises the real path all five modules share.
-    @patch("etc.portfolio_sheet.refresh")
-    @patch("modules.schwab529plan_module.Parser")
+    @patch("stonksmith.etc.portfolio_sheet.refresh")
+    @patch("stonksmith.modules.schwab529plan_module.Parser")
     def test_sheets_failure_does_not_abort_the_run(
         self, mock_parser: MagicMock, mock_refresh: MagicMock
     ) -> None:
-        from modules.schwab529plan_module import Schwab529Module
+        from stonksmith.modules.schwab529plan_module import Schwab529Module
 
         parsed = mock_parser.return_value
         parsed.beneficiary_data.return_value = []
@@ -252,9 +252,9 @@ class NoSheetSkipsTheRefreshTests(unittest.TestCase):
     one that mattered -- is the one Google refuses.
     """
 
-    @patch("etc.portfolio_sheet.refresh")
+    @patch("stonksmith.etc.portfolio_sheet.refresh")
     def test_the_flag_skips_the_refresh_entirely(self, mock_refresh: MagicMock) -> None:
-        from etc.portfolio_sheet import sync
+        from stonksmith.etc.portfolio_sheet import sync
 
         context = MagicMock()
         context.args.no_sheet = True
@@ -268,11 +268,11 @@ class NoSheetSkipsTheRefreshTests(unittest.TestCase):
             "turn that into 'saved locally; the dashboard was not updated'",
         )
 
-    @patch("etc.portfolio_sheet.refresh")
+    @patch("stonksmith.etc.portfolio_sheet.refresh")
     def test_without_the_flag_the_refresh_still_happens(
         self, mock_refresh: MagicMock
     ) -> None:
-        from etc.portfolio_sheet import sync
+        from stonksmith.etc.portfolio_sheet import sync
 
         context = MagicMock()
         context.args.no_sheet = False

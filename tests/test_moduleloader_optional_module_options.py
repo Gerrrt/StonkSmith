@@ -1,17 +1,15 @@
 import unittest
 from argparse import Namespace
-from pathlib import Path
 from typing import ClassVar
 
-from etc.logger import stonksmith_logger
-from loaders.moduleloader import ModuleLoader
-from modules.schwab529plan_module import Schwab529Module
+from package_tree import PACKAGE
+from stonksmith.etc.logger import stonksmith_logger
+from stonksmith.loaders.moduleloader import ModuleLoader
+from stonksmith.modules.schwab529plan_module import Schwab529Module
 
 # Anchored to the repo, not the cwd: the old relative path only resolved
 # when pytest happened to run from the repository root.
-MODULE_PATH = (
-    Path(__file__).resolve().parents[1] / "src/modules/schwab529plan_module.py"
-)
+MODULE_PATH = PACKAGE / "modules/schwab529plan_module.py"
 
 
 class _StubDB:

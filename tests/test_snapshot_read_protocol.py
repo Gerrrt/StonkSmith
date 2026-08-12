@@ -21,8 +21,8 @@ every one of them fail an isinstance check they currently pass.
 import unittest
 from typing import Any
 
-from etc.broker_db import BrokerDatabase
-from etc.context import (
+from stonksmith.etc.broker_db import BrokerDatabase
+from stonksmith.etc.context import (
     BrokerDbProtocol,
     SnapshotDbProtocol,
     SnapshotReadDbProtocol,

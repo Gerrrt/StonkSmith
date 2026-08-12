@@ -16,7 +16,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from etc.stonksmithdb import StonkSmithDBMenu, main
+from stonksmith.etc.stonksmithdb import StonkSmithDBMenu, main
 
 
 def run_main(args: list[str], failed: bool) -> tuple[int, str]:
@@ -33,11 +33,13 @@ def run_main(args: list[str], failed: bool) -> tuple[int, str]:
     out = io.StringIO()
 
     with (
-        patch("etc.tool_setup.setup_tool"),
-        patch("etc.stonksmithdb.argv", ["stonksmithdb", *args]),
-        patch("etc.stonksmithdb.config_path", "stonksmith.conf"),
+        patch("stonksmith.etc.tool_setup.setup_tool"),
+        patch("stonksmith.etc.stonksmithdb.argv", ["stonksmithdb", *args]),
+        patch("stonksmith.etc.stonksmithdb.config_path", "stonksmith.conf"),
         patch.object(Path, "exists", return_value=True),
-        patch("etc.stonksmithdb.StonkSmithDBMenu", return_value=shell) as menu,
+        patch(
+            "stonksmith.etc.stonksmithdb.StonkSmithDBMenu", return_value=shell
+        ) as menu,
         redirect_stdout(out),
     ):
         try:

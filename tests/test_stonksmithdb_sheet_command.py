@@ -12,9 +12,9 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-from etc.portfolio_sheet import GUARD_CHECK_TAB, GuardCase, SheetSync
-from etc.stonksmithdb import StonkSmithDBMenu
-from helpers.sheets import SheetNotOwned, SheetsUnavailable
+from stonksmith.etc.portfolio_sheet import GUARD_CHECK_TAB, GuardCase, SheetSync
+from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
+from stonksmith.helpers.sheets import SheetNotOwned, SheetsUnavailable
 
 
 def shell() -> StonkSmithDBMenu:
@@ -51,7 +51,7 @@ class SheetCommandTests(unittest.TestCase):
     def test_it_refreshes_the_workspace_the_shell_is_in(self) -> None:
         # Not the configured one. Someone who typed `workspace other` expects
         # `sheet` to render what they are looking at.
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.return_value = SheetSync(brokers_read=("tsp",))
             menu = shell()
             menu.workspace = "other"
@@ -60,7 +60,7 @@ class SheetCommandTests(unittest.TestCase):
         refresh.assert_called_once_with(workspace="other")
 
     def test_it_says_what_it_wrote(self) -> None:
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.return_value = SheetSync(
                 accounts=4,
                 holdings=17,
@@ -78,7 +78,7 @@ class SheetCommandTests(unittest.TestCase):
         self.assertIn("ally, tsp", printed)
 
     def test_a_refused_tab_is_reported_rather_than_raised(self) -> None:
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.side_effect = SheetNotOwned("Tab 'Holdings' holds something")
             printed = run(menu=shell())
 
@@ -87,7 +87,7 @@ class SheetCommandTests(unittest.TestCase):
     def test_an_unexpected_failure_still_names_itself(self) -> None:
         # A bare traceback out of a shell command is the thing helpers/sheets.py
         # was written to stop happening.
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.side_effect = RuntimeError("boom")
             printed = run(menu=shell())
 
@@ -95,7 +95,7 @@ class SheetCommandTests(unittest.TestCase):
         self.assertIn("boom", printed)
 
     def test_a_broker_that_would_not_read_is_named(self) -> None:
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.return_value = SheetSync(
                 accounts=1,
                 brokers_read=("tsp",),
@@ -107,7 +107,7 @@ class SheetCommandTests(unittest.TestCase):
         self.assertIn("no such file", printed)
 
     def test_an_empty_workspace_says_no_brokers_rather_than_nothing(self) -> None:
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.return_value = SheetSync()
             printed = run(menu=shell())
 
@@ -119,7 +119,7 @@ class SheetCommandTests(unittest.TestCase):
     def test_a_refresh_that_worked_reports_no_failure(self) -> None:
         menu = shell()
 
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.return_value = SheetSync(accounts=4, brokers_read=("tsp",))
             run(menu=menu)
 
@@ -130,7 +130,7 @@ class SheetCommandTests(unittest.TestCase):
         # for cron, which reads one number and nothing else.
         menu = shell()
 
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.side_effect = SheetNotOwned("Tab 'Holdings' holds something")
             run(menu=menu)
 
@@ -139,7 +139,7 @@ class SheetCommandTests(unittest.TestCase):
     def test_an_unexpected_failure_is_one_too(self) -> None:
         menu = shell()
 
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.side_effect = RuntimeError("boom")
             run(menu=menu)
 
@@ -151,7 +151,7 @@ class SheetCommandTests(unittest.TestCase):
         # one outcome a schedule must not treat as a good night.
         menu = shell()
 
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.return_value = SheetSync(
                 accounts=1,
                 brokers_read=("tsp",),
@@ -167,7 +167,7 @@ class SheetCommandTests(unittest.TestCase):
         # It lives inside do_sheet because this shell is mostly used for things
         # that never touch Sheets, and importing it drags gspread and
         # google-auth along.
-        import etc.stonksmithdb as shell_module
+        import stonksmith.etc.stonksmithdb as shell_module
 
         self.assertFalse(hasattr(shell_module, "refresh"))
 
@@ -213,7 +213,7 @@ class VerifyCommandTests(unittest.TestCase):
     def test_it_says_what_it_is_about_to_do_before_touching_anything(self) -> None:
         # It creates and deletes a tab in the real spreadsheet, which is not
         # something a reader should have to infer from the name of the command.
-        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as check:
             check.return_value = self._cases(True, True, True)
             printed = self._run()
 
@@ -223,7 +223,7 @@ class VerifyCommandTests(unittest.TestCase):
     def test_a_clean_run_still_says_what_it_did_not_cover(self) -> None:
         # A clean report that implied otherwise would retire a step nobody has
         # done. The guard half's gap is the whole-sync abort.
-        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as check:
             check.return_value = self._cases(True, True, True)
             printed = self._run()
 
@@ -237,8 +237,8 @@ class VerifyCommandTests(unittest.TestCase):
         # asked for, and a caveat that does not apply teaches a reader to skim the
         # ones that do.
         with (
-            patch("etc.portfolio_sheet.check_ownership_guard") as guard,
-            patch("etc.portfolio_sheet.check_tabs") as tabs,
+            patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as guard,
+            patch("stonksmith.etc.portfolio_sheet.check_tabs") as tabs,
         ):
             guard.return_value = self._cases(True)
             tabs.return_value = self._cases(True)
@@ -259,8 +259,8 @@ class VerifyCommandTests(unittest.TestCase):
 
     def test_each_half_can_be_run_on_its_own(self) -> None:
         with (
-            patch("etc.portfolio_sheet.check_ownership_guard") as guard,
-            patch("etc.portfolio_sheet.check_tabs") as tabs,
+            patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as guard,
+            patch("stonksmith.etc.portfolio_sheet.check_tabs") as tabs,
         ):
             guard.return_value = self._cases(True)
             tabs.return_value = self._cases(True)
@@ -279,8 +279,8 @@ class VerifyCommandTests(unittest.TestCase):
         # reading them back is the part that says whether the last sync
         # landed. A reader wants that before a scratch tab appears.
         with (
-            patch("etc.portfolio_sheet.check_ownership_guard") as guard,
-            patch("etc.portfolio_sheet.check_tabs") as tabs,
+            patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as guard,
+            patch("stonksmith.etc.portfolio_sheet.check_tabs") as tabs,
         ):
             guard.return_value = self._cases(True)
             tabs.return_value = self._cases(True)
@@ -293,7 +293,7 @@ class VerifyCommandTests(unittest.TestCase):
         )
 
     def test_the_tab_half_reads_the_workspace_the_shell_is_in(self) -> None:
-        with patch("etc.portfolio_sheet.check_tabs") as tabs:
+        with patch("stonksmith.etc.portfolio_sheet.check_tabs") as tabs:
             tabs.return_value = self._cases(True)
             menu = shell()
             menu.workspace = "other"
@@ -306,7 +306,7 @@ class VerifyCommandTests(unittest.TestCase):
     def test_an_unknown_argument_is_refused_rather_than_ignored(self) -> None:
         # Silently running both would be worse than saying no: someone who typed
         # "verify tab" wants to know they did.
-        with patch("etc.portfolio_sheet.check_ownership_guard") as guard:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as guard:
             printed = self._run(line="tab")
 
         guard.assert_not_called()
@@ -316,7 +316,7 @@ class VerifyCommandTests(unittest.TestCase):
         # A refusal that behaved carries the refusal message as its detail.
         # Printing that under a [+] is several lines saying the expected thing
         # happened, which buries the one line that would not have.
-        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as check:
             check.return_value = (
                 GuardCase(
                     name="refused it",
@@ -331,7 +331,7 @@ class VerifyCommandTests(unittest.TestCase):
         self.assertNotIn("did not write", printed)
 
     def test_a_guard_that_did_not_behave_is_loud_and_says_what_to_do(self) -> None:
-        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as check:
             check.return_value = self._cases(True, False, True)
             printed = self._run()
 
@@ -342,14 +342,14 @@ class VerifyCommandTests(unittest.TestCase):
         self.assertNotIn("behaved on all", printed)
 
     def test_a_taken_tab_is_reported_rather_than_raised(self) -> None:
-        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as check:
             check.side_effect = SheetsUnavailable("already has a tab named")
             printed = self._run()
 
         self.assertIn("already has a tab named", printed)
 
     def test_an_unexpected_failure_still_names_itself(self) -> None:
-        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as check:
             check.side_effect = RuntimeError("boom")
             printed = self._run()
 
@@ -362,7 +362,7 @@ class VerifyCommandTests(unittest.TestCase):
     def test_a_check_that_behaved_reports_no_failure(self) -> None:
         menu = shell()
 
-        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as check:
             check.return_value = self._cases(True, True, True)
             self._run_on(menu)
 
@@ -374,7 +374,7 @@ class VerifyCommandTests(unittest.TestCase):
         # the one reading that must never be available.
         menu = shell()
 
-        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as check:
             check.return_value = self._cases(True, False, True)
             self._run_on(menu)
 
@@ -385,7 +385,7 @@ class VerifyCommandTests(unittest.TestCase):
         # known" must not exit the same way as "checked and clean".
         menu = shell()
 
-        with patch("etc.portfolio_sheet.check_ownership_guard") as check:
+        with patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as check:
             check.side_effect = SheetsUnavailable("no credential")
             self._run_on(menu)
 
@@ -401,7 +401,7 @@ class VerifyCommandTests(unittest.TestCase):
     def test_the_check_is_imported_inside_the_command_not_at_module_scope(
         self,
     ) -> None:
-        import etc.stonksmithdb as shell_module
+        import stonksmith.etc.stonksmithdb as shell_module
 
         self.assertFalse(hasattr(shell_module, "check_ownership_guard"))
 

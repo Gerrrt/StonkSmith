@@ -17,8 +17,8 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from helpers.tsp import fund_prices
-from modules.tsp_module import (
+from stonksmith.helpers.tsp import fund_prices
+from stonksmith.modules.tsp_module import (
     FROM_BALANCE,
     FROM_CONFIG,
     FROM_FLAG,
@@ -243,7 +243,9 @@ class BalanceFlagTests(unittest.TestCase):
     def test_an_unreadable_balance_date_says_what_was_expected(self) -> None:
         context = _context(balance=7810.84, balance_as_of="August")
 
-        with patch("modules.tsp_module.get_tsp_units", return_value=(None, "")):
+        with patch(
+            "stonksmith.modules.tsp_module.get_tsp_units", return_value=(None, "")
+        ):
             self._solve(context=context)
 
         self.assertIn("YYYY-MM-DD", _said(context.log.fail))
@@ -254,7 +256,9 @@ class BalanceFlagTests(unittest.TestCase):
         # current balance by an old price invents a unit count.
         context = _context(balance=7810.84, balance_as_of="2026-08-30")
 
-        with patch("modules.tsp_module.get_tsp_units", return_value=(None, "")):
+        with patch(
+            "stonksmith.modules.tsp_module.get_tsp_units", return_value=(None, "")
+        ):
             units, _as_of, _source = self._solve(context=context)
 
         self.assertIsNone(units)
@@ -314,7 +318,8 @@ class UnitSourceTests(unittest.TestCase):
 
     def test_the_flag_beats_config(self) -> None:
         with patch(
-            "modules.tsp_module.get_tsp_units", return_value=(50.0, "2020-01-01")
+            "stonksmith.modules.tsp_module.get_tsp_units",
+            return_value=(50.0, "2020-01-01"),
         ):
             self.assertEqual(
                 TspModule().units_for(
@@ -325,7 +330,8 @@ class UnitSourceTests(unittest.TestCase):
 
     def test_config_is_the_fallback(self) -> None:
         with patch(
-            "modules.tsp_module.get_tsp_units", return_value=(100.0, "2026-06-30")
+            "stonksmith.modules.tsp_module.get_tsp_units",
+            return_value=(100.0, "2026-06-30"),
         ):
             self.assertEqual(
                 TspModule().units_for(context=_context()),
@@ -341,7 +347,8 @@ class UnitSourceTests(unittest.TestCase):
         context = _context()
 
         with patch(
-            "modules.tsp_module.read_statement", return_value=(100.0, "L 2060", None)
+            "stonksmith.modules.tsp_module.read_statement",
+            return_value=(100.0, "L 2060", None),
         ):
             self.assertEqual(
                 module.units_for(context=context), (100.0, "", FROM_STATEMENT)
@@ -417,7 +424,7 @@ class StalenessReportTests(unittest.TestCase):
 
 class MarkTests(unittest.TestCase):
     def _run(self, context: MagicMock, module: TspModule | None = None) -> bool:
-        with patch("modules.tsp_module.sync") as sheet_sync:
+        with patch("stonksmith.modules.tsp_module.sync") as sheet_sync:
             sheet_sync.return_value.save_accounts.return_value = None
             return (module or TspModule()).on_login(
                 context=context, connection=_connection()
@@ -427,7 +434,7 @@ class MarkTests(unittest.TestCase):
         context = _context(units=100.0, as_of="2026-06-30")
         context.db = MagicMock()
 
-        with patch("modules.tsp_module.SnapshotDbProtocol", MagicMock):
+        with patch("stonksmith.modules.tsp_module.SnapshotDbProtocol", MagicMock):
             self.assertTrue(self._run(context=context))
 
         saved = context.db.save_snapshot.call_args.kwargs
@@ -440,7 +447,7 @@ class MarkTests(unittest.TestCase):
         context = _context(units=100.0, as_of="2026-06-30")
         context.db = MagicMock()
 
-        with patch("modules.tsp_module.SnapshotDbProtocol", MagicMock):
+        with patch("stonksmith.modules.tsp_module.SnapshotDbProtocol", MagicMock):
             self._run(context=context)
 
         saved = context.db.save_snapshot.call_args.kwargs
@@ -453,7 +460,7 @@ class MarkTests(unittest.TestCase):
         context = _context(units=100.0, as_of="2026-06-30")
         context.db = MagicMock()
 
-        with patch("modules.tsp_module.SnapshotDbProtocol", MagicMock):
+        with patch("stonksmith.modules.tsp_module.SnapshotDbProtocol", MagicMock):
             self._run(context=context)
 
         holding = context.db.save_snapshot.call_args.kwargs["holdings"][0]
@@ -470,7 +477,7 @@ class MarkTests(unittest.TestCase):
         context = _context(units=100.0, as_of="2026-06-30")
         context.db = MagicMock()
 
-        with patch("modules.tsp_module.SnapshotDbProtocol", MagicMock):
+        with patch("stonksmith.modules.tsp_module.SnapshotDbProtocol", MagicMock):
             self._run(context=context)
 
         saved = context.db.save_snapshot.call_args.kwargs
@@ -486,7 +493,7 @@ class MarkTests(unittest.TestCase):
         context = _context(units=100.0, as_of="")
         context.db = MagicMock()
 
-        with patch("modules.tsp_module.SnapshotDbProtocol", MagicMock):
+        with patch("stonksmith.modules.tsp_module.SnapshotDbProtocol", MagicMock):
             self._run(context=context)
 
         holding = context.db.save_snapshot.call_args.kwargs["holdings"][0]
@@ -498,7 +505,9 @@ class MarkTests(unittest.TestCase):
         context = _context()
         context.db = MagicMock()
 
-        with patch("modules.tsp_module.get_tsp_units", return_value=(None, "")):
+        with patch(
+            "stonksmith.modules.tsp_module.get_tsp_units", return_value=(None, "")
+        ):
             self.assertFalse(self._run(context=context))
 
         self.assertIn("No unit count to value", _said(context.log.fail))
@@ -519,7 +528,7 @@ class MarkTests(unittest.TestCase):
         connection = _connection()
         connection.fund = "Q Fund"
 
-        with patch("modules.tsp_module.sync"):
+        with patch("stonksmith.modules.tsp_module.sync"):
             self.assertFalse(
                 TspModule().on_login(context=context, connection=connection)
             )

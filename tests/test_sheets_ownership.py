@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import gspread.exceptions
 from google.auth.exceptions import RefreshError
 
-from helpers.sheets import (
+from stonksmith.helpers.sheets import (
     SheetsUnavailable,
     ensure_worksheet,
     open_spreadsheet,
@@ -25,7 +25,7 @@ class OpenSpreadsheetTests(unittest.TestCase):
     def test_the_book_comes_back_whole(self) -> None:
         client = MagicMock()
 
-        with patch("helpers.sheets.gspread.oauth", return_value=client):
+        with patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client):
             self.assertIs(open_spreadsheet(), client.open.return_value)
 
     def test_a_missing_book_still_names_it(self) -> None:
@@ -33,7 +33,7 @@ class OpenSpreadsheetTests(unittest.TestCase):
         client.open.side_effect = gspread.exceptions.SpreadsheetNotFound("nope")
 
         with (
-            patch("helpers.sheets.gspread.oauth", return_value=client),
+            patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_spreadsheet(spreadsheet="Missing Book")
@@ -50,7 +50,7 @@ class OpenSpreadsheetTests(unittest.TestCase):
         )
 
         with (
-            patch("helpers.sheets.gspread.oauth", return_value=client),
+            patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_worksheet(worksheet_name="Accounts")
@@ -86,7 +86,7 @@ class WorksheetLookupFailureTests(unittest.TestCase):
         client.open.return_value.worksheet.side_effect = self._api_error()
 
         with (
-            patch("helpers.sheets.gspread.oauth", return_value=client),
+            patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_worksheet(worksheet_name="Accounts")
@@ -98,7 +98,7 @@ class WorksheetLookupFailureTests(unittest.TestCase):
         client.open.return_value.worksheet.side_effect = RefreshError("expired")
 
         with (
-            patch("helpers.sheets.gspread.oauth", return_value=client),
+            patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
             self.assertRaises(SheetsUnavailable) as caught,
         ):
             open_worksheet(worksheet_name="Accounts")
@@ -142,7 +142,7 @@ class EnsureWorksheetTests(unittest.TestCase):
         # Three tabs on one authorization rather than one each.
         book = MagicMock()
 
-        with patch("helpers.sheets.gspread.oauth") as oauth:
+        with patch("stonksmith.helpers.sheets.gspread.oauth") as oauth:
             ensure_worksheet(worksheet_name="Dashboard", book=book)
 
         oauth.assert_not_called()

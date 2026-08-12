@@ -2,8 +2,8 @@ import logging
 import unittest
 from argparse import Namespace
 
-from etc.connection import Connection
-from etc.context import Context
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.context import Context
 
 
 class _CaptureHandler(logging.Handler):
