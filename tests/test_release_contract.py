@@ -32,6 +32,12 @@ WORKFLOW = REPO / ".github" / "workflows" / "release.yml"
 #: A Keep a Changelog release heading: `## [1.2.3] - 2026-08-12`.
 RELEASE_HEADING = re.compile(r"^## \[(?P<version>\d+\.\d+\.\d+)\]", re.MULTILINE)
 
+#: A tag trigger for `v*`, in any of the spellings YAML allows for it -- the
+#: flow form with or without quotes and inner spaces, or the block form.
+TAG_TRIGGER = re.compile(
+    r"""tags:\s*(?:\[\s*['"]?v\*['"]?\s*\]|\n\s*-\s*['"]?v\*['"]?)"""
+)
+
 
 def config() -> dict:
     with PYPROJECT.open(mode="rb") as f:
@@ -130,7 +136,13 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.text: str = WORKFLOW.read_text(encoding="utf-8")
 
     def test_it_only_fires_on_a_version_tag(self) -> None:
-        self.assertIn('tags: [ "v*" ]', self.text)
+        # Matched loosely on purpose. This asserted the exact string
+        # `tags: [ "v*" ]`, which fails on a reformat that changes nothing --
+        # dropping the inner spaces, single quotes, or the block form with a
+        # dash. A test that breaks on harmless edits gets relaxed by whoever it
+        # inconveniences, and the thing worth pinning is that the trigger is a
+        # v-prefixed tag rather than how it happens to be written.
+        self.assertRegex(self.text, TAG_TRIGGER)
         self.assertNotIn(
             "workflow_dispatch",
             self.text,
