@@ -6,7 +6,7 @@ from typing import Any
 
 import parsel
 
-from helpers.schwab529plan import column_map
+from stonksmith.helpers.schwab529plan import column_map
 
 
 class Parser:

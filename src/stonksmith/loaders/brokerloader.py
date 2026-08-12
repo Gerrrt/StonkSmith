@@ -8,8 +8,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import ClassVar, NotRequired, TypedDict, cast
 
-from etc.logger import stonksmith_logger
-from etc.paths import package_root
+from stonksmith.etc.logger import stonksmith_logger
+from stonksmith.etc.paths import package_root
 
 
 class BrokerInfo(TypedDict):

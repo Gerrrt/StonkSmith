@@ -71,12 +71,12 @@ from typing import Any
 
 from sqlalchemy import Engine
 
-from etc.broker_db import BrokerDatabase
-from etc.config import get_workspace
-from etc.context import PortfolioDbProtocol
-from etc.infrastructure import create_db_engine
-from etc.paths import workspace_dir
-from helpers.normalize import to_iso_date
+from stonksmith.etc.broker_db import BrokerDatabase
+from stonksmith.etc.config import get_workspace
+from stonksmith.etc.context import PortfolioDbProtocol
+from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.paths import workspace_dir
+from stonksmith.helpers.normalize import to_iso_date
 
 #: The account view, in order. One row per account, across every broker. The
 #: sum of its Value column is the portfolio total; nothing else here totals.

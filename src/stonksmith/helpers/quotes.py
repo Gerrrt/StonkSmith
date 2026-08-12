@@ -28,7 +28,7 @@ import datetime as dt
 import json
 from typing import Any
 
-from etc.records import Holding
+from stonksmith.etc.records import Holding
 
 #: Where the daily closes live in the payload, and the offset that dates them.
 CHART_ROOT = "chart"

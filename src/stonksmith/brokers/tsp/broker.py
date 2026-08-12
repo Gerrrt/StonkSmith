@@ -33,8 +33,8 @@ from httpx import Response as HttpxResponse
 from requests import Response
 from requests.exceptions import RequestException
 
-from etc.api_connection import ApiConnection
-from etc.config import (
+from stonksmith.etc.api_connection import ApiConnection
+from stonksmith.etc.config import (
     get_tsp_basd,
     get_tsp_contributions,
     get_tsp_fund,
@@ -42,9 +42,9 @@ from etc.config import (
     get_tsp_price_url,
     get_tsp_rank,
 )
-from etc.logger import StonkSmithAdapter
-from etc.paths import stonksmith_path
-from helpers.dfas import (
+from stonksmith.etc.logger import StonkSmithAdapter
+from stonksmith.etc.paths import stonksmith_path
+from stonksmith.helpers.dfas import (
     BANDS,
     SPLIT_BAND,
     TABLE_NAMES,
@@ -58,7 +58,7 @@ from helpers.dfas import (
     normalize_grade,
     table_for,
 )
-from helpers.tsp import fund_prices, price_on
+from stonksmith.helpers.tsp import fund_prices, price_on
 
 #: Matches the directory name, which is also the <name>.db stem and the CLI
 #: subcommand.

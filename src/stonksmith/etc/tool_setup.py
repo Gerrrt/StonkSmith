@@ -5,9 +5,9 @@ Setup tool
 import shutil
 from pathlib import Path
 
-from etc.logger import StonkSmithAdapter
-from etc.paths import config_path, etc_path, managed_dirs, stonksmith_path
-from etc.stonksmithdb import initialize_db
+from stonksmith.etc.logger import StonkSmithAdapter
+from stonksmith.etc.paths import config_path, etc_path, managed_dirs, stonksmith_path
+from stonksmith.etc.stonksmithdb import initialize_db
 
 
 def setup_tool(logger: StonkSmithAdapter) -> None:

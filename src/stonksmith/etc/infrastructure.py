@@ -10,7 +10,7 @@ from typing import Any
 import sqlalchemy
 import sqlalchemy.event
 
-from etc.logger import stonksmith_logger
+from stonksmith.etc.logger import stonksmith_logger
 
 
 def create_db_engine(db_path: Path) -> sqlalchemy.Engine:

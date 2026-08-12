@@ -12,11 +12,11 @@ from typing import Any
 
 from sqlalchemy import Engine
 
-from etc.exceptions import SwitchBroker, UserExitedProto
-from etc.infrastructure import create_db_engine
-from etc.logger import StonkSmithAdapter
-from etc.paths import config_path, workspace_dir, ws_path
-from loaders.brokerloader import BrokerInfo, BrokerLoader
+from stonksmith.etc.exceptions import SwitchBroker, UserExitedProto
+from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.logger import StonkSmithAdapter
+from stonksmith.etc.paths import config_path, workspace_dir, ws_path
+from stonksmith.loaders.brokerloader import BrokerInfo, BrokerLoader
 
 #: Commands that only exist inside a broker's sub-shell. Typing one at the top
 #: level produced a bare "*** Unknown syntax" with no hint that a broker has to
@@ -191,8 +191,8 @@ class StonkSmithDBMenu(cmd.Cmd):
         # google-auth, and the shell is mostly used for things that never touch
         # Sheets. tests/test_no_import_side_effects.py imports this module in a
         # subprocess and asserts nothing appears in $HOME.
-        from etc.portfolio_sheet import refresh
-        from helpers.sheets import SheetsUnavailable
+        from stonksmith.etc.portfolio_sheet import refresh
+        from stonksmith.helpers.sheets import SheetsUnavailable
 
         try:
             result = refresh(workspace=self.workspace)
@@ -249,7 +249,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         # shell is mostly used for things that never read a workspace, and
         # tests/test_no_import_side_effects.py imports this module in a
         # subprocess and asserts nothing appears in $HOME.
-        from etc.portfolio import (
+        from stonksmith.etc.portfolio import (
             STALE_DAYS,
             AccountRow,
             Portfolio,
@@ -343,12 +343,12 @@ class StonkSmithDBMenu(cmd.Cmd):
 
         # Same reason as do_sheet: this pulls in gspread and google-auth, and the
         # shell is mostly used for things that never touch Sheets.
-        from etc.portfolio_sheet import (
+        from stonksmith.etc.portfolio_sheet import (
             GUARD_CHECK_TAB,
             check_ownership_guard,
             check_tabs,
         )
-        from helpers.sheets import SPREADSHEET_NAME
+        from stonksmith.helpers.sheets import SPREADSHEET_NAME
 
         which = line.strip().lower()
 
@@ -435,7 +435,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         :rtype: Any
         """
 
-        from helpers.sheets import SheetsUnavailable
+        from stonksmith.helpers.sheets import SheetsUnavailable
 
         try:
             return run()
@@ -647,8 +647,8 @@ def main() -> None:
     # is responsible for making sure the tool is set up before it reads config.
     # Imported here, not at module scope: tool_setup imports initialize_db from
     # this module, so a top-level import would be circular.
-    from etc.logger import stonksmith_logger
-    from etc.tool_setup import setup_tool
+    from stonksmith.etc.logger import stonksmith_logger
+    from stonksmith.etc.tool_setup import setup_tool
 
     setup_tool(logger=stonksmith_logger)
 

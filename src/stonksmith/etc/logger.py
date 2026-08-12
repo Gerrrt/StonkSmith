@@ -11,8 +11,8 @@ from typing import Any
 
 from rich.logging import RichHandler
 
-from etc.console import stonksmith_console
-from etc.paths import logs_path
+from stonksmith.etc.console import stonksmith_console
+from stonksmith.etc.paths import logs_path
 
 
 class TermEscapeCodeFormatter(logging.Formatter):

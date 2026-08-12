@@ -7,9 +7,9 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 
 from rich.progress import Progress, TaskID
 
-from etc.console import stonksmith_console
-from etc.context import BrokerDbProtocol, BrokerProtocol
-from etc.logger import stonksmith_logger
+from stonksmith.etc.console import stonksmith_console
+from stonksmith.etc.context import BrokerDbProtocol, BrokerProtocol
+from stonksmith.etc.logger import stonksmith_logger
 
 
 def _collect(future: Future[bool | None]) -> bool:

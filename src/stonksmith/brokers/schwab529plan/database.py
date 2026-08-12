@@ -5,7 +5,7 @@ BrokerLoader imports this file by path and expects a ``Database`` symbol; the
 behaviour comes from etc.broker_db.BrokerDatabase.
 """
 
-from etc.broker_db import BrokerDatabase
+from stonksmith.etc.broker_db import BrokerDatabase
 
 
 class Database(BrokerDatabase):

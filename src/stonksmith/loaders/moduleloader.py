@@ -9,10 +9,10 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
-from etc.context import BrokerDbProtocol, Context, ModuleProtocol
-from etc.logger import StonkSmithAdapter, _base_logger  # pyright: ignore
-from etc.paths import package_root, stonksmith_path
-from loaders.brokerloader import ModuleSpec
+from stonksmith.etc.context import BrokerDbProtocol, Context, ModuleProtocol
+from stonksmith.etc.logger import StonkSmithAdapter, _base_logger  # pyright: ignore
+from stonksmith.etc.paths import package_root, stonksmith_path
+from stonksmith.loaders.brokerloader import ModuleSpec
 
 
 def _is_valid_module(filename: str) -> bool:

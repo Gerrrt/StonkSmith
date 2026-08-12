@@ -8,15 +8,15 @@ import sys
 from argparse import Namespace
 from typing import TYPE_CHECKING, cast
 
-from etc.cli import gen_cli_args
-from etc.config import get_workspace
-from etc.infrastructure import create_db_engine, set_logging_level
-from etc.logger import stonksmith_logger
-from etc.paths import stonksmith_path
-from etc.runner import start_run
-from etc.tool_setup import setup_tool
-from loaders.brokerloader import BrokerInfo, BrokerLoader
-from loaders.moduleloader import ModuleLoader
+from stonksmith.etc.cli import gen_cli_args
+from stonksmith.etc.config import get_workspace
+from stonksmith.etc.infrastructure import create_db_engine, set_logging_level
+from stonksmith.etc.logger import stonksmith_logger
+from stonksmith.etc.paths import stonksmith_path
+from stonksmith.etc.runner import start_run
+from stonksmith.etc.tool_setup import setup_tool
+from stonksmith.loaders.brokerloader import BrokerInfo, BrokerLoader
+from stonksmith.loaders.moduleloader import ModuleLoader
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy import Engine
 
-    from etc.context import BrokerDbProtocol, BrokerProtocol, ModuleProtocol
+    from stonksmith.etc.context import BrokerDbProtocol, BrokerProtocol, ModuleProtocol
 
 
 def main(args: Namespace) -> int:

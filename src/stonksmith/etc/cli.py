@@ -15,9 +15,9 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as installed_version
 from types import ModuleType
 
-from etc.logger import stonksmith_logger
-from helpers.logger import highlight
-from loaders.brokerloader import BrokerInfo, BrokerLoader
+from stonksmith.etc.logger import stonksmith_logger
+from stonksmith.helpers.logger import highlight
+from stonksmith.loaders.brokerloader import BrokerInfo, BrokerLoader
 
 #: What --version says when the version cannot be established. Not a number:
 #: every number this could fall back to would be a guess presented as a fact,

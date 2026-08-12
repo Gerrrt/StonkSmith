@@ -66,8 +66,8 @@ from playwright_stealth import Stealth
 from requests import Response
 from requests.exceptions import RequestException
 
-from etc.connection import Connection
-from etc.paths import logs_path, playwright_path
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.paths import logs_path, playwright_path
 
 #: Playwright raises TargetClosedError when the browser goes away mid-call, but
 #: that class is not exported from playwright.sync_api -- only from a private

@@ -13,7 +13,7 @@ TSP.
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from brokers.tsp.broker import Tsp
+    from stonksmith.brokers.tsp.broker import Tsp
 
 __all__ = ["Tsp"]
 
@@ -22,7 +22,7 @@ def __getattr__(name: str) -> Any:
     """Resolve ``Tsp`` on first access (PEP 562)."""
 
     if name == "Tsp":
-        from brokers.tsp.broker import Tsp as _Tsp
+        from stonksmith.brokers.tsp.broker import Tsp as _Tsp
 
         return _Tsp
 

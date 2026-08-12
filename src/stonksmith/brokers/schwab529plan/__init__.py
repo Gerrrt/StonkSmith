@@ -15,7 +15,7 @@ quietly add startup cost to every run.
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from brokers.schwab529plan.broker import Schwab529plan
+    from stonksmith.brokers.schwab529plan.broker import Schwab529plan
 
 __all__ = ["Schwab529plan"]
 
@@ -24,7 +24,9 @@ def __getattr__(name: str) -> Any:
     """Resolve ``Schwab529plan`` on first access (PEP 562)."""
 
     if name == "Schwab529plan":
-        from brokers.schwab529plan.broker import Schwab529plan as _Schwab529plan
+        from stonksmith.brokers.schwab529plan.broker import (
+            Schwab529plan as _Schwab529plan,
+        )
 
         return _Schwab529plan
 

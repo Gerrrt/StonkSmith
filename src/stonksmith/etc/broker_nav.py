@@ -17,11 +17,11 @@ import typing
 from collections.abc import Sequence
 from getpass import getpass
 
-from etc.config import process_secret
-from etc.exceptions import SwitchBroker, UserExitedProto
-from etc.logger import stonksmith_logger
-from helpers import db as helper_db
-from helpers.normalize import format_amount
+from stonksmith.etc.config import process_secret
+from stonksmith.etc.exceptions import SwitchBroker, UserExitedProto
+from stonksmith.etc.logger import stonksmith_logger
+from stonksmith.helpers import db as helper_db
+from stonksmith.helpers.normalize import format_amount
 
 #: Column headers for each thing the shell can show or export, in the order the
 #: corresponding read method returns them. One place, so `show` and `export`

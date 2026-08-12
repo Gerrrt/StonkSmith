@@ -8,9 +8,9 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from etc.logger import StonkSmithAdapter
-from etc.paths import stonksmith_path
-from etc.records import AccountIdentity, Holding, Transaction
+from stonksmith.etc.logger import StonkSmithAdapter
+from stonksmith.etc.paths import stonksmith_path
+from stonksmith.etc.records import AccountIdentity, Holding, Transaction
 
 #: Re-exported so a module author has one import for everything it hands the
 #: database: `from etc.context import Context, AccountIdentity, Holding`.

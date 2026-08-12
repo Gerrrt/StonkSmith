@@ -10,8 +10,8 @@ from typing import Any, cast
 
 import requests
 
-from etc.context import BrokerDbProtocol, Context
-from etc.logger import StonkSmithAdapter, stonksmith_logger
+from stonksmith.etc.context import BrokerDbProtocol, Context
+from stonksmith.etc.logger import StonkSmithAdapter, stonksmith_logger
 
 sem = BoundedSemaphore()
 global_failed_logins = 0

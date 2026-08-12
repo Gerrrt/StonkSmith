@@ -9,11 +9,11 @@ from typing import Any, ClassVar
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-from etc.connection import Connection
-from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
-from etc.portfolio_sheet import sync
-from etc.records import AccountIdentity
-from helpers.normalize import to_amount, to_currency
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from stonksmith.etc.portfolio_sheet import sync
+from stonksmith.etc.records import AccountIdentity
+from stonksmith.helpers.normalize import to_amount, to_currency
 
 # Verified against a signed-in portfolio summary. The account list is Fidelity's
 # "acct-selector" component: one __acct-wrapper per account, each carrying a

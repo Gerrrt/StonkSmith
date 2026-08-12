@@ -10,8 +10,8 @@ and nothing would ever read it -- SnapTrade authenticates with a client id from
 the config file and a consumer key from the OS keyring instead.
 """
 
-from etc.broker_nav import BrokerNavigator, DatabaseLike
-from etc.logger import stonksmith_logger
+from stonksmith.etc.broker_nav import BrokerNavigator, DatabaseLike
+from stonksmith.etc.logger import stonksmith_logger
 
 SETUP_HINT = (
     "SnapTrade does not use stored username/password credentials. Put your "

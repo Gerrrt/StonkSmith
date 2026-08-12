@@ -30,8 +30,8 @@ from typing import Any, cast
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
-from etc.records import Holding
-from helpers.normalize import to_amount, to_currency
+from stonksmith.etc.records import Holding
+from stonksmith.helpers.normalize import to_amount, to_currency
 
 #: Class Ally puts on a losing amount. A gain gets "up". Neither is written
 #: with a sign, so this class *is* the minus sign.

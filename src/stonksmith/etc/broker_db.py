@@ -48,10 +48,15 @@ from sqlalchemy import (
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 
-from etc.logger import stonksmith_logger
-from etc.records import AccountIdentity, Holding, Transaction
-from etc.secrets import delete_secret, get_secret, keyring_key, set_secret
-from helpers.normalize import format_amount, to_amount, to_currency, to_iso_date
+from stonksmith.etc.logger import stonksmith_logger
+from stonksmith.etc.records import AccountIdentity, Holding, Transaction
+from stonksmith.etc.secrets import delete_secret, get_secret, keyring_key, set_secret
+from stonksmith.helpers.normalize import (
+    format_amount,
+    to_amount,
+    to_currency,
+    to_iso_date,
+)
 
 #: Where a legacy ``accounts`` table is moved so its rows survive the migration.
 #: Never dropped: if the replay misreads a balance format, this is the only copy

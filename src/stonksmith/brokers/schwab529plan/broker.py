@@ -12,9 +12,9 @@ from bs4.element import AttributeValueList
 from requests import Response
 from requests.exceptions import RequestException
 
-from etc.connection import Connection
-from etc.logger import StonkSmithAdapter
-from helpers.schwab529plan import get_value
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.logger import StonkSmithAdapter
+from stonksmith.helpers.schwab529plan import get_value
 
 
 class Schwab529plan(Connection):

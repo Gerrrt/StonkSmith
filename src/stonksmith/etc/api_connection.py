@@ -27,7 +27,7 @@ The split this class fixes on:
 
 from typing import Any
 
-from etc.connection import Connection
+from stonksmith.etc.connection import Connection
 
 
 class ApiConnection(Connection):

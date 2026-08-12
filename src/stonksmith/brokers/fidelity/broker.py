@@ -21,8 +21,8 @@ from playwright.sync_api import (
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api._generated import Locator
 
-from etc.browser_connection import BrowserConnection, browser_was_closed
-from etc.logger import StonkSmithAdapter
+from stonksmith.etc.browser_connection import BrowserConnection, browser_was_closed
+from stonksmith.etc.logger import StonkSmithAdapter
 
 #: Playwright's default is 30s. These steps are optional or fast-failing, so a
 #: shorter wait keeps a broken selector from stalling the whole login.

@@ -29,8 +29,8 @@ from playwright.sync_api import (
 )
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from etc.browser_connection import BrowserConnection, browser_was_closed
-from etc.logger import StonkSmithAdapter
+from stonksmith.etc.browser_connection import BrowserConnection, browser_was_closed
+from stonksmith.etc.logger import StonkSmithAdapter
 
 #: Where signing in actually happens. Ally Invest has no login page of its own;
 #: this is Ally Bank's, and the investing site is entered from it.

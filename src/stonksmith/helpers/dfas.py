@@ -47,7 +47,7 @@ from collections.abc import Iterator
 
 from bs4 import BeautifulSoup, Tag
 
-from helpers.tsp import to_number
+from stonksmith.helpers.tsp import to_number
 
 #: Path segment per grade family, hung off the configured base URL, and keyed by
 #: the name used throughout this module and in the cache file name. The base

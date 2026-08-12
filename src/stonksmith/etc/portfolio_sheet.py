@@ -58,9 +58,9 @@ from typing import Any
 
 from gspread.utils import ValueRenderOption
 
-from etc.config import get_asset_classes
-from etc.context import Context
-from etc.portfolio import (
+from stonksmith.etc.config import get_asset_classes
+from stonksmith.etc.context import Context
+from stonksmith.etc.portfolio import (
     ACCOUNT_COLUMNS,
     CARRIED,
     HOLDING_COLUMNS,
@@ -75,7 +75,7 @@ from etc.portfolio import (
     read_workspace,
     stale_cutoff,
 )
-from helpers.sheets import (
+from stonksmith.helpers.sheets import (
     SPREADSHEET_NAME,
     SheetNotOwned,
     SheetsUnavailable,

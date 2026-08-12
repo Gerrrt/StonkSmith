@@ -32,11 +32,11 @@ import datetime
 import re
 from typing import Any, ClassVar
 
-from etc.connection import Connection
-from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
-from etc.portfolio_sheet import sync
-from etc.records import AccountIdentity, Holding, Transaction
-from helpers.normalize import format_amount, to_amount, to_iso_date
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from stonksmith.etc.portfolio_sheet import sync
+from stonksmith.etc.records import AccountIdentity, Holding, Transaction
+from stonksmith.helpers.normalize import format_amount, to_amount, to_iso_date
 
 #: Account categories that are debts rather than holdings. Excluded by default
 #: and opted back in with --include-liabilities.
@@ -652,7 +652,7 @@ class SnapTradeModule:
         :rtype: frozenset[str]
         """
 
-        from etc.config import get_snaptrade_excluded_accounts
+        from stonksmith.etc.config import get_snaptrade_excluded_accounts
 
         labels: list[str] = list(get_snaptrade_excluded_accounts())
         labels.extend(getattr(context.args, "exclude", None) or [])

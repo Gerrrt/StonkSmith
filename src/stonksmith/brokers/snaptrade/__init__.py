@@ -13,7 +13,7 @@ including runs that never touch SnapTrade.
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from brokers.snaptrade.broker import SnapTradeBroker
+    from stonksmith.brokers.snaptrade.broker import SnapTradeBroker
 
 __all__ = ["SnapTradeBroker"]
 
@@ -22,7 +22,9 @@ def __getattr__(name: str) -> Any:
     """Resolve ``SnapTradeBroker`` on first access (PEP 562)."""
 
     if name == "SnapTradeBroker":
-        from brokers.snaptrade.broker import SnapTradeBroker as _SnapTradeBroker
+        from stonksmith.brokers.snaptrade.broker import (
+            SnapTradeBroker as _SnapTradeBroker,
+        )
 
         return _SnapTradeBroker
 

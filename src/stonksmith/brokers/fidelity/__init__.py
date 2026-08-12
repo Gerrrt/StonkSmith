@@ -12,7 +12,7 @@ invocation, for every broker, including runs that never touch Fidelity.
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from brokers.fidelity.broker import Fidelity
+    from stonksmith.brokers.fidelity.broker import Fidelity
 
 __all__ = ["Fidelity"]
 
@@ -21,7 +21,7 @@ def __getattr__(name: str) -> Any:
     """Resolve ``Fidelity`` on first access (PEP 562)."""
 
     if name == "Fidelity":
-        from brokers.fidelity.broker import Fidelity as _Fidelity
+        from stonksmith.brokers.fidelity.broker import Fidelity as _Fidelity
 
         return _Fidelity
 

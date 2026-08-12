@@ -15,10 +15,10 @@ under the synthetic name "broker" with no package.
 import datetime
 from typing import Any
 
-from etc.api_connection import ApiConnection
-from etc.config import get_snaptrade_client_id
-from etc.logger import StonkSmithAdapter
-from etc.secrets import get_secret, keyring_key
+from stonksmith.etc.api_connection import ApiConnection
+from stonksmith.etc.config import get_snaptrade_client_id
+from stonksmith.etc.logger import StonkSmithAdapter
+from stonksmith.etc.secrets import get_secret, keyring_key
 
 #: Matches the directory name, which is also the keyring namespace, the
 #: <name>.db stem and the CLI subcommand.

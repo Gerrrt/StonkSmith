@@ -9,7 +9,7 @@ with a client id from the config file and a consumer key from the OS keyring,
 not with a username and password. See brokers/snaptrade/broker.py.
 """
 
-from etc.broker_db import BrokerDatabase
+from stonksmith.etc.broker_db import BrokerDatabase
 
 
 class Database(BrokerDatabase):

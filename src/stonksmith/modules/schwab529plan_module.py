@@ -10,17 +10,17 @@ from typing import Any, ClassVar
 from requests import Response
 from requests.exceptions import RequestException
 
-from brokers.schwab529plan.parser import Parser
-from etc.connection import Connection
-from etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
-from etc.portfolio_sheet import sync
-from etc.records import AccountIdentity, Holding, Transaction
-from helpers.normalize import (
+from stonksmith.brokers.schwab529plan.parser import Parser
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from stonksmith.etc.portfolio_sheet import sync
+from stonksmith.etc.records import AccountIdentity, Holding, Transaction
+from stonksmith.helpers.normalize import (
     to_amount,
     to_currency,
     to_iso_date,
 )
-from helpers.schwab529plan import (
+from stonksmith.helpers.schwab529plan import (
     account_hint,
     account_label,
     beneficiary_field,

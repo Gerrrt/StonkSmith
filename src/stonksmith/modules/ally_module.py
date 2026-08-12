@@ -11,16 +11,16 @@ from typing import Any, ClassVar
 from bs4 import BeautifulSoup
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-from etc.connection import Connection
-from etc.context import (
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.context import (
     BrokerDbProtocol,
     Context,
     SnapshotDbProtocol,
     SnapshotReadDbProtocol,
 )
-from etc.portfolio_sheet import sync
-from etc.records import AccountIdentity, Holding
-from helpers.ally import (
+from stonksmith.etc.portfolio_sheet import sync
+from stonksmith.etc.records import AccountIdentity, Holding
+from stonksmith.helpers.ally import (
     INVESTMENT_KIND,
     SIDEBAR_SELECTOR,
     account_label,
@@ -31,8 +31,13 @@ from helpers.ally import (
     selected_account,
     sidebar_accounts,
 )
-from helpers.normalize import format_amount, format_units, to_amount, to_currency
-from helpers.quotes import QuotesUnavailable, daily_closes, repriced
+from stonksmith.helpers.normalize import (
+    format_amount,
+    format_units,
+    to_amount,
+    to_currency,
+)
+from stonksmith.helpers.quotes import QuotesUnavailable, daily_closes, repriced
 
 #: The account-value block above the holdings table. Waited for rather than the
 #: table itself, because an account with no positions renders the block and an

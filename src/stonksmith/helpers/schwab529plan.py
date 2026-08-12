@@ -8,8 +8,8 @@ from typing import Any, cast
 from bs4 import BeautifulSoup
 from bs4.element import AttributeValueList, Tag
 
-from etc.records import Holding, Transaction
-from helpers.normalize import to_amount, to_currency
+from stonksmith.etc.records import Holding, Transaction
+from stonksmith.helpers.normalize import to_amount, to_currency
 
 #: Canonical transaction column names, in the order the parser and the sheet
 #: have always used, mapped to the header spellings a page might print. The

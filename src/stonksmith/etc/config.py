@@ -11,8 +11,8 @@ import ast
 import configparser
 from pathlib import Path
 
-from etc.logger import stonksmith_logger
-from etc.paths import etc_path, stonksmith_path
+from stonksmith.etc.logger import stonksmith_logger
+from stonksmith.etc.paths import etc_path, stonksmith_path
 
 default_cfg_path: Path = etc_path / "stonksmith.conf"
 user_cfg_path: Path = stonksmith_path / "stonksmith.conf"
