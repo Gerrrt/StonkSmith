@@ -653,8 +653,10 @@ class ErrorShape(unittest.TestCase):
         self.assertEqual(
             conn.failed_responses,
             [
-                "401 https://secure.ally.com/acs/customers/authenticate/api/v2"
-                "/auth/login (17 bytes)"
+                (
+                    "401 https://secure.ally.com/acs/customers/authenticate/api/v2"
+                    "/auth/login (17 bytes)"
+                )
             ],
         )
 
