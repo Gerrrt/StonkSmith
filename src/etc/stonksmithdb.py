@@ -5,7 +5,6 @@ Create database engine for stonksmith
 import cmd
 import configparser
 import datetime as dt
-from os import listdir
 from pathlib import Path
 from sys import argv
 from types import ModuleType
@@ -454,7 +453,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         Create config file
         """
 
-        with open(file=self.config_path, mode="w") as configfile:
+        with self.config_path.open(mode="w") as configfile:
             self.config.write(fp=configfile)
 
     def do_broker(self, broker: str) -> None:
@@ -561,9 +560,12 @@ class StonkSmithDBMenu(cmd.Cmd):
 
         elif cmd_arg == "list":
             print("[*] Enumerating Workspaces:")
-            for ws in listdir(path=workspace_dir):
-                indicator: str = "==> " if ws == self.workspace else "   "
-                print(f"{indicator}{ws}")
+            # iterdir() yields paths where listdir() yielded names, hence .name
+            # on both lines. sorted() because neither is ordered, and a listing
+            # a person reads should not shuffle between runs.
+            for ws in sorted(workspace_dir.iterdir()):
+                indicator: str = "==> " if ws.name == self.workspace else "   "
+                print(f"{indicator}{ws.name}")
 
         else:
             target_ws: Path = Path(workspace_dir) / line

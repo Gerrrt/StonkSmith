@@ -38,7 +38,7 @@ SRC = REPO / "src"
 def declared() -> str:
     """The version pyproject.toml declares, which is the single source."""
 
-    with open(file=PYPROJECT, mode="rb") as f:
+    with PYPROJECT.open(mode="rb") as f:
         return str(object=tomllib.load(f)["project"]["version"])
 
 

@@ -130,6 +130,7 @@ select = [
     "SLF",
     "SLOT",
     "PERF",
+    "PTH",
     "RET",
     "TID",
     "YTT",

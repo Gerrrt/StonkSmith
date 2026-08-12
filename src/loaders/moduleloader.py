@@ -5,7 +5,6 @@ Module to load modules
 import importlib.util
 import inspect
 from argparse import Namespace
-from os import listdir
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -313,11 +312,13 @@ class ModuleLoader:
 
         for path in search_paths:
             try:
-                for file in listdir(path=path):
-                    if _is_valid_module(filename=file):
+                # sorted() so two installs holding the same modules report them
+                # in the same order; iterdir(), like listdir(), promises none.
+                for file in sorted(path.iterdir()):
+                    if _is_valid_module(filename=file.name):
                         data: (
                             dict[str, dict[str, str | Path | bool | list[str]]] | None
-                        ) = self.get_module_info(module_path=Path(path) / file)
+                        ) = self.get_module_info(module_path=file)
                         if data:
                             modules.update(data)
             except FileNotFoundError:

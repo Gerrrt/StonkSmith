@@ -90,7 +90,7 @@ def get_config() -> configparser.ConfigParser:
         stonksmith_logger.highlight(
             msg=f"Adding missing option(s) to {user_cfg_path}: {', '.join(backfilled)}"
         )
-        with open(file=user_cfg_path, mode="w") as f:
+        with user_cfg_path.open(mode="w") as f:
             config.write(fp=f)
 
     _config = config
