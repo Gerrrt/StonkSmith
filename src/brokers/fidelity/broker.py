@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 from playwright.sync_api import (
     Error as PlaywrightError,
 )
-from playwright.sync_api import TimeoutError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api._generated import Locator
 
 from etc.browser_connection import BrowserConnection, browser_was_closed
@@ -250,7 +250,7 @@ class Fidelity(BrowserConnection):
                 timeout=MANUAL_LOGIN_TIMEOUT_MS,
             )
 
-        except TimeoutError:
+        except PlaywrightTimeoutError:
             self.logger.fail(
                 msg=(
                     "Timed out waiting for the portfolio summary. If the sign-in "
@@ -316,9 +316,8 @@ class Fidelity(BrowserConnection):
             self.logger.success(msg=f"Successfully logged in to {self.broker} with 2FA")
             return True
 
-        else:
-            self.logger.fail(msg=f"Failed to log in to {self.broker} with 2FA")
-            return False
+        self.logger.fail(msg=f"Failed to log in to {self.broker} with 2FA")
+        return False
 
     def wait_for_loading_sign(self, timeout: int = 30000) -> None:
         """
@@ -434,7 +433,7 @@ class Fidelity(BrowserConnection):
             self.capture_page(reason="unexpected-page")
             raise RuntimeError(f"Landed on an unexpected page: {self.active_page.url}")
 
-        except TimeoutError:
+        except PlaywrightTimeoutError:
             self.logger.fail(
                 msg=f"Timed out during login for {username}; capturing the page."
             )
@@ -484,7 +483,7 @@ class Fidelity(BrowserConnection):
         try:
             checkbox.check(timeout=SHORT_TIMEOUT_MS)
 
-        except (TimeoutError, PlaywrightError) as e:
+        except (PlaywrightTimeoutError, PlaywrightError) as e:
             self.logger.highlight(msg=f"Could not tick 'don't ask again': {e}")
             return False
 
@@ -524,7 +523,7 @@ class Fidelity(BrowserConnection):
 
             return True
 
-        except TimeoutError:
+        except PlaywrightTimeoutError:
             self.logger.fail(
                 msg=(
                     "Timed out after submitting the 2FA code; the code may have "

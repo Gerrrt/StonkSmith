@@ -63,17 +63,16 @@ def _gather_attributes(
 ) -> dict[str, dict[str, str | Path | bool | list[str]]] | None:
     if target_class is None:
         return None
-    else:
-        return {
-            getattr(target_class, "name", "Unknown"): {
-                "path": module_path,
-                "description": getattr(target_class, "description", "Missing"),
-                "options": getattr(
-                    getattr(target_class, "options", None), "__doc__", "None"
-                ),
-                "supported_brokers": getattr(target_class, "supported_brokers", []),
-            }
+    return {
+        getattr(target_class, "name", "Unknown"): {
+            "path": module_path,
+            "description": getattr(target_class, "description", "Missing"),
+            "options": getattr(
+                getattr(target_class, "options", None), "__doc__", "None"
+            ),
+            "supported_brokers": getattr(target_class, "supported_brokers", []),
         }
+    }
 
 
 class ModuleLoader:

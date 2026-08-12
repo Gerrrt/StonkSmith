@@ -114,7 +114,9 @@ select = [
     "UP",
     "W",
     # ratchet
+    "A",
     "ASYNC",
+    "C90",
     "ERA",
     "EXE",
     "FA",
@@ -129,9 +131,19 @@ select = [
     "RSE",
     "SLF",
     "SLOT",
+    "PERF",
+    "RET",
     "TID",
     "YTT",
 ]
+
+[tool.ruff.lint.mccabe]
+# 16 is what the worst function in src/ scores today (error_shape, in
+# browser_connection.py). Set here as a ceiling rather than an aspiration: it
+# cannot be met by accident, and it stops anything new from being worse than the
+# worst thing already here. Lowering it towards 10 is a refactor of ten named
+# functions, which is its own piece of work and not a lint setting.
+max-complexity = 16
 
 [tool.ruff.lint.per-file-ignores]
 # The template is illustrative; its unused args are the point.

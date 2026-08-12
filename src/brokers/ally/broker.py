@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 from playwright.sync_api import (
     Error as PlaywrightError,
 )
-from playwright.sync_api import TimeoutError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from etc.browser_connection import BrowserConnection, browser_was_closed
 from etc.logger import StonkSmithAdapter
@@ -328,7 +328,7 @@ class Ally(BrowserConnection):
                 "#allyNavLogOut", state="attached", timeout=SIGNED_IN_TIMEOUT_MS
             )
 
-        except TimeoutError:
+        except PlaywrightTimeoutError:
             # Only reachable while on the investing host: a bounce is caught by
             # the host check above, so this is the session being genuinely dead
             # or the markup having moved. Keep the page -- it is the only thing
@@ -344,9 +344,9 @@ class Ally(BrowserConnection):
             return False
 
         except PlaywrightError as e:
-            # Ordered after TimeoutError, which subclasses it. A page that went
-            # away mid-wait is unreadable rather than unrendered, and must not
-            # be reported as a session that timed out.
+            # Ordered after PlaywrightTimeoutError, which subclasses it. A page
+            # that went away mid-wait is unreadable rather than unrendered, and
+            # must not be reported as a session that timed out.
             self.logger.display(
                 msg=f"No saved session to reuse: the page could not be read ({e})."
             )
@@ -422,7 +422,7 @@ class Ally(BrowserConnection):
                 "#allyNavLogOut", state="attached", timeout=SIGNED_IN_TIMEOUT_MS
             )
 
-        except TimeoutError:
+        except PlaywrightTimeoutError:
             self.logger.fail(
                 msg=(
                     f"Timed out waiting for a signed-in page on {INVEST_HOST}. "
