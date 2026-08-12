@@ -1,7 +1,7 @@
 [project]
 dependencies = [
     "beautifulsoup4>=4.12",
-    "google-auth>=2.0",
+    "google-auth>=2.56.3",
     # Only the DFAS pay table needs this, and only because requests cannot
     # fetch it: dfas.mil refuses urllib3's TLS handshake whatever headers ride
     # on top of it. See brokers/tsp/broker.py for what was measured.
@@ -9,16 +9,16 @@ dependencies = [
     "gspread>=6.1",
     "keyring>=25.0",
     "parsel>=1.9",
-    "playwright>=1.52",
+    "playwright>=1.62.0",
     # 1.x imports pkg_resources, which no longer exists on Python 3.14.
     "playwright-stealth>=2",
     # Reads TSP quarterly statements, which are the only place a unit count
     # is stated without a login.
     "pypdf>=6.15.0",
-    "requests>=2.33.1",
+    "requests>=2.34.2",
     "rich>=13.7",
-    "snaptrade-python-sdk>=12.0.4",
-    "sqlalchemy>=2.0.49",
+    "snaptrade-python-sdk>=12.1.0",
+    "sqlalchemy>=2.0.51",
     "tabulate>=0.9",
     "termcolor>=2.4",
 ]
@@ -34,11 +34,11 @@ stonksmithdb = "etc.stonksmithdb:main"
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "pytest-cov>=7.0",
     "pytest-xdist>=3.8",
-    "ruff>=0.15.11",
-    "ty>=0.0.32",
+    "ruff>=0.16.2",
+    "ty>=0.0.69",
 ]
 
 [build-system]
