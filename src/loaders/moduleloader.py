@@ -157,7 +157,13 @@ class ModuleLoader:
 
             # A module that fails to initialize is skipped, not fatal: the rest
             # of the requested modules still run.
-            if module_obj:
+            #
+            # `is not None`, not truthiness: init_module() says "failed" with
+            # None, and a module class is free to define __bool__ or __len__ --
+            # one holding an empty collection of things to sync would have been
+            # dropped for being empty, which is the same falsy-is-not-missing
+            # mistake helpers.normalize is careful about for money.
+            if module_obj is not None:
                 prepared.append(module_obj)
 
         return prepared

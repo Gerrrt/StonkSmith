@@ -102,12 +102,15 @@ class BrokerConformanceTests(unittest.TestCase):
         for name in SHIPPED_BROKERS:
             with self.subTest(broker=name):
                 module = loader.load_broker(broker_path=brokers[name]["path"])
+                # Both checked before use, as in the test above, and separately
+                # so the failure says which of the two went wrong: a broker that
+                # would not load reads very differently from one that loaded and
+                # published no class.
+                self.assertIsNotNone(module, "broker failed to load")
+
                 broker_class = getattr(module, "Broker", None) or getattr(
                     module, name.capitalize(), None
                 )
-                # Checked before use, as above: reading __call__ off None is an
-                # AttributeError that names neither the broker nor what was
-                # wrong with it.
                 self.assertIsNotNone(broker_class, "no Broker alias or named class")
 
                 signature = inspect.signature(broker_class.__call__)
