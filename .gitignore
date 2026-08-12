@@ -208,3 +208,52 @@ __marimo__/
 
 # macOS
 .DS_Store
+
+# ---------------------------------------------------------------------------
+# StonkSmith
+#
+# Everything above is the stock GitHub Python template and is left untouched so
+# that refreshing it stays a clean diff. None of it protects anything this
+# project actually writes.
+# ---------------------------------------------------------------------------
+
+# The operator's live config. Anchored to the repository root on purpose: it has
+# the same *name* as the shipped default at src/stonksmith/etc/stonksmith.conf,
+# which is tracked, so a bare `*.conf` would ignore that too and every edit to it
+# would need `git add -f`. Theirs carries a SnapTrade client id, a pay grade, a
+# service date and two contribution percentages.
+/stonksmith.conf
+/.stonksmith/
+
+# Account databases: every account number, balance, holding and transaction the
+# tool has recorded. `db.sqlite3` in the Django block above is Django's name and
+# matches none of ours -- a broker database is <broker>.db under a workspace.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Page captures and screenshots. These are the raw signed-in page, unredacted,
+# and docs/live-verification.md tells you to open one and quote it in an issue --
+# so nothing should make committing one the easy mistake. The HTML fixtures under
+# tests/ are tracked and negated here rather than left for the next person who
+# adds one to rediscover with `git add -f`. A screenshot added under docs/ would
+# need the same treatment.
+*.html
+*.png
+!tests/*.html
+
+# Playwright traces: a DOM recording of a signed-in session, screenshots and all.
+*_trace.zip
+
+# Google OAuth. gspread keeps these under ~/.config/gspread; authorized_user.json
+# is a refresh token for the operator's whole Drive, and a copy of one inside a
+# public checkout is the worst thing in this file.
+authorized_user.json
+credentials.json
+token.json
+
+# The response logs under ~/.stonksmith/logs are already covered by `*.log` in
+# the template above. Left there rather than duplicated here, but worth knowing
+# it is deliberate rather than luck.
