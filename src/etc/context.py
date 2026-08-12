@@ -17,13 +17,51 @@ from etc.records import AccountIdentity, Holding, Transaction
 __all__ = [
     "AccountIdentity",
     "BrokerDbProtocol",
+    "BrokerProtocol",
     "Context",
     "Holding",
+    "ModuleProtocol",
     "PortfolioDbProtocol",
     "SnapshotDbProtocol",
     "SnapshotReadDbProtocol",
     "Transaction",
 ]
+
+
+@runtime_checkable
+class ModuleProtocol(Protocol):
+    """
+    What every module class declares, whatever else it does.
+
+    Only the three attributes that are read *about* a module rather than *by*
+    it. The login handlers are deliberately absent: a module supplies
+    ``on_login`` or ``on_admin_login`` and needs only one, which a Protocol
+    cannot say, so Connection.call_modules() keeps asking with hasattr and
+    ModuleLoader.module_is_sane() keeps being the gate that rejects neither.
+    """
+
+    name: str
+    description: str
+    supported_brokers: list[str]
+
+
+@runtime_checkable
+class BrokerProtocol(Protocol):
+    """
+    What main.py builds and the runner submits to the thread pool.
+
+    ``__call__`` returns ``bool | None`` rather than ``bool`` because None has
+    always meant success for a broker under ~/.stonksmith/brokers that declares
+    ``broker_flow() -> None``. runner._collect() already documents that and
+    tests ``is not False``; narrowing here would contradict it.
+    """
+
+    name: str
+    module: list[ModuleProtocol]
+
+    def __call__(
+        self, args: Namespace, db: BrokerDbProtocol, host: str | None = ...
+    ) -> bool | None: ...
 
 
 @runtime_checkable

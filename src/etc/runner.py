@@ -4,12 +4,11 @@ runner.py: run the execution logic all together
 
 from argparse import Namespace
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from typing import Any
 
 from rich.progress import Progress, TaskID
 
 from etc.console import stonksmith_console
-from etc.context import BrokerDbProtocol
+from etc.context import BrokerDbProtocol, BrokerProtocol
 from etc.logger import stonksmith_logger
 
 
@@ -42,7 +41,9 @@ def _collect(future: Future[bool | None]) -> bool:
         return False
 
 
-async def start_run(broker_obj: Any, db: BrokerDbProtocol, args: Namespace) -> bool:
+async def start_run(
+    broker_obj: BrokerProtocol, db: BrokerDbProtocol, args: Namespace
+) -> bool:
     """
     Run StonkSmith execution logic
     :param broker_obj:

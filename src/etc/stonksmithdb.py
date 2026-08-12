@@ -16,7 +16,7 @@ from etc.exceptions import SwitchBroker, UserExitedProto
 from etc.infrastructure import create_db_engine
 from etc.logger import StonkSmithAdapter
 from etc.paths import config_path, workspace_dir, ws_path
-from loaders.brokerloader import BrokerLoader
+from loaders.brokerloader import BrokerInfo, BrokerLoader
 
 #: Commands that only exist inside a broker's sub-shell. Typing one at the top
 #: level produced a bare "*** Unknown syntax" with no hint that a broker has to
@@ -62,7 +62,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         self.config.read(filenames=self.config_path)
 
         self.broker_loader = BrokerLoader()
-        self.brokers: dict[str, dict[str, str]] = self.broker_loader.get_brokers()
+        self.brokers: dict[str, BrokerInfo] = self.broker_loader.get_brokers()
 
         #: Set by any command that reported a failure. It exists for the
         #: scripted form in ``main()``, which has to exit non-zero when the
@@ -155,7 +155,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         print("[*] Available brokers:")
 
         for name in sorted(self.brokers):
-            info: dict[str, str] = self.brokers[name]
+            info: BrokerInfo = self.brokers[name]
             db_file: Path = Path(workspace_dir) / self.workspace / f"{name}.db"
 
             if not {"nvpath", "dbpath"} <= set(info):
@@ -490,7 +490,7 @@ class StonkSmithDBMenu(cmd.Cmd):
             self.list_brokers()
             return None
 
-        info: dict[str, str] = self.brokers[broker]
+        info: BrokerInfo = self.brokers[broker]
         missing: list[str] = [key for key in ("nvpath", "dbpath") if key not in info]
         if missing:
             print(f"[-] Broker '{broker}' is incomplete; missing {', '.join(missing)}")
@@ -616,7 +616,7 @@ def initialize_db(logger: StonkSmithAdapter) -> None:
     default_ws.mkdir(parents=True, exist_ok=True)
 
     loader = BrokerLoader()
-    brokers: dict[str, dict[str, str]] = loader.get_brokers()
+    brokers: dict[str, BrokerInfo] = loader.get_brokers()
 
     for name, info in brokers.items():
         db_file: Path = default_ws / f"{name}.db"

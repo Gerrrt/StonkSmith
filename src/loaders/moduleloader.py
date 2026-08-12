@@ -9,7 +9,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
-from etc.context import BrokerDbProtocol, Context
+from etc.context import BrokerDbProtocol, Context, ModuleProtocol
 from etc.logger import StonkSmithAdapter, _base_logger  # pyright: ignore
 from etc.paths import package_root, stonksmith_path
 from loaders.brokerloader import ModuleSpec
@@ -129,11 +129,11 @@ class ModuleLoader:
                         )
                     )
 
-    def prepare(self) -> list[Any]:
+    def prepare(self) -> list[ModuleProtocol]:
         """
         Validate and initialize every module named on the command line.
         :return: The initialized module instances, in the order requested
-        :rtype: list[Any]
+        :rtype: list[ModuleProtocol]
         """
 
         modules: dict[str, dict[str, str | Path | bool | list[str]]] | None = (
@@ -141,7 +141,7 @@ class ModuleLoader:
         )
         requested: list[str] = [m.lower() for m in getattr(self.args, "module", [])]
 
-        prepared: list[Any] = []
+        prepared: list[ModuleProtocol] = []
 
         for module in requested:
             if modules is None or module not in modules:
@@ -157,7 +157,13 @@ class ModuleLoader:
 
             # A module that fails to initialize is skipped, not fatal: the rest
             # of the requested modules still run.
-            if module_obj:
+            #
+            # `is not None`, not truthiness: init_module() says "failed" with
+            # None, and a module class is free to define __bool__ or __len__ --
+            # one holding an empty collection of things to sync would have been
+            # dropped for being empty, which is the same falsy-is-not-missing
+            # mistake helpers.normalize is careful about for money.
+            if module_obj is not None:
                 prepared.append(module_obj)
 
         return prepared

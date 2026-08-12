@@ -6,10 +6,27 @@ import importlib.util
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
-from typing import ClassVar
+from typing import ClassVar, NotRequired, TypedDict, cast
 
 from etc.logger import stonksmith_logger
 from etc.paths import package_root
+
+
+class BrokerInfo(TypedDict):
+    """
+    Where a discovered broker's files are.
+
+    The keys are a closed set -- ``path`` plus one per entry in
+    ``BrokerLoader._OPTIONAL_FILES`` -- so they are written down rather than
+    left as ``dict[str, str]``, which made ``broker_info["dbpath"]`` an
+    unchecked lookup that main.py has to guard by hand.
+    """
+
+    #: broker.py. Always present: finding it is what makes a directory a broker.
+    path: str
+    dbpath: NotRequired[str]
+    nvpath: NotRequired[str]
+    argspath: NotRequired[str]
 
 
 class BrokerLoader:
@@ -28,7 +45,7 @@ class BrokerLoader:
 
     def __init__(self) -> None:
         self.stonksmith_path = Path("~/.stonksmith").expanduser()
-        self._cache = {}
+        self._cache: dict[str, BrokerInfo] = {}
 
     @staticmethod
     def load_broker(broker_path: str, label: str | None = None) -> ModuleType | None:
@@ -68,7 +85,7 @@ class BrokerLoader:
 
         return None
 
-    def get_brokers(self) -> dict[str, dict[str, str]]:
+    def get_brokers(self) -> dict[str, BrokerInfo]:
         """
         Scan directories and return a mapping of available brokers.
 
@@ -83,7 +100,7 @@ class BrokerLoader:
         if self._cache:
             return self._cache
 
-        brokers: dict[str, dict[str, str]] = {}
+        brokers: dict[str, BrokerInfo] = {}
 
         search_dirs: list[Path] = list(
             dict.fromkeys(
@@ -121,7 +138,12 @@ class BrokerLoader:
                     if candidate.is_file():
                         info[key] = str(object=candidate)
 
-                brokers[name] = info
+                # Cast rather than construct: the optional keys are filled
+                # through a variable, which no type checker can match to a
+                # TypedDict field. _OPTIONAL_FILES is itself the statement of
+                # which keys exist, so the two cannot drift without the literal
+                # above being edited too.
+                brokers[name] = cast("BrokerInfo", info)
 
-        self._cache: dict[str, dict[str, str]] = brokers
+        self._cache = brokers
         return brokers
