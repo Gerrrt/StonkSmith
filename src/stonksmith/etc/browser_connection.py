@@ -598,7 +598,14 @@ class BrowserConnection(Connection):
         # brokers' --help offer it -- and tightening the mode on that is a change
         # to state this tool did not create, cannot put back, and which another
         # process or another user may legitimately be reaching.
-        if profile_dir.is_relative_to(playwright_path):
+        #
+        # Resolved on both sides before comparing, because is_relative_to() is
+        # purely lexical: it reads the path components and does not walk them.
+        # `--profile-dir ~/.stonksmith/playwright/../../Documents` sits under
+        # playwright_path as far as it is concerned, and does not once the path
+        # is normalised. Resolving also collapses a symlink, so the check is
+        # about where the directory really is rather than how it was spelled.
+        if profile_dir.resolve().is_relative_to(playwright_path.resolve()):
             restrict_dir(path=profile_dir)
 
         assert self.playwright is not None

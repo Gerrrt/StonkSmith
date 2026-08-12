@@ -230,6 +230,37 @@ class TraceAndProfileTests(_TempRoot):
 
         self.assertEqual(theirs.stat().st_mode & 0o777, 0o755)
 
+    def test_a_profile_directory_reached_through_dot_dot_is_left_alone(self) -> None:
+        # is_relative_to() reads path components and does not walk them, so
+        # `<playwright_path>/../<name>` satisfies it while pointing somewhere
+        # else entirely. Spelled the way an operator plausibly would: a profile
+        # kept beside StonkSmith's own state rather than inside it.
+        #
+        # Both directories live inside this test's own temporary root, so the
+        # traversal is real and there is still nothing shared between workers.
+        nested: Path = self.tmp / "playwright"
+        nested.mkdir()
+        theirs: Path = self.tmp / "beside-it"
+        theirs.mkdir(mode=0o755)
+
+        escaped: Path = nested / ".." / theirs.name
+        self.assertTrue(
+            escaped.is_relative_to(nested),
+            "the lexical check has to pass here, or this test proves nothing",
+        )
+        self.assertEqual(escaped.resolve(), theirs.resolve())
+
+        connection = self._connection()
+
+        with (
+            patch.object(browser_mod, "playwright_path", nested),
+            patch.object(BrowserConnection, "chrome_profile_dir", return_value=escaped),
+            contextlib.suppress(Exception),
+        ):
+            connection.start_chromium(headed=False, channel=None)
+
+        self.assertEqual(theirs.stat().st_mode & 0o777, 0o755)
+
 
 class GoogleCredentialTests(_TempRoot):
     def _seed(self) -> None:
