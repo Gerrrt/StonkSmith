@@ -9,6 +9,23 @@ the two disagree.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-12
+
+No change to the tool. `v0.1.0` was tagged and published nothing: the release
+workflow pinned a version of `gh-action-pypi-publish` whose bundled `twine`
+predates core metadata 2.5, which is what this project's build produces, so the
+upload was refused before it started. Nothing reached PyPI and no release was
+created, and the tag is left in place rather than moved — a tag that shipped
+nothing is a more useful record than one that quietly points somewhere else.
+
+### Fixed
+
+- The release workflow's pre-flight `twine check` ran with whatever `twine` was
+  newest while the upload used the action's own older copy, so the two disagreed
+  about the same wheel and the check passed on something the upload rejected. It
+  is pinned to the version the action bundles, and a test refuses to let it float
+  again.
+
 ## [0.1.0] - 2026-08-12
 
 First tagged release. The project existed for 127 merged pull requests before
@@ -49,5 +66,6 @@ which is written to be read.
   `site-packages`. A broker or module written against those still loads, with a
   `DeprecationWarning`; that shim is removed in 1.0.
 
-[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.1.0

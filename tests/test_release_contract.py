@@ -245,6 +245,35 @@ class ReleaseWorkflowTests(unittest.TestCase):
             with self.subTest(job=name):
                 self.assertIn("permissions", job, f"{name} inherits the default token")
 
+    def test_the_preflight_twine_is_pinned(self) -> None:
+        # The pre-flight check has to be run with the same twine the upload
+        # uses, or it is not checking the upload. Unpinned it resolved to
+        # whatever was newest while the publish action used its own bundled
+        # copy, and the two disagreed about the same wheel -- `twine check
+        # --strict` passed, and the upload refused it as "'2.5' is not a valid
+        # metadata version". That cost a tag.
+        #
+        # Only the pin is asserted. Which version it should be lives in a
+        # comment beside it, because the answer is in another repository's
+        # requirements file and nothing here can read it.
+        commands: list[str] = [
+            step["run"]
+            for job in self.jobs.values()
+            for step in job["steps"]
+            if "run" in step
+        ]
+        checks: list[str] = [c for c in commands if "twine check" in c]
+
+        self.assertTrue(checks, "nothing runs twine check")
+
+        for command in checks:
+            with self.subTest(command=command.strip()[:60]):
+                self.assertRegex(
+                    command,
+                    r"--with twine==\d+\.\d+",
+                    "pin twine to the version gh-action-pypi-publish bundles",
+                )
+
     def test_every_action_is_pinned_to_a_commit(self) -> None:
         # Same reasoning as ci.yml: a tag is a pointer its owner can move, and
         # whatever it lands on runs here with a PyPI identity in scope.
