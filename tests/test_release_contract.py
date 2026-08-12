@@ -266,13 +266,25 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
         self.assertTrue(checks, "nothing runs twine check")
 
+        # The trailing (?!\S) is the part that does the work. Without it the
+        # pattern matches a prefix, so `twine==7.0.*` satisfies it while leaving
+        # every patch release free -- which is the drift this exists to stop.
+        # The number of components is deliberately not fixed: the action pins
+        # twine to 7.0.0 and packaging to 26.2, and under PEP 440 a release
+        # segment may be as long as it likes.
+        #
+        # packaging is checked too because packaging is what decides. twine
+        # hands it the metadata and its table of valid versions is where the
+        # rejection came from; pinning only twine leaves the deciding half free.
         for command in checks:
-            with self.subTest(command=command.strip()[:60]):
-                self.assertRegex(
-                    command,
-                    r"--with twine==\d+\.\d+",
-                    "pin twine to the version gh-action-pypi-publish bundles",
-                )
+            for package in ("twine", "packaging"):
+                with self.subTest(package=package):
+                    self.assertRegex(
+                        command,
+                        rf"--with {package}==\d+(?:\.\d+)*(?!\S)",
+                        f"pin {package} to the exact version "
+                        "gh-action-pypi-publish bundles",
+                    )
 
     def test_every_action_is_pinned_to_a_commit(self) -> None:
         # Same reasoning as ci.yml: a tag is a pointer its owner can move, and

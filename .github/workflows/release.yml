@@ -111,15 +111,24 @@ jobs:
       # wheel PyPI will reject, at the point where the fix is still a commit
       # rather than a burned version number.
       #
-      # Pinned, and pinned to the version the publish action bundles -- see
-      # requirements/runtime.txt in pypa/gh-action-pypi-publish at the tag below.
-      # Unpinned, this resolved to whatever was newest while the action used its
-      # own older copy, so the two disagreed about the same wheel: the check
-      # passed and the upload refused it as "'2.5' is not a valid metadata
-      # version". A pre-flight check run with different tooling than the flight
-      # is not a pre-flight check. Bump both together.
+      # Pinned to what the publish action bundles -- see requirements/runtime.txt
+      # in pypa/gh-action-pypi-publish at the tag below. Unpinned, this resolved
+      # to whatever was newest while the action used its own older copy, so the
+      # two disagreed about the same wheel: the check passed and the upload
+      # refused it as "'2.5' is not a valid metadata version".
+      #
+      # packaging as well as twine, because packaging is what actually decides.
+      # twine hands the metadata to it, the rejected version came from its table
+      # of valid ones, and the action constrains it separately for that reason.
+      # Pinning only twine would leave the deciding half free to drift and
+      # reproduce this exactly.
+      #
+      # A pre-flight check run with different tooling than the flight is not a
+      # pre-flight check. Bump all three together.
       - name: Check the artifacts
-        run: uv run --no-project --with twine==7.0.0 twine check --strict dist/*
+        run: |
+          uv run --no-project --with twine==7.0.0 --with packaging==26.2 \
+            twine check --strict dist/*
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
