@@ -54,15 +54,11 @@ addopts = [ "-ra", "--strict-config", "--strict-markers" ]
 # A warning the suite does not notice is a warning that becomes a breakage on
 # some later dependency bump, so they are errors here.
 #
-# ResourceWarning is the one exception, and it is masking something real: tests
-# that build an engine with create_db_engine() close the session via
-# shutdown_db() but never dispose the engine, so SQLAlchemy's pool holds the
-# sqlite connections until the garbage collector finalises them -- 163 of them
-# per run. It surfaces as a warning rather than a failure because it is raised
-# during finalisation, outside any test. Removing this line is the check that
-# the leak is actually fixed; do not remove it before then, or the suite fails
-# at teardown with PytestUnraisableExceptionWarning.
-filterwarnings = [ "error", "ignore::ResourceWarning" ]
+# ResourceWarning is included deliberately, and the suite only survives it
+# because shutdown_db() disposes its engine. An unclosed sqlite connection is
+# raised during finalisation, where no test is running to fail, so this line is
+# the only thing that turns the next leak back into a red build.
+filterwarnings = [ "error" ]
 pythonpath = [ "src" ]
 testpaths = [ "tests" ]
 xfail_strict = true
