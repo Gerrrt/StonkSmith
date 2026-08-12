@@ -1337,8 +1337,10 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         # Names what the USD total left out. A USD-only total with a euro
         # account in the workspace is a wrong number that looks right.
         [
-            f'=IFERROR(TEXTJOIN(", ",TRUE,UNIQUE(FILTER({currency},'
-            f'{currency}<>"USD",{currency}<>""))),"")'
+            (
+                f'=IFERROR(TEXTJOIN(", ",TRUE,UNIQUE(FILTER({currency},'
+                f'{currency}<>"USD",{currency}<>""))),"")'
+            )
         ],
         # SORT rather than MAX: Scraped At is text under RAW, and MAX over text
         # returns 0. The stored format is YYYY-MM-DD HH:MM:SS, which sorts
@@ -1367,8 +1369,10 @@ def _summary(portfolio: Portfolio) -> tuple[list[list[Any]], list[list[Any]]]:
         # so the cell would answer "whenever" and look authoritative. The row
         # keeps its place on the tab; it just cannot be the answer here.
         [
-            f"=IFERROR(INDEX(SORT(UNIQUE(FILTER({processed},"
-            f'REGEXMATCH({processed}&"","{ISO_DATE_PATTERN}"))),1,FALSE),1,1),"")'
+            (
+                f"=IFERROR(INDEX(SORT(UNIQUE(FILTER({processed},"
+                f'REGEXMATCH({processed}&"","{ISO_DATE_PATTERN}"))),1,FALSE),1,1),"")'
+            )
         ],
         # COUNTUNIQUE over a column with trailing blanks counts the blank as a
         # value, so the empty tail is filtered out rather than subtracted.
@@ -1661,8 +1665,10 @@ def _block(
                 # named. The criterion beside it keeps the raw string, because
                 # that is what is on the tab.
                 name.strip() or unnamed,
-                f"=SUMIFS({value_range},{criterion_range},"
-                f'"{_quoted(text=name)}",{currency_range},"{currency}")',
+                (
+                    f"=SUMIFS({value_range},{criterion_range},"
+                    f'"{_quoted(text=name)}",{currency_range},"{currency}")'
+                ),
                 f'=IFERROR({values}{row}/{total},"")',
             ]
         )
@@ -1735,8 +1741,10 @@ def _refused(heading: str, cash: float) -> list[list[Any]]:
         [heading, f"Value ({USD})", f"Share of total ({USD})"],
         [
             ALLOCATION_REFUSED,
-            f"positions exceed account balances by {-cash:,.2f} {USD}, "
-            "so something is counted twice",
+            (
+                f"positions exceed account balances by {-cash:,.2f} {USD}, "
+                "so something is counted twice"
+            ),
             "",
         ],
     ]
