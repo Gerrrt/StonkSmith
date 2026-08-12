@@ -1,0 +1,32 @@
+# Version updates. Distinct from Dependabot's security updates, which are on
+# already and only fire once an advisory is published -- everything here is the
+# ordinary drift that never gets an advisory, and which is what leaves a project
+# stranded on a version nothing else supports.
+version: 2
+
+updates:
+  # The "uv" ecosystem rather than "pip": this project's resolution lives in
+  # uv.lock, and pip's updater does not maintain it.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    # Minor and patch bumps arrive as one pull request rather than a dozen.
+    # Majors stay on their own, because those are the ones worth reading -- the
+    # playwright-stealth 1.x pin in pyproject.toml exists because a major broke
+    # on Python 3.14, and that is not a diff to skim in a batch of fifteen.
+    groups:
+      minor-and-patch:
+        patterns: [ "*" ]
+        update-types: [ minor, patch ]
+
+  # Also keeps the pinned commit SHAs in .github/workflows current, and rewrites
+  # the trailing "# v4" comment as it goes, so pinning does not mean going stale.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: [ "*" ]
+        update-types: [ minor, patch ]
