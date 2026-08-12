@@ -27,6 +27,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import stonksmith.etc.config as etc_config
+from config_isolation import UserConfigMixin
+from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.etc.permissions import (
     OWNER_ONLY_DIR,
     OWNER_ONLY_FILE,
@@ -75,6 +78,59 @@ class TheHelperTests(_TempRoot):
         with patch.object(Path, "chmod", side_effect=PermissionError("read-only")):
             restrict(path=target)
             restrict_dir(path=self.tmp)
+
+
+class DatabaseFileTests(_TempRoot):
+    def test_the_database_is_owner_only_from_the_first_connect(self) -> None:
+        path: Path = self.tmp / "ally.db"
+        engine = create_db_engine(db_path=path)
+        # dispose() is not optional here: filterwarnings = ["error"] promotes the
+        # ResourceWarning from an unclosed pool to a failure, raised during
+        # finalisation with no test running to pin it on.
+        self.addCleanup(engine.dispose)
+
+        with engine.connect():
+            pass
+
+        self.assertEqual(path.stat().st_mode & 0o777, OWNER_ONLY_FILE)
+
+    def test_a_database_an_older_stonksmith_wrote_is_tightened_on_open(self) -> None:
+        # The case that matters and the one a create-time-only fix cannot reach:
+        # every database that exists today was written before this and is 0644.
+        path: Path = self.tmp / "legacy.db"
+        first = create_db_engine(db_path=path)
+        with first.connect():
+            pass
+        first.dispose()
+        path.chmod(mode=0o644)
+
+        second = create_db_engine(db_path=path)
+        self.addCleanup(second.dispose)
+
+        with second.connect():
+            pass
+
+        self.assertEqual(path.stat().st_mode & 0o777, OWNER_ONLY_FILE)
+
+
+class ConfigFileTests(UserConfigMixin, unittest.TestCase):
+    config_body = "[STONKSMITH]\nworkspace = mine\n"
+
+    def test_backfilling_the_config_does_not_widen_it(self) -> None:
+        # get_config() opens the file "w", which truncates in place and so keeps
+        # the mode. That is an accident of how it happens to be written: a future
+        # rewrite via tempfile-and-rename would hand the file back at umask, and
+        # the protection would be lost without anyone editing a line about
+        # permissions.
+        path: Path = etc_config.user_cfg_path
+        path.chmod(mode=OWNER_ONLY_FILE)
+
+        etc_config.get_config()
+
+        # Load-bearing: without it this passes on a get_config() that did
+        # nothing at all, and the mode assertion below would mean nothing.
+        self.assertIn("audit_mode", path.read_text(encoding="utf-8"))
+        self.assertEqual(path.stat().st_mode & 0o777, OWNER_ONLY_FILE)
 
 
 if __name__ == "__main__":
