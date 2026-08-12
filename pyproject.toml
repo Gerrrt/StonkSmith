@@ -52,12 +52,14 @@ sources = [ "src" ]
 [tool.pytest.ini_options]
 addopts = [ "-ra", "--strict-config", "--strict-markers" ]
 # A warning the suite does not notice is a warning that becomes a breakage on
-# some later dependency bump, so they are errors here.
+# some later dependency bump, so "error" fails the suite on every one of them.
 #
-# ResourceWarning is included deliberately, and the suite only survives it
-# because shutdown_db() disposes its engine. An unclosed sqlite connection is
-# raised during finalisation, where no test is running to fail, so this line is
-# the only thing that turns the next leak back into a red build.
+# That single entry does more than it looks. Python ignores ResourceWarning by
+# default, so promoting warnings to errors is what takes an unclosed sqlite
+# connection from invisible to fatal -- and the suite passes under it only
+# because shutdown_db() disposes its engine. Such a warning is raised during
+# finalisation, with no test running to pin it on, so an ignore added back here
+# would not be quieting a known problem; it would be hiding the next one.
 filterwarnings = [ "error" ]
 pythonpath = [ "src" ]
 testpaths = [ "tests" ]
