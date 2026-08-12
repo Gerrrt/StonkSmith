@@ -1,0 +1,133 @@
+name: Release
+
+# Tag-driven, and only ever from a tag. A release that could be fired by hand
+# against an arbitrary ref is a release whose contents nobody can reconstruct
+# later from the tag alone.
+on:
+  push:
+    tags: [ "v*" ]
+
+# Nothing here is safe to run twice against the same tag: PyPI rejects a
+# re-upload of a version it already has, and a second GitHub release for one tag
+# is an error. Queue rather than cancel, so a re-run cannot race the first.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Split from publishing on purpose. This job needs nothing but read access;
+  # keeping it separate means the token that can write releases and mint a PyPI
+  # identity is never in scope while arbitrary project code is being built.
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Pinned to commits, not tags -- see .github/workflows/ci.yml for why.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      # Before anything is built. A v0.2.0 tag on a tree declaring 0.1.0
+      # produces artifacts named after the file and a release named after the
+      # tag, and the mismatch is invisible until somebody installs the wrong
+      # thing. The version is single-sourced in pyproject.toml, so the tag is
+      # the only place a second copy of it can appear -- and this is the check
+      # that stops the two parting company.
+      - name: The tag must be the version
+        id: version
+        # The runner's own python3 rather than uv's: tomllib is in the standard
+        # library, and this should not depend on a toolchain being up before it
+        # can say the tag is wrong.
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          declared="$(python3 -c 'import tomllib,pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')"
+          if [ "$tag" != "$declared" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} says $tag, pyproject.toml says $declared"
+            exit 1
+          fi
+          echo "version=$declared" >> "$GITHUB_OUTPUT"
+
+      # The changelog is the release notes. An entry that does not exist means
+      # the notes would be empty, and empty notes on a tagged release are how a
+      # changelog stops being maintained.
+      - name: The changelog must mention it
+        run: |
+          grep -q "^## \[${{ steps.version.outputs.version }}\]" CHANGELOG.md || {
+            echo "::error::CHANGELOG.md has no '## [${{ steps.version.outputs.version }}]' section"
+            exit 1
+          }
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # The gates again, against the tagged tree. CI ran them on the pull
+      # request, but a tag can point at any commit -- including one that never
+      # went through a pull request at all.
+      - name: Lint
+        run: uv run ruff check
+
+      - name: Format check
+        run: uv run ruff format --check
+
+      - name: Type check
+        run: uv run ty check
+
+      - name: Test
+        env:
+          PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
+        run: uv run pytest -q --cov --cov-fail-under=87
+
+      - name: Build
+        run: uv build
+
+      # Not a formality: this is what catches a packaging change that produces a
+      # wheel PyPI will reject, at the point where the fix is still a commit
+      # rather than a burned version number.
+      - name: Check the artifacts
+        run: uv run --no-project --with twine twine check --strict dist/*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # The environment is where the PyPI trusted publisher is scoped, and it is
+    # also where a required reviewer can be attached later without touching this
+    # file.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/stonksmith
+    permissions:
+      # Mints the short-lived OIDC token PyPI trades for an upload token. This
+      # is the whole reason there is no API token in repository secrets.
+      id-token: write
+      # Creating the release and attaching the artifacts to it.
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+
+      # After PyPI, deliberately. PyPI is the step that cannot be undone -- a
+      # version number is spent whether or not the release exists -- so the
+      # recoverable half goes second.
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md)."
