@@ -12,6 +12,7 @@ from typing import Any, cast
 from stonksmith.etc.context import BrokerDbProtocol, Context, ModuleProtocol
 from stonksmith.etc.logger import StonkSmithAdapter, _base_logger  # pyright: ignore
 from stonksmith.etc.paths import package_root, stonksmith_path
+from stonksmith.loaders._legacy_names import legacy_top_level_names
 from stonksmith.loaders.brokerloader import ModuleSpec
 
 
@@ -23,7 +24,11 @@ def _is_valid_module(filename: str) -> bool:
 def _is_valid_spec(spec: ModuleSpec | None) -> ModuleType | None:
     if spec and spec.loader:
         module_obj: ModuleType = importlib.util.module_from_spec(spec=spec)
-        spec.loader.exec_module(module=module_obj)
+        # The one place a module file is executed -- init_module() and
+        # get_module_info() both come through here -- so it is also the one place
+        # a user module written against the pre-namespace names is rescued.
+        with legacy_top_level_names():
+            spec.loader.exec_module(module=module_obj)
         return module_obj
     return None
 
