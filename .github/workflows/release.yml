@@ -43,8 +43,11 @@ jobs:
         # library, and this should not depend on a toolchain being up before it
         # can say the tag is wrong.
         run: |
+          # Opened binary and parsed by tomllib, which decodes UTF-8 itself.
+          # read_text() without an encoding would take the runner's locale, and
+          # TOML is UTF-8 whatever that happens to be.
+          declared="$(python3 -c 'import tomllib,pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_bytes().decode())["project"]["version"])')"
           tag="${GITHUB_REF_NAME#v}"
-          declared="$(python3 -c 'import tomllib,pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')"
           if [ "$tag" != "$declared" ]; then
             echo "::error::tag ${GITHUB_REF_NAME} says $tag, pyproject.toml says $declared"
             exit 1
@@ -55,11 +58,25 @@ jobs:
       # the notes would be empty, and empty notes on a tagged release are how a
       # changelog stops being maintained.
       - name: The changelog must mention it
+        env:
+          # Through the environment rather than interpolated into the script.
+          # The value is our own and not attacker-controlled, but a `${{ }}`
+          # expanded into a shell body is the shape of a script injection and is
+          # not worth keeping as a habit.
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          grep -q "^## \[${{ steps.version.outputs.version }}\]" CHANGELOG.md || {
-            echo "::error::CHANGELOG.md has no '## [${{ steps.version.outputs.version }}]' section"
-            exit 1
-          }
+          # re.escape, not grep: a version is full of dots, and an unescaped dot
+          # is a wildcard. This one is release-critical enough that it should
+          # match the heading it names and nothing else.
+          python3 - <<'PY'
+          import os, pathlib, re, sys
+
+          version = os.environ["VERSION"]
+          body = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+
+          if not re.search(rf"^## \[{re.escape(version)}\]", body, re.MULTILINE):
+              sys.exit(f"::error::CHANGELOG.md has no '## [{version}]' section")
+          PY
 
       - name: Install dependencies
         run: uv sync --locked

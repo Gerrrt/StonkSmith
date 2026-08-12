@@ -144,6 +144,27 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("GITHUB_REF_NAME#v", self.text)
         self.assertIn('if [ "$tag" != "$declared" ]', self.text)
 
+    def test_the_changelog_check_escapes_the_version(self) -> None:
+        # A version is mostly dots, and a dot in a regex matches anything -- so
+        # `grep "^## \[0.1.0\]"` accepts a heading reading `## [0x1x0]`, which
+        # was measured rather than supposed. The gate that decides whether a
+        # release has notes should match the heading it names and nothing else.
+        self.assertIn(
+            "re.escape(version)",
+            self.text,
+            "the changelog gate has to escape the version before matching it",
+        )
+
+    def test_it_reads_pyproject_without_asking_the_locale(self) -> None:
+        # read_text() with no encoding takes the runner's locale. TOML is UTF-8
+        # whatever that happens to be, and a release workflow is a bad place to
+        # find out they differ.
+        self.assertNotIn(
+            'pathlib.Path("pyproject.toml").read_text()',
+            self.text,
+            "read pyproject.toml as bytes and let tomllib decode it",
+        )
+
     def test_publishing_asks_for_no_more_than_it_needs(self) -> None:
         # id-token: write is what makes trusted publishing work without an API
         # token in repository secrets. contents: write creates the release. The
