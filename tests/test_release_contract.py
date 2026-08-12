@@ -23,6 +23,8 @@ import re
 import tomllib
 import unittest
 
+import yaml
+
 from package_tree import PACKAGE, REPO
 
 CHANGELOG = REPO / "CHANGELOG.md"
@@ -31,12 +33,6 @@ WORKFLOW = REPO / ".github" / "workflows" / "release.yml"
 
 #: A Keep a Changelog release heading: `## [1.2.3] - 2026-08-12`.
 RELEASE_HEADING = re.compile(r"^## \[(?P<version>\d+\.\d+\.\d+)\]", re.MULTILINE)
-
-#: A tag trigger for `v*`, in any of the spellings YAML allows for it -- the
-#: flow form with or without quotes and inner spaces, or the block form.
-TAG_TRIGGER = re.compile(
-    r"""tags:\s*(?:\[\s*['"]?v\*['"]?\s*\]|\n\s*-\s*['"]?v\*['"]?)"""
-)
 
 
 def config() -> dict:
@@ -130,25 +126,39 @@ class PackageMetadataTests(unittest.TestCase):
 
 
 class ReleaseWorkflowTests(unittest.TestCase):
-    """The workflow is only exercised by tagging, which is too late to find out."""
+    """The workflow is only exercised by tagging, which is too late to find out.
+
+    Parsed rather than grepped. Every assertion here began as a substring check
+    against the file, and the permissions one was the proof that this is not the
+    same thing: it asserted that ``id-token: write`` appeared *somewhere*, while
+    the comment above it claimed the build job did not have it. Granting the
+    build job that exact permission left the test green.
+    """
 
     def setUp(self) -> None:
         self.text: str = WORKFLOW.read_text(encoding="utf-8")
+        self.workflow: dict = yaml.safe_load(stream=self.text)
+        self.jobs: dict = self.workflow["jobs"]
+
+    def triggers(self) -> dict:
+        """
+        What the workflow runs on.
+
+        YAML 1.1 reads a bare ``on`` as the boolean true, so the key this parses
+        out is ``True`` rather than the string. Quoting it in the file would fix
+        that and make the file worse to read, so it is handled here.
+        :return: The ``on:`` mapping
+        """
+
+        return self.workflow.get("on") or self.workflow[True]
 
     def test_it_only_fires_on_a_version_tag(self) -> None:
-        # Matched loosely on purpose. This asserted the exact string
-        # `tags: [ "v*" ]`, which fails on a reformat that changes nothing --
-        # dropping the inner spaces, single quotes, or the block form with a
-        # dash. A test that breaks on harmless edits gets relaxed by whoever it
-        # inconveniences, and the thing worth pinning is that the trigger is a
-        # v-prefixed tag rather than how it happens to be written.
-        self.assertRegex(self.text, TAG_TRIGGER)
-        self.assertNotIn(
-            "workflow_dispatch",
-            self.text,
-            "a release that can be fired by hand against an arbitrary ref is one "
-            "whose contents cannot be reconstructed from the tag",
-        )
+        self.assertEqual(self.triggers(), {"push": {"tags": ["v*"]}})
+
+    def test_nothing_can_fire_it_by_hand(self) -> None:
+        # A release firable against an arbitrary ref is one whose contents
+        # cannot be reconstructed from the tag afterwards.
+        self.assertNotIn("workflow_dispatch", self.triggers())
 
     def test_it_compares_the_tag_against_the_declared_version(self) -> None:
         # The check this whole file exists around: the tag is the only place a
@@ -199,20 +209,50 @@ class ReleaseWorkflowTests(unittest.TestCase):
             f"these would annotate nothing: {stderr_bound}",
         )
 
-    def test_publishing_asks_for_no_more_than_it_needs(self) -> None:
-        # id-token: write is what makes trusted publishing work without an API
-        # token in repository secrets. contents: write creates the release. The
-        # build job, which runs project code, gets neither.
-        self.assertIn("id-token: write", self.text)
-        self.assertIn("contents: read", self.text)
+    def test_the_build_job_holds_no_publishing_rights(self) -> None:
+        # The one that matters. The build job checks out the tag and runs
+        # project code -- the tests, the lint, the build backend -- so it is the
+        # job an attacker reaches first, and it must not be able to publish
+        # anything or write to the repository.
+        self.assertEqual(self.jobs["build"]["permissions"], {"contents": "read"})
+
+    def test_only_the_publish_job_can_mint_an_identity(self) -> None:
+        # id-token: write is what trades an OIDC token for a PyPI upload, which
+        # is why there is no API token in repository secrets. contents: write
+        # creates the release. Both belong to the job that does nothing but move
+        # an already-built artifact.
+        self.assertEqual(
+            self.jobs["publish"]["permissions"],
+            {"id-token": "write", "contents": "write"},
+        )
+
+        for name, job in self.jobs.items():
+            if name == "publish":
+                continue
+
+            with self.subTest(job=name):
+                self.assertNotIn("id-token", job.get("permissions", {}))
+
+    def test_publishing_waits_for_the_gates(self) -> None:
+        # Without needs:, the two jobs run at once and a tag whose tests fail is
+        # on PyPI before anyone knows.
+        self.assertEqual(self.jobs["publish"]["needs"], "build")
+
+    def test_every_job_states_its_permissions(self) -> None:
+        # A job with no permissions block inherits the repository default, which
+        # on an older repository is write on every scope.
+        for name, job in self.jobs.items():
+            with self.subTest(job=name):
+                self.assertIn("permissions", job, f"{name} inherits the default token")
 
     def test_every_action_is_pinned_to_a_commit(self) -> None:
         # Same reasoning as ci.yml: a tag is a pointer its owner can move, and
         # whatever it lands on runs here with a PyPI identity in scope.
         unpinned: list[str] = [
-            line.strip()
-            for line in self.text.splitlines()
-            if "uses:" in line and not re.search(r"@[0-9a-f]{40}\b", line)
+            uses
+            for job in self.jobs.values()
+            for step in job["steps"]
+            if (uses := step.get("uses")) and not re.search(r"@[0-9a-f]{40}$", uses)
         ]
 
         self.assertEqual(unpinned, [], f"not pinned to a commit: {unpinned}")
