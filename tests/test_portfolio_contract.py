@@ -22,10 +22,11 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from etc.broker_db import BrokerDatabase
-from etc.context import PortfolioDbProtocol
-from etc.infrastructure import create_db_engine
-from etc.portfolio import (
+from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.broker_db import BrokerDatabase
+from stonksmith.etc.context import PortfolioDbProtocol
+from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
     NET_WORTH_COLUMNS,
@@ -41,8 +42,7 @@ from etc.portfolio import (
     read_history,
     read_workspace,
 )
-from etc.records import AccountIdentity, Holding, Transaction
-from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.records import AccountIdentity, Holding, Transaction
 
 #: A scraped 529: a fund code, contributions and growth, no ticker.
 FUND = Holding(

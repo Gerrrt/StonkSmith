@@ -29,11 +29,11 @@ from unittest.mock import MagicMock, patch
 
 from sqlalchemy import text
 
-from etc.broker_db import BrokerDatabase
-from etc.broker_nav import BrokerNavigator
-from etc.infrastructure import create_db_engine
-from etc.records import AccountIdentity, Holding
 from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.broker_db import BrokerDatabase
+from stonksmith.etc.broker_nav import BrokerNavigator
+from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.records import AccountIdentity, Holding
 
 TSP = AccountIdentity(
     account_key="TSP L 2060", display_name="TSP L 2060", kind="INVESTMENT"
@@ -171,13 +171,13 @@ class DeleteCommand(unittest.TestCase):
         # nothing takes the whole shell down.
         del self.db.delete_snapshot
 
-        with patch("etc.broker_nav.stonksmith_logger") as log:
+        with patch("stonksmith.etc.broker_nav.stonksmith_logger") as log:
             self.nav.do_delete("snapshot 12")
 
         self.assertIn("cannot delete", str(object=log.fail.call_args))
 
     def test_the_usage_line_names_both(self) -> None:
-        with patch("etc.broker_nav.stonksmith_logger") as log:
+        with patch("stonksmith.etc.broker_nav.stonksmith_logger") as log:
             self.nav.do_delete("snapshot")
 
         said = str(object=log.fail.call_args)

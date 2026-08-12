@@ -17,7 +17,7 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-from helpers.ally import (
+from stonksmith.helpers.ally import (
     INVESTMENT_KIND,
     account_balances,
     account_label,

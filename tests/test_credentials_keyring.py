@@ -9,7 +9,8 @@ import keyring
 import keyring.backend
 from sqlalchemy import text
 
-from etc.infrastructure import create_db_engine
+from package_tree import PACKAGE
+from stonksmith.etc.infrastructure import create_db_engine
 
 
 class _MemoryKeyring(keyring.backend.KeyringBackend):
@@ -34,7 +35,7 @@ class _MemoryKeyring(keyring.backend.KeyringBackend):
 def _load_database_class() -> type:
     """Load the broker Database the way BrokerLoader does: by file path."""
 
-    path = Path(__file__).resolve().parents[1] / "src/brokers/schwab529plan/database.py"
+    path = PACKAGE / "brokers/schwab529plan/database.py"
     spec = importlib.util.spec_from_file_location("schwab529_database", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

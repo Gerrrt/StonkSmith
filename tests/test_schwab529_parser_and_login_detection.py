@@ -1,15 +1,10 @@
 import unittest
 from importlib.util import module_from_spec, spec_from_file_location
-from pathlib import Path
 from typing import Any, ClassVar
 
-_BROKER_FILE = (
-    Path(__file__).resolve().parents[1]
-    / "src"
-    / "brokers"
-    / "schwab529plan"
-    / "broker.py"
-)
+from package_tree import PACKAGE
+
+_BROKER_FILE = PACKAGE / "brokers" / "schwab529plan" / "broker.py"
 _SPEC = spec_from_file_location("brokers_schwab529plan_file", _BROKER_FILE)
 if _SPEC is None or _SPEC.loader is None:
     raise RuntimeError("Unable to load Schwab529plan broker module for tests")
@@ -149,13 +144,7 @@ class Schwab529LoginDetectionTests(unittest.TestCase):
         self.assertFalse(result)
 
 
-_PARSER_FILE = (
-    Path(__file__).resolve().parents[1]
-    / "src"
-    / "brokers"
-    / "schwab529plan"
-    / "parser.py"
-)
+_PARSER_FILE = PACKAGE / "brokers" / "schwab529plan" / "parser.py"
 _PARSER_SPEC = spec_from_file_location("brokers_schwab529plan_parser", _PARSER_FILE)
 if _PARSER_SPEC is None or _PARSER_SPEC.loader is None:
     raise RuntimeError("Unable to load Schwab529plan parser module for tests")

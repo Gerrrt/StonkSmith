@@ -17,9 +17,9 @@ import unittest
 from typing import Any, ClassVar
 from unittest.mock import MagicMock, patch
 
-from etc.records import AccountIdentity
-from helpers.schwab529plan import account_hint, column_map, match_account
-from modules.schwab529plan_module import Schwab529Module
+from stonksmith.etc.records import AccountIdentity
+from stonksmith.helpers.schwab529plan import account_hint, column_map, match_account
+from stonksmith.modules.schwab529plan_module import Schwab529Module
 
 _TX_COLUMNS: tuple[str, ...] = (
     "Processed",
@@ -281,7 +281,7 @@ class OnLoginTransactionRoutingTests(unittest.TestCase):
         context.db = db
         context.log = MagicMock()
 
-        with patch("modules.schwab529plan_module.sync"):
+        with patch("stonksmith.modules.schwab529plan_module.sync"):
             Schwab529Module().on_login(context, connection)
 
         return db, context
@@ -424,7 +424,7 @@ class SingleAccountRegressionTests(unittest.TestCase):
         context.db = db
         context.log = MagicMock()
 
-        with patch("modules.schwab529plan_module.sync"):
+        with patch("stonksmith.modules.schwab529plan_module.sync"):
             Schwab529Module().on_login(context, connection)
 
         self.assertEqual(len(db.snapshots), 1)

@@ -13,9 +13,10 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from config_isolation import UserConfigMixin
-from etc.broker_db import BrokerDatabase
-from etc.infrastructure import create_db_engine
-from etc.portfolio import (
+from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.broker_db import BrokerDatabase
+from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.portfolio import (
     ACCOUNT_COLUMNS,
     CARRIED,
     HOLDING_COLUMNS,
@@ -24,7 +25,7 @@ from etc.portfolio import (
     TRANSACTION_COLUMNS,
     read_workspace,
 )
-from etc.portfolio_sheet import (
+from stonksmith.etc.portfolio_sheet import (
     ACCOUNTS_TAB,
     BANNER,
     DASHBOARD_TAB,
@@ -34,9 +35,8 @@ from etc.portfolio_sheet import (
     TRANSACTIONS_TAB,
     refresh,
 )
-from etc.records import AccountIdentity, Holding, Transaction
-from helpers.sheets import SheetsUnavailable
-from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.records import AccountIdentity, Holding, Transaction
+from stonksmith.helpers.sheets import SheetsUnavailable
 
 
 class FakeBook:

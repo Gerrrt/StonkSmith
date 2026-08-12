@@ -169,7 +169,7 @@ Those five tabs each grew their own layout, and nothing shared a column:
 `Synced`, `Price date` and `Units as of` were three answers to one question. A
 formula pointing at `SnapTrade!D:D` broke the day a column moved.
 
-`src/etc/portfolio.py` settles that. It reads every broker database in the
+`src/stonksmith/etc/portfolio.py` settles that. It reads every broker database in the
 workspace and produces four row shapes, shared across all brokers:
 
 **Accounts** — one row per account. Summing `Value` gives the portfolio total.
@@ -356,7 +356,7 @@ that could cut through the middle of one is where a real id stops being optional
 SnapTrade already supplies one, which is why only the 529 scraper's rows are
 keyed this way at all.
 
-`src/etc/portfolio_sheet.py` is the only thing that writes them: one read of the
+`src/stonksmith/etc/portfolio_sheet.py` is the only thing that writes them: one read of the
 workspace, one authorization, five tabs. Values go up raw, so a number arrives
 as a number — and so an account whose display name begins with `=` stays a name
 instead of becoming a formula the spreadsheet runs.

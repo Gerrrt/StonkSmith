@@ -6,13 +6,11 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import etc.config
-from etc.config import process_secret
-from etc.connection import Connection
-from etc.logger import stonksmith_logger
-from loaders.moduleloader import ModuleLoader
-
-SRC = Path(__file__).resolve().parents[1] / "src"
+import stonksmith.etc.config as etc_config
+from stonksmith.etc.config import process_secret
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.logger import stonksmith_logger
+from stonksmith.loaders.moduleloader import ModuleLoader
 
 _config_home: tempfile.TemporaryDirectory | None = None
 _config_patch = None
@@ -33,18 +31,18 @@ def setUpModule() -> None:
 
     _config_home = tempfile.TemporaryDirectory()
     _config_patch = patch.object(
-        etc.config, "user_cfg_path", Path(_config_home.name) / "stonksmith.conf"
+        etc_config, "user_cfg_path", Path(_config_home.name) / "stonksmith.conf"
     )
     _config_patch.start()
 
     # The merged config is cached in a process global, so patching the path
     # without dropping the cache would leave whatever an earlier test module
     # loaded -- and would leak this module's config to the next one.
-    etc.config.reset_config_cache()
+    etc_config.reset_config_cache()
 
 
 def tearDownModule() -> None:
-    etc.config.reset_config_cache()
+    etc_config.reset_config_cache()
 
     if _config_patch is not None:
         _config_patch.stop()
@@ -99,11 +97,11 @@ class ModuleLoaderPrepareTests(unittest.TestCase):
 class StonkSmithDBGuardTests(unittest.TestCase):
     """do_broker indexed brokers[...]['nvpath'] without checking it existed."""
 
-    @patch("etc.stonksmithdb.BrokerLoader")
+    @patch("stonksmith.etc.stonksmithdb.BrokerLoader")
     def test_incomplete_broker_reports_instead_of_raising(
         self, mock_loader: MagicMock
     ) -> None:
-        from etc.stonksmithdb import StonkSmithDBMenu
+        from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
 
         # A broker package with broker.py but no database.py/db_navigator.py:
         # 'path' only, no nvpath/dbpath.
@@ -122,7 +120,7 @@ class StonkSmithDBGuardTests(unittest.TestCase):
         self.assertIn("incomplete", printed)
 
     def test_exit_is_a_command_method_returning_true(self) -> None:
-        from etc.stonksmithdb import StonkSmithDBMenu
+        from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
 
         # do_exit used to be a module-level function, so cmd.Cmd never saw it.
         self.assertTrue(callable(getattr(StonkSmithDBMenu, "do_exit", None)))

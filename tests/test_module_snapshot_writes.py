@@ -24,10 +24,10 @@ import unittest
 from typing import Any, ClassVar
 from unittest.mock import MagicMock, patch
 
-from etc.context import Context, SnapshotDbProtocol
-from etc.records import AccountIdentity, Holding, Transaction
-from modules.fidelity_module import FidelityModule
-from modules.schwab529plan_module import Schwab529Module
+from stonksmith.etc.context import Context, SnapshotDbProtocol
+from stonksmith.etc.records import AccountIdentity, Holding, Transaction
+from stonksmith.modules.fidelity_module import FidelityModule
+from stonksmith.modules.schwab529plan_module import Schwab529Module
 
 
 class _LegacyDb:
@@ -149,7 +149,7 @@ class FidelityWriteTests(unittest.TestCase):
         # Stubbed for the same reason as elsewhere: the sheet sync reads the
         # configured workspace to know which databases to render, and letting it
         # would rewrite the developer's own config. This is about the snapshot.
-        with patch("modules.fidelity_module.sync", return_value=True):
+        with patch("stonksmith.modules.fidelity_module.sync", return_value=True):
             return module.on_login(context=context, connection=connection)
 
     def test_a_snapshot_database_receives_a_number_not_a_string(self) -> None:
@@ -499,7 +499,7 @@ class Schwab529WriteTests(unittest.TestCase):
         self.assertNotIn("$50.00", printed, "values do not belong in a diagnostic")
 
     def test_the_beneficiary_is_stored_rather_than_folded_into_a_name(self) -> None:
-        from helpers.schwab529plan import beneficiary_field
+        from stonksmith.helpers.schwab529plan import beneficiary_field
 
         self.assertEqual(
             beneficiary_field(beneficiaries=self.BENEFICIARIES, index=1, key="Name"),
@@ -513,7 +513,7 @@ class Schwab529WriteTests(unittest.TestCase):
     def test_an_unpaired_balance_gets_no_beneficiary_rather_than_the_wrong_one(
         self,
     ) -> None:
-        from helpers.schwab529plan import beneficiary_field
+        from stonksmith.helpers.schwab529plan import beneficiary_field
 
         self.assertIsNone(
             beneficiary_field(beneficiaries=self.BENEFICIARIES, index=5, key="Name")

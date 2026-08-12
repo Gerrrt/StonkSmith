@@ -41,14 +41,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from helpers.tsp import (
+from stonksmith.helpers.tsp import (
     CLOSING_BALANCE_LABEL,
     fund_values,
     leading_columns,
     sole_position,
     statement_funds,
 )
-from modules.tsp_module import read_statement, statement_reconciles
+from stonksmith.modules.tsp_module import read_statement, statement_reconciles
 
 HERE = Path(__file__).resolve().parent
 TRANSFER = HERE / "tsp_statement_transfer.txt"

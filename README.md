@@ -126,14 +126,15 @@ five apps between them will not.
 ```text
 StonkSmith/
 |--- src/
-|    |--- main.py            # CLI entry point
-|    |--- etc/               # config, logging, connection, shells, paths,
-|    |                       #   records, database, the canonical row shape
-|    |                       #   and the one thing that writes it to a sheet
-|    |--- brokers/           # one package per broker (broker.py + helpers)
-|    |--- modules/           # per-broker scrape/sync modules
-|    |--- loaders/           # dynamic broker and module loading
-|    |--- helpers/           # db, sheets, logging helpers
+|    |--- stonksmith/        # the one name this project installs
+|         |--- main.py       # CLI entry point
+|         |--- etc/          # config, logging, connection, shells, paths,
+|         |                  #   records, database, the canonical row shape
+|         |                  #   and the one thing that writes it to a sheet
+|         |--- brokers/      # one package per broker (broker.py + helpers)
+|         |--- modules/      # per-broker scrape/sync modules
+|         |--- loaders/      # dynamic broker and module loading
+|         |--- helpers/      # db, sheets, logging helpers
 |--- docs/                # the reference chapters this file summarises,
 |                         #   live verification, what a schedule can carry,
 |                         #   and what was decided against
@@ -142,16 +143,25 @@ StonkSmith/
 |--- pyproject.toml
 ```
 
+Everything lives under `stonksmith/` so that the wheel installs exactly one
+importable name. It used to install six — `main`, `etc`, `helpers`, `modules`,
+`loaders`, `brokers` — straight into `site-packages`, where any of them could
+collide with an unrelated package in the same environment.
+
 Each broker is one package. `brokers/<name>/broker.py` holds the login class and
 publishes it as `Broker`, alongside `database.py`, `db_navigator.py`,
 `broker_args.py` and any `parser.py`. A directory containing
 `broker.py` *is* a broker — that is how `BrokerLoader` discovers them, scanning
-`src/brokers/` first and then `~/.stonksmith/brokers/`. Everything except
+`src/stonksmith/brokers/` first and then `~/.stonksmith/brokers/`. Everything except
 `broker.py` is optional; a broker without `database.py` and `db_navigator.py` is
 listed as "incomplete" by `stonksmithdb`. A broker that *raises* while loading is
 reported by name and skipped — it registers no subparser and is simply
 unavailable for that run, so a half-finished broker under
 `~/.stonksmith/brokers/` never takes the rest of the tool down with it.
+
+Your own brokers and modules import from `stonksmith.` — see
+[what to import](docs/modules.md#what-to-import), which also covers the
+pre-namespace names, still accepted under deprecation until 1.0.
 
 Brokers come in three shapes. A **scraper** posts a form and reads the response,
 and subclasses `Connection`: Schwab 529. A **browser-backed** broker has a login
@@ -163,7 +173,7 @@ subclasses `ApiConnection`: SnapTrade, and TSP, which holds no key either
 because the data it reads is published.
 
 What a module is handed and what it must return is
-[`docs/modules.md`](docs/modules.md); `src/modules/example.py` is the annotated
+[`docs/modules.md`](docs/modules.md); `src/stonksmith/modules/example.py` is the annotated
 template.
 
 > [!NOTE]
@@ -487,7 +497,7 @@ future.
 The version lives in `pyproject.toml` and nowhere else. `--version` and the
 banner read it off the installed distribution, so bumping it is one edit
 followed by `uv sync` — and `tests/test_version_single_source.py` fails if the
-two ever part company. The codename beside it in `src/etc/cli.py` is the one
+two ever part company. The codename beside it in `src/stonksmith/etc/cli.py` is the one
 piece still written by hand, because nothing can derive one.
 
 A change to anything under `docs/` carries one extra obligation: those files are

@@ -5,8 +5,8 @@ whole story: get_config() backfills options missing from the shipped defaults
 and writes the merged result back whenever the user file already exists, so a
 test that merely *calls* it -- directly, or through process_secret() or
 get_workspace() -- rewrites the real ~/.stonksmith/stonksmith.conf. Adding a
-section to src/etc/stonksmith.conf then shows up as an unexplained diff in the
-developer's home directory. Saving a browser session is the same story: it
+section to src/stonksmith/etc/stonksmith.conf then shows up as an unexplained
+diff in the developer's home directory. Saving a browser session is the same story: it
 mkdirs ~/.stonksmith/playwright before writing.
 
 This runs the rest of the suite against a throwaway $HOME and asserts that
@@ -92,8 +92,9 @@ class SuiteLeavesHomeAloneTests(unittest.TestCase):
                 after.get("stonksmith.conf"),
                 SEED_CONFIG.encode(),
                 "the suite rewrote ~/.stonksmith/stonksmith.conf; isolate the "
-                "test that reaches get_config() -- patch etc.config.user_cfg_path "
-                "and call etc.config.reset_config_cache(), which drops the "
+                "test that reaches get_config() -- patch "
+                "stonksmith.etc.config.user_cfg_path and call "
+                "stonksmith.etc.config.reset_config_cache(), which drops the "
                 "process-global cache the patch is otherwise powerless against",
             )
             self.assertEqual(

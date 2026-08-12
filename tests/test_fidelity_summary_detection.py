@@ -16,9 +16,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import etc.browser_connection as browser_mod
-
-SRC = Path(__file__).resolve().parents[1] / "src"
+import stonksmith.etc.browser_connection as browser_mod
+from package_tree import PACKAGE
 
 # The real redirect observed in the wild.
 LOGIN_URL = (
@@ -36,7 +35,7 @@ SUMMARY_BODY = "<html><div>holdings</div></html>"
 
 def _load_fidelity():
     spec = importlib.util.spec_from_file_location(
-        "fidelity_broker_summary", SRC / "brokers/fidelity/broker.py"
+        "fidelity_broker_summary", PACKAGE / "brokers/fidelity/broker.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

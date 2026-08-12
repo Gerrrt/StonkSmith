@@ -20,8 +20,8 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from etc.cli import gen_cli_args
-from loaders.brokerloader import BrokerLoader
+from stonksmith.etc.cli import gen_cli_args
+from stonksmith.loaders.brokerloader import BrokerLoader
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -100,7 +100,7 @@ class BrokenBrokerArgsTests(_CaptureMixin, unittest.TestCase):
 
             with (
                 patch.object(sys, "argv", ["stonksmith", *argv]),
-                patch("etc.cli.BrokerLoader", _loader_for(root)),
+                patch("stonksmith.etc.cli.BrokerLoader", _loader_for(root)),
             ):
                 return gen_cli_args()
 
@@ -195,10 +195,10 @@ class LoadBrokerGuardTests(_CaptureMixin, unittest.TestCase):
 
 
 class MainSurvivesABrokenDatabaseTests(_CaptureMixin, unittest.TestCase):
-    """main.py loads database.py by path with only an `is None` check."""
+    """stonksmith.main.py loads database.py by path with only an `is None` check."""
 
     def test_a_database_that_raises_on_import_exits_one(self) -> None:
-        import main as main_module
+        import stonksmith.main as main_module
 
         with tempfile.TemporaryDirectory() as tmp:
             package = Path(tmp)

@@ -20,16 +20,16 @@ from unittest.mock import MagicMock, patch
 
 from gspread.utils import ValueRenderOption
 
-import etc.config
+import stonksmith.etc.config as etc_config
 from config_isolation import UserConfigMixin
-from etc.portfolio import (
+from stonksmith.etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
     NET_WORTH_COLUMNS,
     TRANSACTION_COLUMNS,
     Portfolio,
 )
-from etc.portfolio_sheet import (
+from stonksmith.etc.portfolio_sheet import (
     ACCOUNTS_TAB,
     ALLOCATION_CHECK,
     ALLOCATION_REFUSED,
@@ -46,7 +46,7 @@ from etc.portfolio_sheet import (
     check_tabs,
     column_index,
 )
-from helpers.sheets import SheetsUnavailable
+from stonksmith.helpers.sheets import SheetsUnavailable
 
 #: Two movements under one account, newest first, both normalized.
 MOVEMENTS: tuple[tuple[str, str], ...] = (
@@ -293,7 +293,7 @@ def run(
     transactions = tuple(MagicMock() for _ in range(movements))
 
     with patch(
-        "etc.portfolio_sheet.read_workspace",
+        "stonksmith.etc.portfolio_sheet.read_workspace",
         return_value=Portfolio(transactions=transactions),
     ):
         cases = check_tabs(book=fake, classes=classes or {})
@@ -561,15 +561,15 @@ class AllocationReadBackTests(UserConfigMixin, unittest.TestCase):
         # The default path, which the rest of this file bypasses. check_tabs has
         # to consult the same config the sync did, or verify would check for a
         # block the run never drew -- or miss the one it did.
-        etc.config.user_cfg_path.write_text(
+        etc_config.user_cfg_path.write_text(
             data="[ALLOCATION]\nasset_classes =\n    VTI = US Stock\n"
         )
-        etc.config.reset_config_cache()
+        etc_config.reset_config_cache()
 
         transactions = tuple(MagicMock() for _ in range(len(MOVEMENTS)))
 
         with patch(
-            "etc.portfolio_sheet.read_workspace",
+            "stonksmith.etc.portfolio_sheet.read_workspace",
             return_value=Portfolio(transactions=transactions),
         ):
             cases = check_tabs(book=book())

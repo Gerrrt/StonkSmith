@@ -27,9 +27,9 @@ from unittest.mock import MagicMock
 from bs4 import BeautifulSoup
 from requests.exceptions import RequestException
 
-BROKER_FILE = (
-    Path(__file__).resolve().parents[1] / "src" / "brokers" / "tsp" / "broker.py"
-)
+from package_tree import PACKAGE
+
+BROKER_FILE = PACKAGE / "brokers" / "tsp" / "broker.py"
 
 PRICES = Path(__file__).resolve().parent / "tsp_prices.csv"
 PAY_TABLE = Path(__file__).resolve().parent / "dfas_basic_pay_em.html"
@@ -203,7 +203,7 @@ class TspLoadTests(unittest.TestCase):
     def test_downloads_with_nothing_configured_but_the_fund(self) -> None:
         # The point of the default URL: fund and units are the whole setup, and
         # a run with neither price_url nor --prices has to work.
-        from etc.config import DEFAULT_TSP_PRICE_URL
+        from stonksmith.etc.config import DEFAULT_TSP_PRICE_URL
 
         self.module.get_tsp_price_url = lambda: DEFAULT_TSP_PRICE_URL
         self.broker.session.get.return_value = _response(
@@ -578,7 +578,7 @@ class TspPriceUrlTests(unittest.TestCase):
     """get_tsp_price_url(): blank means unset, not "download nothing"."""
 
     def setUp(self) -> None:
-        import etc.config as config
+        import stonksmith.etc.config as config
 
         self.config = config
 

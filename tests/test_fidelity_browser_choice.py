@@ -16,14 +16,13 @@ from unittest.mock import MagicMock, patch
 
 from playwright.sync_api import Error as PlaywrightError
 
-import etc.browser_connection as browser_mod
-
-SRC = Path(__file__).resolve().parents[1] / "src"
+import stonksmith.etc.browser_connection as browser_mod
+from package_tree import PACKAGE
 
 
 def _load_fidelity():
     spec = importlib.util.spec_from_file_location(
-        "fidelity_broker_browser", SRC / "brokers/fidelity/broker.py"
+        "fidelity_broker_browser", PACKAGE / "brokers/fidelity/broker.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

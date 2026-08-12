@@ -21,8 +21,8 @@ from unittest.mock import MagicMock, patch
 
 from bs4 import BeautifulSoup
 
-from etc.context import SnapshotDbProtocol
-from modules.ally_module import AllyModule
+from stonksmith.etc.context import SnapshotDbProtocol
+from stonksmith.modules.ally_module import AllyModule
 
 FIXTURE = Path(__file__).resolve().parents[0] / "ally_holdings.html"
 
@@ -359,7 +359,7 @@ class UnitsAreDatedWhenTheyAreRead(unittest.TestCase):
         context.db = db
         context.args.from_prices = False
 
-        with patch("modules.ally_module.sync", return_value=True):
+        with patch("stonksmith.modules.ally_module.sync", return_value=True):
             AllyModule().on_login(context, connection)
 
         return db.saved[0]

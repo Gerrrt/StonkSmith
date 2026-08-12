@@ -24,11 +24,11 @@ from becoming one file written twice.
 ## What exists today
 
 **Nothing on the sheet side is blocking.** Two producers construct a `Transaction`:
-`transaction_from_row()` in `src/helpers/schwab529plan.py`, and `activity_transaction()` in
-`src/modules/snaptrade_module.py`. Those are the only two in `src/`.
+`transaction_from_row()` in `src/stonksmith/helpers/schwab529plan.py`, and `activity_transaction()` in
+`src/stonksmith/modules/snaptrade_module.py`. Those are the only two in `src/`.
 
-The `Transactions` tab branches on no broker at all. `src/etc/portfolio_sheet.py` writes
-`portfolio.transactions` whole, and `src/etc/portfolio.py` builds those rows out of whatever
+The `Transactions` tab branches on no broker at all. `src/stonksmith/etc/portfolio_sheet.py` writes
+`portfolio.transactions` whole, and `src/stonksmith/etc/portfolio.py` builds those rows out of whatever
 the workspace databases hold, filling `broker`, `source` and `account` from the account join.
 An Ally producer would appear on the tab the day one was written, with no change to the sheet
 code and no new column.
@@ -49,10 +49,10 @@ exactly what takes Fidelity from attended to unattended, as
 describes. For Ally that route does not exist, so there is no
 aggregator to fall back to and no path to transactions that does not go through the scraper.
 
-**No activity endpoint has ever been observed.** `src/modules/ally_module.py` navigates one
+**No activity endpoint has ever been observed.** `src/stonksmith/modules/ally_module.py` navigates one
 URL — `https://live.invest.ally.com/accounts/holdings-balances` — and reads the rendered DOM;
 the only other address the integration drives is `secure.ally.com`, for the sign-in in
-`src/brokers/ally/broker.py`. Five Ally endpoints have ever been recorded from a live run:
+`src/stonksmith/brokers/ally/broker.py`. Five Ally endpoints have ever been recorded from a live run:
 `api/session/checkSession`, the bank's `auth/login`, `auth/anonymous_invoke`, `auth/logout`
 and `api/account/get`. All five are session, auth and account-roster plumbing. Nothing in
 `src/`, in `docs/`, in the README or in the captured fixtures names an activity, history or
@@ -92,13 +92,13 @@ signed-in account.
 #99 made the response recorder produce that discovery evidence out of ordinary runs, at no
 extra cost and with nothing new to remember:
 
-- **armed before the CDP branch**, in `src/brokers/ally/broker.py`, so `--browser cdp`
+- **armed before the CDP branch**, in `src/stonksmith/brokers/ally/broker.py`, so `--browser cdp`
   records at all — it previously recorded nothing, and it is the path
   [`brokers.md`](brokers.md) recommends
 - **written on every exit**, from `BrowserConnection.teardown()` to
   `~/.stonksmith/logs/ally-data-calls-<stamp>.log`, rather than only after a failure
 - **carrying each endpoint's parameter names**, via `query_shape()` in
-  `src/etc/browser_connection.py`, with values, bodies and headers still never read
+  `src/stonksmith/etc/browser_connection.py`, with values, bodies and headers still never read
 
 That last point is what makes the log answer the question rather than merely restate it. A
 route called `activity` says nothing on its own; the same route taking `startDate` and
@@ -178,7 +178,7 @@ state this file was written to end.
 
 **A scraped Ally producer would supply no `external_id`,** exactly as the 529 scraper
 supplies none, so its rows would be keyed on their own content by `natural_keys()` in
-`src/etc/broker_db.py`. That function's own docstring states where content keying stops: a
+`src/stonksmith/etc/broker_db.py`. That function's own docstring states where content keying stops: a
 same-content group has to arrive whole in one window, because two $50 contributions on one
 day, fetched one per window, are byte-identical to the same contribution fetched twice — and
 with nothing but the row's own text the two cannot be told apart. The scheme picks a side and

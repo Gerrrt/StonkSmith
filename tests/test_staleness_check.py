@@ -23,9 +23,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from config_isolation import UserConfigMixin
-from etc.broker_db import BrokerDatabase
-from etc.infrastructure import create_db_engine
-from etc.portfolio import (
+from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.broker_db import BrokerDatabase
+from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.portfolio import (
     STALE_DAYS,
     AccountRow,
     Portfolio,
@@ -34,9 +35,8 @@ from etc.portfolio import (
     stale_cutoff,
     stale_reason,
 )
-from etc.records import AccountIdentity
-from etc.stonksmithdb import StonkSmithDBMenu
-from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.records import AccountIdentity
+from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
 
 TODAY = dt.date(2026, 8, 11)
 
@@ -229,7 +229,7 @@ class ShellTests(UserConfigMixin, MemoryKeyringMixin, unittest.TestCase):
         printed: list[str] = []
 
         with (
-            patch("etc.portfolio.workspace_dir", str(object=self.root)),
+            patch("stonksmith.etc.portfolio.workspace_dir", str(object=self.root)),
             patch(
                 "builtins.print",
                 side_effect=lambda *a: printed.append(" ".join(map(str, a))),

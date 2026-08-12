@@ -18,9 +18,8 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import etc.browser_connection as browser_mod
-
-SRC = Path(__file__).resolve().parents[1] / "src"
+import stonksmith.etc.browser_connection as browser_mod
+from package_tree import PACKAGE
 
 LOGIN_URL = "https://digital.fidelity.com/prgw/digital/signin/retail"
 SUMMARY_URL = "https://digital.fidelity.com/ftgw/digital/portfolio/summary"
@@ -28,7 +27,7 @@ SUMMARY_URL = "https://digital.fidelity.com/ftgw/digital/portfolio/summary"
 
 def _load_fidelity():
     spec = importlib.util.spec_from_file_location(
-        "fidelity_no_nav", SRC / "brokers/fidelity/broker.py"
+        "fidelity_no_nav", PACKAGE / "brokers/fidelity/broker.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

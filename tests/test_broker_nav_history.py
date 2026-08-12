@@ -20,9 +20,10 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-import etc.broker_nav as broker_nav
-from etc.broker_db import BrokerDatabase, natural_keys
-from etc.broker_nav import (
+import stonksmith.etc.broker_nav as broker_nav
+from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.broker_db import BrokerDatabase, natural_keys
+from stonksmith.etc.broker_nav import (
     CATEGORY_HEADERS,
     CURRENCY_HEADER,
     HISTORY_FILTERS,
@@ -32,9 +33,8 @@ from etc.broker_nav import (
     SHOW_LIMITS,
     BrokerNavigator,
 )
-from etc.infrastructure import create_db_engine
-from etc.records import AccountIdentity, Holding, Transaction
-from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.records import AccountIdentity, Holding, Transaction
 
 
 class _LegacyDb:
@@ -534,7 +534,7 @@ class ExportWritesEverythingTests(MemoryKeyringMixin, unittest.TestCase):
         self._movements(count=640)
         target: Path = self.root / "tx.csv"
 
-        with patch("etc.broker_nav.stonksmith_logger") as log:
+        with patch("stonksmith.etc.broker_nav.stonksmith_logger") as log:
             self.nav.do_export(f"transactions {target}")
 
         message: str = str(object=log.success.call_args.kwargs["msg"])
@@ -721,8 +721,8 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
         """
 
         with (
-            patch("helpers.db.print_table") as table,
-            patch("etc.broker_nav.stonksmith_logger") as log,
+            patch("stonksmith.helpers.db.print_table") as table,
+            patch("stonksmith.etc.broker_nav.stonksmith_logger") as log,
         ):
             self.nav.do_show(category)
 
@@ -783,8 +783,8 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
         self._movements(count=1)
 
         with (
-            patch("helpers.db.print_table") as table,
-            patch("etc.broker_nav.stonksmith_logger") as log,
+            patch("stonksmith.helpers.db.print_table") as table,
+            patch("stonksmith.etc.broker_nav.stonksmith_logger") as log,
         ):
             self.nav.do_show("transactions")
 
@@ -812,8 +812,8 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
         self._movements(count=1)
 
         with (
-            patch("helpers.db.print_table") as table,
-            patch("etc.broker_nav.stonksmith_logger"),
+            patch("stonksmith.helpers.db.print_table") as table,
+            patch("stonksmith.etc.broker_nav.stonksmith_logger"),
         ):
             self.nav.do_show("transactions")
 
@@ -827,8 +827,8 @@ class ShowStatesItsCapTests(MemoryKeyringMixin, unittest.TestCase):
         self._movements(count=1)
 
         with (
-            patch("helpers.db.print_table"),
-            patch("etc.broker_nav.stonksmith_logger") as log,
+            patch("stonksmith.helpers.db.print_table"),
+            patch("stonksmith.etc.broker_nav.stonksmith_logger") as log,
         ):
             self.nav.do_show("snapshots")
 

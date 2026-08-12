@@ -27,8 +27,8 @@ parse may be off -- so the run refuses rather than picking.
 import unittest
 from unittest.mock import MagicMock, patch
 
-from helpers.tsp import same_fund
-from modules.tsp_module import TspModule
+from stonksmith.helpers.tsp import same_fund
+from stonksmith.modules.tsp_module import TspModule
 
 
 class FundNames(unittest.TestCase):
@@ -66,7 +66,7 @@ class MismatchedStatement(unittest.TestCase):
         context = MagicMock()
 
         with patch(
-            target="modules.tsp_module.read_statement",
+            target="stonksmith.modules.tsp_module.read_statement",
             return_value=(315.789, statement_fund, None),
         ):
             return module.units_for(

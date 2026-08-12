@@ -22,9 +22,9 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from etc.api_connection import ApiConnection
-from etc.connection import Connection
-from etc.runner import start_run
+from stonksmith.etc.api_connection import ApiConnection
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.runner import start_run
 
 
 class _StubDb:
@@ -318,7 +318,7 @@ class MainExitCodeTests(LoggerLevelMixin, unittest.TestCase):
         requested: Any = _DEFAULT,
         prepared: int = 1,
     ) -> int:
-        import main as main_module
+        import stonksmith.main as main_module
 
         broker_module = SimpleNamespace(Broker=MagicMock(), Database=MagicMock())
         loader = MagicMock()

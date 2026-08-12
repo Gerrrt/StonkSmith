@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-from modules.fidelity_module import (
+from stonksmith.modules.fidelity_module import (
     ACCOUNT_BALANCE_SELECTORS,
     ACCOUNT_NAME_SELECTORS,
     ACCOUNT_NUMBER_SELECTORS,

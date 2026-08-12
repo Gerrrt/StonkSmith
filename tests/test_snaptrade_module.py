@@ -16,8 +16,8 @@ from argparse import Namespace
 from typing import Any, ClassVar
 from unittest.mock import patch
 
-from helpers.sheets import SheetsUnavailable
-from modules.snaptrade_module import (
+from stonksmith.helpers.sheets import SheetsUnavailable
+from stonksmith.modules.snaptrade_module import (
     SnapTradeModule,
     activity_transaction,
     brokerage_name,
@@ -714,7 +714,7 @@ class ExclusionSourcesTests(unittest.TestCase):
 
     def test_the_config_alone_is_used(self) -> None:
         with patch(
-            "etc.config.get_snaptrade_excluded_accounts",
+            "stonksmith.etc.config.get_snaptrade_excluded_accounts",
             return_value=["Schwab / Beneficiary A 529 Plan"],
         ):
             self.assertEqual(
@@ -726,7 +726,7 @@ class ExclusionSourcesTests(unittest.TestCase):
         # A cron run carries the standing overlap in config; --exclude is for
         # the one-off. Replacing would silently drop the standing one.
         with patch(
-            "etc.config.get_snaptrade_excluded_accounts",
+            "stonksmith.etc.config.get_snaptrade_excluded_accounts",
             return_value=["Schwab / Beneficiary A 529 Plan"],
         ):
             self.assertEqual(
@@ -741,7 +741,8 @@ class ExclusionSourcesTests(unittest.TestCase):
     def test_blank_entries_are_dropped(self) -> None:
         # A trailing newline in the config is not an account called "".
         with patch(
-            "etc.config.get_snaptrade_excluded_accounts", return_value=["", "   "]
+            "stonksmith.etc.config.get_snaptrade_excluded_accounts",
+            return_value=["", "   "],
         ):
             self.assertEqual(
                 SnapTradeModule.excluded(context=self.context(exclude=[])), frozenset()
@@ -959,14 +960,16 @@ class OnLoginTests(unittest.TestCase):
         # user's stonksmith.conf. Left alone this suite would edit the
         # developer's own config, which tests/test_suite_does_not_touch_home.py
         # exists to catch.
-        excluded = patch("etc.config.get_snaptrade_excluded_accounts", return_value=[])
+        excluded = patch(
+            "stonksmith.etc.config.get_snaptrade_excluded_accounts", return_value=[]
+        )
         self.addCleanup(excluded.stop)
         excluded.start()
 
     def test_balances_reach_the_database(self) -> None:
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.sync"):
+        with patch("stonksmith.modules.snaptrade_module.sync"):
             result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertIsNot(result, False, "a working sync must not fail the run")
@@ -978,7 +981,7 @@ class OnLoginTests(unittest.TestCase):
         # table has no brokerage column to tell them apart.
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.sync"):
+        with patch("stonksmith.modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertEqual(self.db.saved[0]["account_name"], "Schwab - Garrett IRA")
@@ -1000,7 +1003,7 @@ class OnLoginTests(unittest.TestCase):
         ]
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.sync"):
+        with patch("stonksmith.modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker(accounts, TWO_BROKERAGES))  # type: ignore[arg-type]
 
         self.assertEqual(
@@ -1030,7 +1033,7 @@ class OnLoginTests(unittest.TestCase):
         ]
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.sync"):
+        with patch("stonksmith.modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker(accounts, TWO_BROKERAGES))  # type: ignore[arg-type]
 
         labels = [row["account_name"] for row in self.db.saved]
@@ -1041,7 +1044,7 @@ class OnLoginTests(unittest.TestCase):
     def test_the_timestamp_matches_the_other_brokers(self) -> None:
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.sync"):
+        with patch("stonksmith.modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         datetime.datetime.strptime(
@@ -1056,7 +1059,7 @@ class OnLoginTests(unittest.TestCase):
         # refresh() rather than sync(): the "sync skipped" wording and the
         # decision not to fail the run live inside sync() now, so patching that
         # would remove the behaviour under test.
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.side_effect = SheetsUnavailable("no tab")
             result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
@@ -1070,7 +1073,7 @@ class OnLoginTests(unittest.TestCase):
         # Faulted underneath sync() rather than in place of it, so the broad
         # except that keeps a Sheets crash from costing the run is the thing
         # actually exercised.
-        with patch("etc.portfolio_sheet.refresh") as refresh:
+        with patch("stonksmith.etc.portfolio_sheet.refresh") as refresh:
             refresh.side_effect = RuntimeError("boom")
             result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
@@ -1081,7 +1084,7 @@ class OnLoginTests(unittest.TestCase):
     def test_a_database_without_save_account_data_is_reported(self) -> None:
         context = _StubContext(_StubDbNoSave())
 
-        with patch("modules.snaptrade_module.sync"):
+        with patch("stonksmith.modules.snaptrade_module.sync"):
             result = self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
         self.assertFalse(result, "nothing reached the database")
@@ -1090,7 +1093,7 @@ class OnLoginTests(unittest.TestCase):
     def test_nothing_syncable_writes_nothing_and_says_so(self) -> None:
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.sync") as sheet_sync:
+        with patch("stonksmith.modules.snaptrade_module.sync") as sheet_sync:
             result = self.module.on_login(
                 context,
                 _StubBroker([account(brokerage_authorization=DEAD_CONNECTION)]),  # type: ignore[arg-type]
@@ -1126,7 +1129,7 @@ class OnLoginTests(unittest.TestCase):
         }
         context = _StubContext(self.db)
 
-        with patch("modules.snaptrade_module.sync"):
+        with patch("stonksmith.modules.snaptrade_module.sync"):
             self.module.on_login(context, broker)  # type: ignore[arg-type]
 
         self.assertEqual(len(self.db.saved), 1, "the healthy account still synced")

@@ -13,7 +13,7 @@ import unittest
 from typing import Any
 from unittest.mock import MagicMock
 
-from etc.portfolio import (
+from stonksmith.etc.portfolio import (
     ACCOUNT_COLUMNS,
     CARRIED,
     HOLDING_COLUMNS,
@@ -26,7 +26,7 @@ from etc.portfolio import (
     Portfolio,
     stale_cutoff,
 )
-from etc.portfolio_sheet import (
+from stonksmith.etc.portfolio_sheet import (
     ACCOUNTS_TAB,
     ALLOCATION_WIDTH,
     BANNER,
@@ -56,7 +56,7 @@ from etc.portfolio_sheet import (
     tab_ref,
     write_dashboard,
 )
-from helpers.sheets import SheetNotOwned
+from stonksmith.helpers.sheets import SheetNotOwned
 
 TODAY = dt.date(2026, 8, 8)
 

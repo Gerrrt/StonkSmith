@@ -521,7 +521,7 @@ A run reads the overview page for accounts and holdings, then the activity page
 for movements. Three things about that parse are worth knowing:
 
 **Columns are found by their headers, not by position.** `TRANSACTION_COLUMNS`
-in `src/helpers/schwab529plan.py` maps each of the six canonical fields to the
+in `src/stonksmith/helpers/schwab529plan.py` maps each of the six canonical fields to the
 spellings a page might print — `Processed` also answers to *process date* and
 *settlement date*. A page that grows a seventh column shifts nothing, which is
 the failure a positional read has and does not report.

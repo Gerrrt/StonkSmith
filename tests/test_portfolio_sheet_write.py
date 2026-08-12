@@ -10,14 +10,14 @@ import unittest
 from typing import Any
 from unittest.mock import MagicMock
 
-from etc.portfolio import (
+from stonksmith.etc.portfolio import (
     ACCOUNT_COLUMNS,
     HOLDING_COLUMNS,
     TRANSACTION_COLUMNS,
     AccountRow,
     HoldingRow,
 )
-from etc.portfolio_sheet import (
+from stonksmith.etc.portfolio_sheet import (
     ACCOUNTS_TAB,
     BANNER,
     BANNER_CELL,
@@ -29,7 +29,7 @@ from etc.portfolio_sheet import (
     last_column,
     write_rows,
 )
-from helpers.sheets import a1_range, fit
+from stonksmith.helpers.sheets import a1_range, fit
 
 
 def owned(row_count: int = 1000, col_count: int = 26) -> MagicMock:

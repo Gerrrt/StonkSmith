@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import etc.config
+import stonksmith.etc.config as etc_config
 
 
 class UserConfigMixin:
@@ -42,17 +42,17 @@ class UserConfigMixin:
         if self.config_body:
             path.write_text(data=self.config_body)
 
-        self._config_patch = patch.object(etc.config, "user_cfg_path", path)
+        self._config_patch = patch.object(etc_config, "user_cfg_path", path)
         self._config_patch.start()
 
         # The merged config lives in a process global, so patching the path
         # without dropping the cache reads whatever an earlier test loaded --
         # and leaks this body to whatever runs next.
-        etc.config.reset_config_cache()
+        etc_config.reset_config_cache()
 
     def tearDown(self) -> None:
         self._config_patch.stop()
-        etc.config.reset_config_cache()
+        etc_config.reset_config_cache()
         self._config_home.cleanup()
 
         super().tearDown()  # type: ignore[misc]

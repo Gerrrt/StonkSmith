@@ -31,7 +31,7 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-from helpers.dfas import (
+from stonksmith.helpers.dfas import (
     BANDS,
     alignment_faults,
     band_on,
@@ -43,7 +43,7 @@ from helpers.dfas import (
     normalize_grade,
     table_for,
 )
-from helpers.tsp import to_number
+from stonksmith.helpers.tsp import to_number
 
 FIXTURES = Path(__file__).resolve().parent
 ENLISTED = FIXTURES / "dfas_basic_pay_em.html"

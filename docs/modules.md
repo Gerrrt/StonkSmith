@@ -7,8 +7,39 @@ as it is today. A broker's own shape — what it logs into and what it reads —
 is [`brokers.md`](brokers.md); where a module's output ends up is
 [`database.md`](database.md) and [`sheet.md`](sheet.md).
 
-`src/modules/example.py` is the annotated template, and is deliberately exempt
+`src/stonksmith/modules/example.py` is the annotated template, and is deliberately exempt
 from some lint rules because its unused arguments are the point.
+
+---
+
+## What to import
+
+Everything StonkSmith exposes lives under `stonksmith.`:
+
+```python
+from stonksmith.etc.connection import Connection
+from stonksmith.etc.context import Context
+```
+
+**The old top-level names still work, and will stop working at 1.0.** Before the
+package had a namespace it installed `etc`, `helpers`, `modules`, `loaders` and
+`brokers` directly into `site-packages`, and modules were written against those:
+
+```python
+from etc.connection import Connection  # deprecated
+from etc.context import Context  # deprecated
+```
+
+A file under `~/.stonksmith/modules` or `~/.stonksmith/brokers` that says this
+still loads. StonkSmith aliases the old names for as long as it is executing your
+file, logs which name it aliased, and raises a `DeprecationWarning`. Change the
+imports when convenient; nothing else about the contract has moved.
+
+One limit worth knowing, because it is not obvious: the alias exists only while
+your file is being *loaded*. A top-level `import etc.config` is fine — the name it
+binds is the real module and keeps working for the life of the run. The same
+import written inside `on_login()` runs later, after the alias is gone, and raises
+`ModuleNotFoundError`. Import at the top of the file, as the template does.
 
 ---
 

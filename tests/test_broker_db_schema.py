@@ -23,11 +23,11 @@ from typing import Any
 
 from sqlalchemy import text
 
-from etc.broker_db import LEGACY_ACCOUNTS_TABLE, BrokerDatabase
-from etc.infrastructure import create_db_engine
-from etc.records import AccountIdentity, Holding
-from etc.secrets import get_secret
 from keyring_isolation import MemoryKeyringMixin
+from stonksmith.etc.broker_db import LEGACY_ACCOUNTS_TABLE, BrokerDatabase
+from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.records import AccountIdentity, Holding
+from stonksmith.etc.secrets import get_secret
 
 LEGACY_SCHEMA = """
 CREATE TABLE accounts (

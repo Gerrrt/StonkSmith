@@ -16,15 +16,14 @@ import importlib.util
 import logging
 import unittest
 from argparse import Namespace
-from pathlib import Path
 from typing import Any, ClassVar
 
 import keyring
 import keyring.backend
 
-BROKER_FILE = (
-    Path(__file__).resolve().parents[1] / "src" / "brokers" / "snaptrade" / "broker.py"
-)
+from package_tree import PACKAGE
+
+BROKER_FILE = PACKAGE / "brokers" / "snaptrade" / "broker.py"
 
 
 class _CaptureHandler(logging.Handler):

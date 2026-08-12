@@ -30,8 +30,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-import etc.config
-from etc.config import (
+import stonksmith.etc.config as etc_config
+from stonksmith.etc.config import (
     DEFAULT_DFAS_PAY_URL,
     DEFAULT_HOST_INFO_COLORS,
     DEFAULT_TSP_PRICE_URL,
@@ -70,17 +70,17 @@ def config_of(body: str) -> Iterator[None]:
         path = Path(home) / "stonksmith.conf"
         path.write_text(data=body)
 
-        with patch.object(etc.config, "user_cfg_path", path):
+        with patch.object(etc_config, "user_cfg_path", path):
             # The merged config lives in a process global, so patching the path
             # without dropping the cache reads whatever an earlier test loaded --
             # and leaks this body to whatever runs next.
-            etc.config.reset_config_cache()
+            etc_config.reset_config_cache()
 
             try:
                 yield
 
             finally:
-                etc.config.reset_config_cache()
+                etc_config.reset_config_cache()
 
 
 def section(name: str, **options: str) -> str:
@@ -259,7 +259,7 @@ class HostInfoColorsTests(unittest.TestCase):
     def test_falling_back_is_reported_rather_than_silent(self) -> None:
         with (
             config_of(section("STONKSMITH", host_info_colors='("green", "red")')),
-            patch.object(etc.config.stonksmith_logger, "error") as error,
+            patch.object(etc_config.stonksmith_logger, "error") as error,
         ):
             get_host_info_colors()
 
@@ -627,7 +627,7 @@ class ShippedDefaultsTests(unittest.TestCase):
 
         found: list[tuple[str, Callable[[], object]]] = []
 
-        for name, function in inspect.getmembers(etc.config, inspect.isfunction):
+        for name, function in inspect.getmembers(etc_config, inspect.isfunction):
             if not name.startswith("get_") or name == "get_config":
                 continue
 
@@ -643,7 +643,7 @@ class ShippedDefaultsTests(unittest.TestCase):
         # four bugs these tests were written against were a getter raising on a
         # value rather than returning a wrong one, and a shipped default that
         # trips one would break every install on first run.
-        body = etc.config.default_cfg_path.read_text()
+        body = etc_config.default_cfg_path.read_text()
 
         for name, getter in self._getters():
             with self.subTest(getter=name), config_of(body):
@@ -680,14 +680,14 @@ class ConfigCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             path = Path(home) / "stonksmith.conf"
 
-            with patch.object(etc.config, "user_cfg_path", path):
-                etc.config.reset_config_cache()
+            with patch.object(etc_config, "user_cfg_path", path):
+                etc_config.reset_config_cache()
 
                 try:
                     self.assertEqual(get_workspace(), "default")
 
                 finally:
-                    etc.config.reset_config_cache()
+                    etc_config.reset_config_cache()
 
             self.assertFalse(path.exists(), "reading config must not create the file")
 

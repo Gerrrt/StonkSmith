@@ -16,14 +16,13 @@ reader nothing.
 
 import importlib.util
 import unittest
-from pathlib import Path
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+from package_tree import PACKAGE
 
 
 def _tsp_broker():
     spec = importlib.util.spec_from_file_location(
-        "tsp_broker", SRC / "brokers/tsp/broker.py"
+        "tsp_broker", PACKAGE / "brokers/tsp/broker.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

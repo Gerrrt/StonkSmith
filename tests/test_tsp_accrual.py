@@ -21,9 +21,9 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from helpers.dfas import basic_pay_table
-from helpers.tsp import fund_prices, price_on
-from modules.tsp_module import TspModule, accrue_units, posting_dates
+from stonksmith.helpers.dfas import basic_pay_table
+from stonksmith.helpers.tsp import fund_prices, price_on
+from stonksmith.modules.tsp_module import TspModule, accrue_units, posting_dates
 
 HERE = Path(__file__).resolve().parent
 PRICES = HERE / "tsp_prices.csv"
@@ -221,10 +221,13 @@ class AccrualReportTests(unittest.TestCase):
     def _accrue(self, context: MagicMock, connection: MagicMock) -> float:
         with (
             patch(
-                "modules.tsp_module.get_tsp_contributions",
+                "stonksmith.modules.tsp_module.get_tsp_contributions",
                 return_value=(MEMBER_PCT, AGENCY_PCT),
             ),
-            patch("modules.tsp_module.get_tsp_contribution_day", return_value=None),
+            patch(
+                "stonksmith.modules.tsp_module.get_tsp_contribution_day",
+                return_value=None,
+            ),
         ):
             return TspModule.accrue(
                 context=context,
@@ -320,7 +323,8 @@ class AccrualReportTests(unittest.TestCase):
         context = _context()
 
         with patch(
-            "modules.tsp_module.get_tsp_contributions", return_value=(5.0, None)
+            "stonksmith.modules.tsp_module.get_tsp_contributions",
+            return_value=(5.0, None),
         ):
             self.assertEqual(
                 TspModule.accrue(
@@ -340,15 +344,20 @@ class MarkWithAnEstimateTests(unittest.TestCase):
 
     def _run(self, context: MagicMock, connection: MagicMock) -> bool:
         with (
-            patch("modules.tsp_module.sync"),
-            patch("modules.tsp_module.SnapshotDbProtocol", MagicMock),
-            patch("modules.tsp_module.get_tsp_units", return_value=(None, "")),
+            patch("stonksmith.modules.tsp_module.sync"),
+            patch("stonksmith.modules.tsp_module.SnapshotDbProtocol", MagicMock),
             patch(
-                "modules.tsp_module.get_tsp_contributions",
+                "stonksmith.modules.tsp_module.get_tsp_units", return_value=(None, "")
+            ),
+            patch(
+                "stonksmith.modules.tsp_module.get_tsp_contributions",
                 return_value=(MEMBER_PCT, AGENCY_PCT),
             ),
-            patch("modules.tsp_module.get_tsp_contribution_day", return_value=None),
-            patch("modules.tsp_module.dt", _FrozenDate),
+            patch(
+                "stonksmith.modules.tsp_module.get_tsp_contribution_day",
+                return_value=None,
+            ),
+            patch("stonksmith.modules.tsp_module.dt", _FrozenDate),
         ):
             return TspModule().on_login(context=context, connection=connection)
 

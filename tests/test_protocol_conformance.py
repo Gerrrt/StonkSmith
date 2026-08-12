@@ -21,11 +21,10 @@ import unittest
 from pathlib import Path
 from types import ModuleType
 
-from etc.context import BrokerProtocol, ModuleProtocol
-from loaders.brokerloader import BrokerLoader
-
-REPO = Path(__file__).resolve().parents[1]
-MODULES_DIR = REPO / "src" / "modules"
+from package_tree import MODULES as MODULES_DIR
+from package_tree import REPO
+from stonksmith.etc.context import BrokerProtocol, ModuleProtocol
+from stonksmith.loaders.brokerloader import BrokerLoader
 
 #: Not collected by globbing what exists: a glob that silently stopped matching
 #: would leave this file asserting nothing, which is the failure mode

@@ -22,7 +22,7 @@ import unittest
 from typing import Any
 from unittest.mock import MagicMock
 
-from modules.ally_module import AllyModule
+from stonksmith.modules.ally_module import AllyModule
 
 _ACCOUNT = "Individual (...0847)"
 

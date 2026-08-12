@@ -23,8 +23,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from helpers.ally import SIDEBAR_SELECTOR
-from modules.ally_module import AllyModule, capture_holdings
+from stonksmith.helpers.ally import SIDEBAR_SELECTOR
+from stonksmith.modules.ally_module import AllyModule, capture_holdings
 
 FIXTURE = Path(__file__).resolve().parent / "ally_holdings.html"
 
@@ -55,7 +55,7 @@ def _run(markup: str, capture: str | None = "/tmp/ally-empty-account-rail.html")
     # config to know which databases to render, and a test that lets it would
     # rewrite the developer's own ~/.stonksmith/stonksmith.conf. Nothing here is
     # about the sheet.
-    with patch("modules.ally_module.sync", return_value=True):
+    with patch("stonksmith.modules.ally_module.sync", return_value=True):
         module.on_login(context, connection)
 
     return connection, context

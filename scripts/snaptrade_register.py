@@ -44,8 +44,8 @@ from typing import Any
 
 import keyring.errors
 
-from etc.config import get_snaptrade_client_id
-from etc.secrets import get_secret, keyring_key, set_secret
+from stonksmith.etc.config import get_snaptrade_client_id
+from stonksmith.etc.secrets import get_secret, keyring_key, set_secret
 
 BROKER_NAME = "snaptrade"
 CONSUMER_KEY_ACCOUNT = "consumerKey"
