@@ -40,7 +40,6 @@ What it inherits is everything above, plus ``create_conn_obj()`` and
 ``teardown()`` already wired into ``broker_flow()``.
 """
 
-import contextlib
 import json
 import re
 import warnings
@@ -68,6 +67,7 @@ from requests.exceptions import RequestException
 
 from stonksmith.etc.connection import Connection
 from stonksmith.etc.paths import logs_path, playwright_path
+from stonksmith.etc.permissions import restrict
 
 #: Playwright raises TargetClosedError when the browser goes away mid-call, but
 #: that class is not exported from playwright.sync_api -- only from a private
@@ -393,22 +393,6 @@ def error_shape(response: PlaywrightResponse) -> str:
         parts.append(f"points to: {', '.join(targets)}")
 
     return f" {{{' | '.join(parts)}}}" if parts else ""
-
-
-def restrict(path: Path) -> None:
-    """
-    Make a captured file owner-readable only.
-
-    Captures are raw markup from a signed-in brokerage session and can contain
-    account numbers, balances, and 2FA context. Default permissions follow the
-    process umask, which is commonly world-readable.
-    :param path: The file to restrict
-    """
-
-    # Best-effort: a filesystem without POSIX permissions must not turn a
-    # diagnostic capture into a failure.
-    with contextlib.suppress(OSError):
-        path.chmod(mode=0o600)
 
 
 class BrowserConnection(Connection):
