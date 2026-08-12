@@ -40,19 +40,34 @@ SEED_CONFIG = "[STONKSMITH]\nworkspace = default\n"
 HOME_LEVEL_PATHS = ("token.json", "credentials.json")
 
 
-def _snapshot(root: Path) -> dict[str, bytes | None]:
+def _snapshot(root: Path) -> dict[str, tuple[bytes | None, int]]:
     """
-    Every path under ``root``, mapped to file contents (None for directories).
+    Every path under ``root``, mapped to its contents and its mode.
+
+    The mode is here because contents alone missed a real escape: a test that
+    chmods a file changes no bytes, so a snapshot of contents compares equal
+    while the permissions on somebody's credentials have been rewritten
+    underneath it.
     :param root: Directory to walk; need not exist
-    :return: Relative path string -> contents
+    :return: Relative path string -> (contents or None for a directory, mode)
     """
 
     if not root.exists():
         return {}
 
+    # rglob() yields the children and never the root, so the watched directory's
+    # own mode was outside this. That is the one restrict_dir() actually changes
+    # -- _restrict_google_credentials() chmods the gspread directory itself --
+    # and it would go unseen whenever the files beneath it were already correct.
     return {
-        str(path.relative_to(root)): None if path.is_dir() else path.read_bytes()
-        for path in sorted(root.rglob(pattern="*"))
+        ".": (None, root.stat().st_mode & 0o777),
+        **{
+            str(path.relative_to(root)): (
+                None if path.is_dir() else path.read_bytes(),
+                path.stat().st_mode & 0o777,
+            )
+            for path in sorted(root.rglob(pattern="*"))
+        },
     }
 
 
@@ -64,7 +79,20 @@ class SuiteLeavesHomeAloneTests(unittest.TestCase):
             config_file.parent.mkdir()
             config_file.write_text(data=SEED_CONFIG)
 
+            # gspread keeps a Google refresh token here, outside ~/.stonksmith
+            # and so outside everything this test used to watch. Seeded at 0644
+            # because the escape being guarded against is a chmod: helpers.sheets
+            # tightens these on every open_spreadsheet(), and a test that patches
+            # only gspread.oauth reaches the real ones.
+            gspread_dir = Path(home) / ".config" / "gspread"
+            gspread_dir.mkdir(parents=True)
+            for name in ("authorized_user.json", "credentials.json"):
+                token = gspread_dir / name
+                token.write_text(data="{}")
+                token.chmod(mode=0o644)
+
             before = _snapshot(root=state)
+            before_gspread = _snapshot(root=gspread_dir)
 
             result = subprocess.run(
                 [
@@ -87,9 +115,32 @@ class SuiteLeavesHomeAloneTests(unittest.TestCase):
             )
 
             after = _snapshot(root=state)
+            after_gspread = _snapshot(root=gspread_dir)
+
+            # First, not last. A suite that never ran proves nothing about what
+            # it touches -- and a nested run that died half way through leaves
+            # state that trips the assertions below, so checking it afterwards
+            # reports a phantom escape and buries the actual failure. This is
+            # the only assertion here whose message wants the nested output;
+            # the rest name a specific file and a specific remedy, and the
+            # nested run is a page of dots when they fire.
+            self.assertEqual(
+                result.returncode, 0, result.stdout[-4000:] + result.stderr[-4000:]
+            )
 
             self.assertEqual(
-                after.get("stonksmith.conf"),
+                after_gspread,
+                before_gspread,
+                "the suite reached ~/.config/gspread; a test that calls "
+                "open_spreadsheet() needs GspreadConfigMixin, because patching "
+                "gspread.oauth alone still lets _restrict_google_credentials() "
+                "chmod the real token",
+            )
+
+            contents, _mode = after.get("stonksmith.conf", (None, 0))
+
+            self.assertEqual(
+                contents,
                 SEED_CONFIG.encode(),
                 "the suite rewrote ~/.stonksmith/stonksmith.conf; isolate the "
                 "test that reaches get_config() -- patch "
@@ -108,11 +159,6 @@ class SuiteLeavesHomeAloneTests(unittest.TestCase):
                 self.assertFalse(
                     (Path(home) / name).exists(), f"the suite created ~/{name}"
                 )
-
-            # A suite that never ran proves nothing about what it touches.
-            self.assertEqual(
-                result.returncode, 0, result.stdout[-4000:] + result.stderr[-4000:]
-            )
 
 
 if __name__ == "__main__":

@@ -90,7 +90,7 @@ answer for a `TestCase` and are not going away.
 - **`if __name__ == "__main__": unittest.main()` goes at the end**, where it can
   see every test in the file.
 
-Four isolation helpers, and using the wrong one is how a test ends up writing to
+Five isolation helpers, and using the wrong one is how a test ends up writing to
 your real home directory:
 
 | helper | when |
@@ -98,11 +98,14 @@ your real home directory:
 | `home_isolation` | any subprocess that could touch `$HOME` |
 | `config_isolation` | any test whose code path reaches a config getter |
 | `keyring_isolation` | any test that opens a broker database — not just credential tests, because `migrate_plaintext_secrets()` runs on every open |
+| `gspread_isolation` | any test that reaches `open_spreadsheet()` — patching `gspread.oauth` keeps it off the network but not off your real `~/.config/gspread` |
 | `package_tree` | any path anchor into the source tree |
 
 `tests/test_suite_does_not_touch_home.py` re-runs the whole suite under a
-throwaway `$HOME` and diffs `~/.stonksmith` byte for byte, so getting this wrong
-fails the build rather than quietly editing your config.
+throwaway `$HOME` and compares `~/.stonksmith` and `~/.config/gspread` — contents
+*and* modes — so getting this wrong fails the build rather than quietly editing
+your config. The modes are in there because contents alone missed a real escape:
+a chmod changes no bytes.
 
 In `package_tree`, `SRC` is a `sys.path` entry and `PACKAGE` is where files live.
 They are different names because they are different things; a file anchor always

@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import gspread.exceptions
 from google.auth.exceptions import RefreshError
 
+from gspread_isolation import GspreadConfigMixin
 from stonksmith.helpers.sheets import (
     SheetsUnavailable,
     ensure_worksheet,
@@ -21,7 +22,7 @@ from stonksmith.helpers.sheets import (
 )
 
 
-class OpenSpreadsheetTests(unittest.TestCase):
+class OpenSpreadsheetTests(GspreadConfigMixin, unittest.TestCase):
     def test_the_book_comes_back_whole(self) -> None:
         client = MagicMock()
 
@@ -58,7 +59,7 @@ class OpenSpreadsheetTests(unittest.TestCase):
         self.assertIn("Accounts", str(caught.exception))
 
 
-class WorksheetLookupFailureTests(unittest.TestCase):
+class WorksheetLookupFailureTests(GspreadConfigMixin, unittest.TestCase):
     """Looking a tab up reaches the network, so it can fail like anything else.
 
     Spreadsheet.worksheet() is not a dictionary lookup -- it fetches the book's
@@ -118,7 +119,7 @@ class WorksheetLookupFailureTests(unittest.TestCase):
         book.add_worksheet.assert_not_called()
 
 
-class EnsureWorksheetTests(unittest.TestCase):
+class EnsureWorksheetTests(GspreadConfigMixin, unittest.TestCase):
     def test_an_existing_tab_is_returned_untouched(self) -> None:
         book = MagicMock()
 
