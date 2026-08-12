@@ -110,8 +110,25 @@ jobs:
       # Not a formality: this is what catches a packaging change that produces a
       # wheel PyPI will reject, at the point where the fix is still a commit
       # rather than a burned version number.
+      #
+      # Pinned to what the publish action bundles -- see requirements/runtime.txt
+      # in pypa/gh-action-pypi-publish at the tag below. Unpinned, this resolved
+      # to whatever was newest while the action used its own older copy, so the
+      # two disagreed about the same wheel: the check passed and the upload
+      # refused it as "'2.5' is not a valid metadata version".
+      #
+      # packaging as well as twine, because packaging is what actually decides.
+      # twine hands the metadata to it, the rejected version came from its table
+      # of valid ones, and the action constrains it separately for that reason.
+      # Pinning only twine would leave the deciding half free to drift and
+      # reproduce this exactly.
+      #
+      # A pre-flight check run with different tooling than the flight is not a
+      # pre-flight check. Bump all three together.
       - name: Check the artifacts
-        run: uv run --no-project --with twine twine check --strict dist/*
+        run: |
+          uv run --no-project --with twine==7.0.0 --with packaging==26.2 \
+            twine check --strict dist/*
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -140,8 +157,12 @@ jobs:
           name: dist
           path: dist/
 
+      # v1.13.0 shipped twine 6.1.0 and packaging 25.0, which predate core
+      # metadata 2.5 -- the version hatchling emits for the PEP 639 SPDX license
+      # this project declares. It refused the wheel before uploading it. v1.14.2
+      # carries twine 7.0.0 and packaging 26.2, which accept it.
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
 
       # After PyPI, deliberately. PyPI is the step that cannot be undone -- a
       # version number is spent whether or not the release exists -- so the

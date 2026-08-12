@@ -245,6 +245,47 @@ class ReleaseWorkflowTests(unittest.TestCase):
             with self.subTest(job=name):
                 self.assertIn("permissions", job, f"{name} inherits the default token")
 
+    def test_the_preflight_twine_is_pinned(self) -> None:
+        # The pre-flight check has to be run with the same twine the upload
+        # uses, or it is not checking the upload. Unpinned it resolved to
+        # whatever was newest while the publish action used its own bundled
+        # copy, and the two disagreed about the same wheel -- `twine check
+        # --strict` passed, and the upload refused it as "'2.5' is not a valid
+        # metadata version". That cost a tag.
+        #
+        # Only the pin is asserted. Which version it should be lives in a
+        # comment beside it, because the answer is in another repository's
+        # requirements file and nothing here can read it.
+        commands: list[str] = [
+            step["run"]
+            for job in self.jobs.values()
+            for step in job["steps"]
+            if "run" in step
+        ]
+        checks: list[str] = [c for c in commands if "twine check" in c]
+
+        self.assertTrue(checks, "nothing runs twine check")
+
+        # The trailing (?!\S) is the part that does the work. Without it the
+        # pattern matches a prefix, so `twine==7.0.*` satisfies it while leaving
+        # every patch release free -- which is the drift this exists to stop.
+        # The number of components is deliberately not fixed: the action pins
+        # twine to 7.0.0 and packaging to 26.2, and under PEP 440 a release
+        # segment may be as long as it likes.
+        #
+        # packaging is checked too because packaging is what decides. twine
+        # hands it the metadata and its table of valid versions is where the
+        # rejection came from; pinning only twine leaves the deciding half free.
+        for command in checks:
+            for package in ("twine", "packaging"):
+                with self.subTest(package=package):
+                    self.assertRegex(
+                        command,
+                        rf"--with {package}==\d+(?:\.\d+)*(?!\S)",
+                        f"pin {package} to the exact version "
+                        "gh-action-pypi-publish bundles",
+                    )
+
     def test_every_action_is_pinned_to_a_commit(self) -> None:
         # Same reasoning as ci.yml: a tag is a pointer its owner can move, and
         # whatever it lands on runs here with a PyPI identity in scope.
