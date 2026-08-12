@@ -43,10 +43,11 @@ jobs:
         # library, and this should not depend on a toolchain being up before it
         # can say the tag is wrong.
         run: |
-          # Opened binary and parsed by tomllib, which decodes UTF-8 itself.
-          # read_text() without an encoding would take the runner's locale, and
-          # TOML is UTF-8 whatever that happens to be.
-          declared="$(python3 -c 'import tomllib,pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_bytes().decode())["project"]["version"])')"
+          # tomllib.load() on a binary handle, which is the form that decodes
+          # UTF-8 itself -- and the form every other pyproject reader in this
+          # repo uses. read_text() with no encoding would take the runner's
+          # locale instead, and TOML is UTF-8 whatever that happens to be.
+          declared="$(python3 -c 'import tomllib,pathlib; f=pathlib.Path("pyproject.toml").open("rb"); print(tomllib.load(f)["project"]["version"]); f.close()')"
           tag="${GITHUB_REF_NAME#v}"
           if [ "$tag" != "$declared" ]; then
             echo "::error::tag ${GITHUB_REF_NAME} says $tag, pyproject.toml says $declared"

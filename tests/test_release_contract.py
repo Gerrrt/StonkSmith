@@ -45,8 +45,9 @@ def declared_version() -> str:
 class ChangelogTests(unittest.TestCase):
     def test_the_declared_version_has_an_entry(self) -> None:
         # The release notes point at the changelog, so a version with no section
-        # ships a release whose notes are a link to nothing. The workflow greps
-        # for exactly this heading and refuses to publish without it.
+        # ships a release whose notes are a link to nothing. The workflow makes
+        # the same check against the tagged tree -- an re.search for this exact
+        # heading -- and refuses to publish without it.
         versions: list[str] = RELEASE_HEADING.findall(
             string=CHANGELOG.read_text(encoding="utf-8")
         )
@@ -159,11 +160,15 @@ class ReleaseWorkflowTests(unittest.TestCase):
         # read_text() with no encoding takes the runner's locale. TOML is UTF-8
         # whatever that happens to be, and a release workflow is a bad place to
         # find out they differ.
-        self.assertNotIn(
-            'pathlib.Path("pyproject.toml").read_text()',
+        #
+        # Asserted positively: naming the one form that is right outlasts a list
+        # of the forms that are wrong, and this started as the latter.
+        self.assertIn(
+            'open("rb")',
             self.text,
-            "read pyproject.toml as bytes and let tomllib decode it",
+            "read pyproject.toml as a binary handle and let tomllib decode it",
         )
+        self.assertIn("tomllib.load(f)", self.text)
 
     def test_publishing_asks_for_no_more_than_it_needs(self) -> None:
         # id-token: write is what makes trusted publishing work without an API
