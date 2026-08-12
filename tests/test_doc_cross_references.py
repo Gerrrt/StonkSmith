@@ -36,12 +36,13 @@ REPO = Path(__file__).resolve().parent.parent
 #: The files whose links are checked. The README plus every record and reference
 #: chapter beside it -- these are the ones that cite each other.
 #:
-#: SECURITY.md is in for the same reason: it cites src/ paths and doc sections
-#: heavily, and a security document pointing at a file that has moved is worse
-#: than one that says less.
+#: SECURITY.md and CONTRIBUTING.md are in for the same reason: both cite src/
+#: paths and README sections heavily, and a security document pointing at a file
+#: that has moved is worse than one that says less.
 SOURCES: tuple[Path, ...] = (
     REPO / "README.md",
     REPO / "SECURITY.md",
+    REPO / "CONTRIBUTING.md",
     *sorted((REPO / "docs").glob("*.md")),
 )
 

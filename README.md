@@ -496,25 +496,22 @@ how to report a vulnerability.
 This is currently a personal project, but contributions may open up in the
 future.
 
-1. Fork the project
-2. Create your feature branch (`git checkout -b some-amazing-feature`)
-3. Run the gates: `uv run ruff check`, `uv run ruff format --check`,
-   `uv run ty check`, `uv run pytest -q`
-4. Commit your changes (`git commit -m 'Add some amazing feature'`)
-5. Push to the branch (`git push origin some-amazing-feature`)
-6. Open a Pull Request
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the gates, the commit and branch
+conventions, the test house rules, and the handful of settings whose reasons are
+worth reading before changing them. The four gates are:
+
+```bash
+uv run ruff check
+uv run ruff format --check
+uv run ty check
+uv run pytest -q --cov --cov-fail-under=87
+```
 
 The version lives in `pyproject.toml` and nowhere else. `--version` and the
 banner read it off the installed distribution, so bumping it is one edit
 followed by `uv sync` — and `tests/test_version_single_source.py` fails if the
 two ever part company. The codename beside it in `src/stonksmith/etc/cli.py` is the one
 piece still written by hand, because nothing can derive one.
-
-A change to anything under `docs/` carries one extra obligation: those files are
-records, and each names the section that summarises it. Change a claim in one
-and change its summary here in the same pass —
-`tests/test_doc_cross_references.py` will tell you if a link went stale, but not
-whether the prose still means what it did.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
