@@ -472,10 +472,20 @@ Current safeguards:
   open: each plaintext password moves into the keyring and the column is
   cleared in place.
 
+- **Everything StonkSmith writes is owner-only** — `0600` for files, `0700` for
+  the directories under `~/.stonksmith`. That covers the databases, the config,
+  the run log, page captures, the saved browser session and the Playwright
+  trace.
+
 > [!IMPORTANT]
 > Passing `-p` on the command line still exposes the secret to your shell
 > history and process list. Prefer `add creds` in `stonksmithdb` plus `-id`.
 > Never commit credentials to source control.
+
+[`SECURITY.md`](SECURITY.md) is the full account, including the risks this
+project accepts rather than solves — the CDP debugging port, the width of the
+Google grant, and what a migrated database still has in its freed pages — and
+how to report a vulnerability.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

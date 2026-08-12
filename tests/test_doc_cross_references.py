@@ -35,7 +35,15 @@ REPO = Path(__file__).resolve().parent.parent
 
 #: The files whose links are checked. The README plus every record and reference
 #: chapter beside it -- these are the ones that cite each other.
-SOURCES: tuple[Path, ...] = (REPO / "README.md", *sorted((REPO / "docs").glob("*.md")))
+#:
+#: SECURITY.md is in for the same reason: it cites src/ paths and doc sections
+#: heavily, and a security document pointing at a file that has moved is worse
+#: than one that says less.
+SOURCES: tuple[Path, ...] = (
+    REPO / "README.md",
+    REPO / "SECURITY.md",
+    *sorted((REPO / "docs").glob("*.md")),
+)
 
 #: An inline markdown link, `[text](target)`. Reference-style links and bare URLs
 #: are not matched: neither is used in these files, and a pattern that guessed at
