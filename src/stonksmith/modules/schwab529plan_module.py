@@ -51,7 +51,7 @@ class Schwab529Module:
         """
         Set up module options, such as export format.
         :param context: Execution context supplied by ModuleLoader. Unused today, but
-        part of the module contract
+            part of the module contract
         :param module_options: Optional dictionary of module-specific options
         """
 
@@ -151,13 +151,13 @@ class Schwab529Module:
         :param balances: Parsed balance rows, one per account
         :param context: Used for logging
         :param beneficiaries: Parsed beneficiary rows, used to recognise an account a
-        row names
+            row names
         :param structure: Reads the shape of the transaction markup. Deferred rather
-        than a value because it walks every row, and it is only ever wanted on the paths
-        where attribution falls short -- which is neither the single-account path nor
-        the one where the page names its accounts
+            than a value because it walks every row, and it is only ever wanted on the
+            paths where attribution falls short -- which is neither the single-account
+            path nor the one where the page names its accounts
         :return: Transactions keyed by the position of the account they belong to.
-        Accounts with none are absent
+            Accounts with none are absent
         """
 
         if not transactions:
@@ -304,7 +304,7 @@ class Schwab529Module:
         run somebody was doing anyway.
         :param context: Used for logging
         :param structure: Reads one entry per table. Called here and nowhere else, so a
-        run that attributes cleanly never walks the markup a second time
+            run that attributes cleanly never walks the markup a second time
         """
 
         if structure is None:
@@ -338,9 +338,9 @@ class Schwab529Module:
         """
         Perform the login and scraping process for Schwab529Plan.
         :param context: The execution context, providing access to logging, database,
-        and other shared resources
+            and other shared resources
         :param connection: The connection object containing session and authentication
-        details for the broker
+            details for the broker
         :return: False when nothing reached the database
         """
 

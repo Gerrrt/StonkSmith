@@ -211,9 +211,15 @@ class TraceAndProfileTests(_TempRoot):
         # change to state this tool did not create, cannot put back, and which
         # another process or another user may legitimately be reaching. This is
         # the test that stops the guard being "simplified" away.
-        theirs: Path = Path(self._tmp.name).parent / "their-chrome-profile"
-        theirs.mkdir(mode=0o755, exist_ok=True)
-        self.addCleanup(theirs.rmdir)
+        #
+        # Its own temporary directory rather than a named one beside self.tmp:
+        # it has to sit outside the patched playwright_path for the guard to be
+        # exercised at all, and a fixed name there collides between xdist
+        # workers and then races them on cleanup.
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        theirs: Path = Path(outside.name) / "their-chrome-profile"
+        theirs.mkdir(mode=0o755)
         connection = self._connection()
 
         with (

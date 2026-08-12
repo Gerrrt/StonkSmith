@@ -94,7 +94,7 @@ def posting_dates(start: dt.date, end: dt.date, day: int | None) -> list[dt.date
     :param start: The date the anchoring unit count was true
     :param end: The run date
     :param day: Day of the month a contribution posts; None means the last day of each
-    month
+        month
     :return: The posting dates, in order
     """
 
@@ -142,7 +142,7 @@ def accrue_units(
     :param percent: Member and agency percentages, added together
     :param dates: The posting dates to price
     :return: One record per month that could be priced, and one note per month that
-    could not
+        could not
     """
 
     accruals: list[Accrual] = []
@@ -229,7 +229,7 @@ def read_statement(path: str) -> tuple[float | None, str, dt.date | None]:
     it reproduces the printed balance to the cent.
     :param path: Path to the statement, as text or PDF
     :return: Units, the fund they belong to, and the period end they were true on. Units
-    is None when the file could not be read or carries no activity table
+        is None when the file could not be read or carries no activity table
     """
 
     target = Path(path).expanduser()
@@ -320,7 +320,7 @@ def units_from_balance(
     :param balance: The balance as printed
     :param day: The date printed beside it
     :return: Units, the price date used, and that price. None when the fund has no price
-    on or before that day
+        on or before that day
     """
 
     found: tuple[dt.date, float] | None = price_on(prices=prices, fund=fund, day=day)
@@ -387,7 +387,7 @@ class TspModule:
         Set up module options.
         :param context: Execution context supplied by ModuleLoader
         :param module_options: EXPORT sets the export format; STATEMENT names a
-        quarterly statement to take units from
+            quarterly statement to take units from
         """
 
         del context
@@ -525,7 +525,7 @@ class TspModule:
         :param fund: The fund the balance belongs to
         :param balance: The balance as printed on the site
         :return: Units, the date they are true, and the source label. None when the
-        balance could not be converted
+            balance could not be converted
         """
 
         written: str = str(object=getattr(context.args, "balance_as_of", "") or "")
@@ -612,7 +612,7 @@ class TspModule:
         Mark the account and persist it.
         :param context: Logging, database, and shared resources
         :param connection: The TSP connection, whose client holds the parsed share price
-        file
+            file
         :return: False when nothing reached the database
         """
 
@@ -723,14 +723,15 @@ class TspModule:
         the accrual, and say so.
         :param context: Logging, and the parsed CLI arguments
         :param connection: The TSP connection, carrying the pay table, the canonical
-        grade and the service date the broker validated
+            grade and the service date the broker validated
         :param prices: The parsed price file
         :param fund: The fund the contributions buy into
         :param units_as_of: The date the anchoring unit count was true
         :param today: The run date
         :return: Estimated units accrued and the date they run through -- the last
-        contribution that could be priced, not the run date, since a month that could
-        not be priced is not in the number. (0.0, "") when no estimate could be made
+            contribution that could be priced, not the run date, since a month that
+            could not be priced is not in the number. (0.0, "") when no estimate could
+            be made
         """
 
         table: Any = getattr(connection, "pay_table", None)
@@ -927,7 +928,7 @@ class TspModule:
         :param price_date: The date that price was published
         :param units_as_of: The date the anchoring unit count was true
         :param accrued_as_of: The date the estimate runs through, which is the last
-        contribution it could price rather than the run date
+            contribution it could price rather than the run date
         :return: False on a database contract violation
         """
 

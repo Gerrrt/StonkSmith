@@ -94,7 +94,7 @@ def capture_holdings(connection: Connection, reason: str = "no-holdings") -> str
     ~/.stonksmith/logs with owner-only permissions.
     :param connection: The live broker
     :param reason: Slug for the filename, naming what surprised the run. Defaults to the
-    page never rendering its holdings at all
+        page never rendering its holdings at all
     :return: Path to the saved HTML, or None if it could not be captured
     """
 
@@ -358,7 +358,7 @@ class AllyModule:
         is the outcome that would otherwise look exactly like success.
         :param context: Logging, database, and shared resources
         :param connection: The authenticated Ally broker, whose `active_page` holds the
-        logged-in Playwright page
+            logged-in Playwright page
         :return: False when nothing reached the database
         """
 
@@ -548,7 +548,7 @@ class AllyModule:
         :param soup: The parsed holdings page
         :param context: Used for logging
         :return: One dict per investment account, carrying the worksheet's columns plus
-        "Number" and "Holdings"
+            "Number" and "Holdings"
         """
 
         listed: list[dict[str, str]] = sidebar_accounts(soup=soup)
@@ -665,7 +665,7 @@ class AllyModule:
         :param number: The account number from the heading, possibly ""
         :param context: Used for logging
         :return: Index into `investments`, or None when the positions cannot be
-        attributed to any of them
+            attributed to any of them
         """
 
         if number:
@@ -708,7 +708,7 @@ class AllyModule:
         :param number: The account number, masked or full
         :param balance: The account value as text
         :param totals: The headline figures, empty for an account whose page was not on
-        screen
+            screen
         :param positions: The account's positions, possibly empty
         :return: The row
         """

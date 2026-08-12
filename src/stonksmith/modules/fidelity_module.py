@@ -56,8 +56,8 @@ def capture_summary(connection: Connection) -> str | None:
     ~/.stonksmith/logs with owner-only permissions.
     :param connection: The live broker
     :return: Path to the saved HTML, or None if it could not be captured. The broker
-    returns a Path; it is normalised to str here because the value is only ever
-    displayed
+        returns a Path; it is normalised to str here because the value is only ever
+        displayed
     """
 
     capture = getattr(connection, "capture_page", None)
@@ -99,7 +99,7 @@ class FidelityModule:
         Scrape the portfolio summary and persist the balances.
         :param context: Logging, database, and shared resources
         :param connection: The authenticated Fidelity broker, whose `active_page` holds
-        the logged-in Playwright page
+            the logged-in Playwright page
         :return: False when nothing reached the database
         """
 
@@ -230,9 +230,9 @@ class FidelityModule:
         :param page: The authenticated Playwright page
         :param context: Used for logging
         :return: One dict per account, with "Account" and "Balance" as the dashboard
-        shows them plus the "Name" and "Number" they were built from. The composite
-        label stays the database's identity key -- it is what previous runs stored --
-        while the number is recorded alongside it as the account's own identifier
+            shows them plus the "Name" and "Number" they were built from. The composite
+            label stays the database's identity key -- it is what previous runs stored
+            -- while the number is recorded alongside it as the account's own identifier
         """
 
         rows: list[Any] = []

@@ -41,6 +41,10 @@ GOOGLE_SECTION = re.compile(
     r"^\s*(Args|Arguments|Returns|Yields|Raises|Attributes|Example|Examples|Note|Notes):\s*$"
 )
 
+#: A Sphinx field, capturing its indent so a continuation line can be compared
+#: against it.
+FIELD = re.compile(r"^(\s*):(?:param|return|rtype|raises|type)\b")
+
 
 def docstrings() -> list[tuple[Path, int, str]]:
     """
@@ -89,6 +93,46 @@ class DocstringStyleTests(unittest.TestCase):
             "these use a Google section header; this package writes Sphinx "
             "fields (:param, :return, :rtype, :raises) -- see CONTRIBUTING.md:\n"
             + "\n".join(offenders),
+        )
+
+    def test_a_wrapped_field_indents_its_continuation(self) -> None:
+        # `:param x: ...` continued on the next line indents that line under the
+        # field, the way brokerloader.py and helpers/schwab529plan.py do. A
+        # continuation at the same column reads as a new paragraph and hides
+        # where one field ends and the next begins.
+        #
+        # A house-style rule, not a reST one. These docstrings are not valid reST
+        # field lists in the first place -- the syntax wants a blank line before
+        # the list and this project's does not have one, in all 407 of them -- so
+        # nothing here is claiming Sphinx would render them.
+        offenders: list[str] = []
+
+        for path, line, text in docstrings():
+            body: list[str] = text.splitlines()
+            field_indent: int | None = None
+
+            for offset, raw in enumerate(body):
+                match = FIELD.match(raw)
+
+                if match:
+                    field_indent = len(match.group(1))
+                    continue
+
+                if field_indent is None or not raw.strip():
+                    field_indent = None
+                    continue
+
+                if len(raw) - len(raw.lstrip()) <= field_indent:
+                    offenders.append(
+                        f"{path.relative_to(REPO)}:{line + offset}: {raw.strip()[:60]}"
+                    )
+                    field_indent = None
+
+        self.assertEqual(
+            offenders,
+            [],
+            "these continue a :param/:return onto a line that is not indented "
+            "under it:\n" + "\n".join(offenders),
         )
 
     def test_the_package_has_docstrings_to_check(self) -> None:

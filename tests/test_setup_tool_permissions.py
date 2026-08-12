@@ -41,6 +41,12 @@ class SetupToolTests(unittest.TestCase):
         self.root = root
         self.config = root / "stonksmith.conf"
 
+        #: Stands in for tmp_path, which is the one managed directory that lives
+        #: outside ~/.stonksmith -- and, being in a world-writable place, the one
+        #: whose mode matters most. Kept as an attribute so the assertions below
+        #: cover it; walking self.root alone would silently miss it.
+        self.managed_tmp: Path = Path(self._tmp.name) / "tmp"
+
         # A permissive umask would let mkdir(0o700) succeed while proving
         # nothing about the chmod, and a strict one would hide a missing chmod
         # behind the umask. Pin it, and put it back -- a leaked umask silently
@@ -54,7 +60,7 @@ class SetupToolTests(unittest.TestCase):
         for name, value in (
             ("stonksmith_path", root),
             ("config_path", self.config),
-            ("managed_dirs", (root, root / "workspaces", Path(self._tmp.name) / "tmp")),
+            ("managed_dirs", (root, root / "workspaces", self.managed_tmp)),
         ):
             patcher = patch.object(tool_setup, name, value)
             patcher.start()
@@ -70,7 +76,11 @@ class SetupToolTests(unittest.TestCase):
         tool_setup.setup_tool(logger=MagicMock())
 
     def _directories(self) -> list[Path]:
-        return [self.root, *(p for p in sorted(self.root.iterdir()) if p.is_dir())]
+        return [
+            self.root,
+            self.managed_tmp,
+            *(p for p in sorted(self.root.iterdir()) if p.is_dir()),
+        ]
 
     def test_every_directory_it_creates_is_owner_only(self) -> None:
         for path in self._directories():
