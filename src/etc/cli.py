@@ -17,7 +17,7 @@ from types import ModuleType
 
 from etc.logger import stonksmith_logger
 from helpers.logger import highlight
-from loaders.brokerloader import BrokerLoader
+from loaders.brokerloader import BrokerInfo, BrokerLoader
 
 #: What --version says when the version cannot be established. Not a number:
 #: every number this could fall back to would be a guess presented as a fact,
@@ -212,7 +212,7 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
     )
 
     broker_loader = BrokerLoader()
-    brokers: dict[str, dict[str, str]] = broker_loader.get_brokers()
+    brokers: dict[str, BrokerInfo] = broker_loader.get_brokers()
 
     for broker_name, info in brokers.items():
         if "argspath" in info:

@@ -6,7 +6,7 @@
 import asyncio
 import sys
 from argparse import Namespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from etc.cli import gen_cli_args
 from etc.config import get_workspace
@@ -15,16 +15,17 @@ from etc.logger import stonksmith_logger
 from etc.paths import stonksmith_path
 from etc.runner import start_run
 from etc.tool_setup import setup_tool
-from loaders.brokerloader import BrokerLoader
+from loaders.brokerloader import BrokerInfo, BrokerLoader
 from loaders.moduleloader import ModuleLoader
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
     from types import ModuleType
 
     from sqlalchemy import Engine
 
-    from etc.context import BrokerDbProtocol
+    from etc.context import BrokerDbProtocol, BrokerProtocol, ModuleProtocol
 
 
 def main(args: Namespace) -> int:
@@ -53,13 +54,13 @@ def main(args: Namespace) -> int:
     # 4. Broker Data Setup
     broker_name: str = args.broker.lower()
     broker_loader: BrokerLoader = BrokerLoader()
-    brokers: dict[str, dict[str, str]] = broker_loader.get_brokers()
+    brokers: dict[str, BrokerInfo] = broker_loader.get_brokers()
 
     if broker_name not in brokers:
         stonksmith_logger.error(msg=f"Broker '{broker_name}' not found.")
         return 1
 
-    broker_info: dict[str, str] = brokers[broker_name]
+    broker_info: BrokerInfo = brokers[broker_name]
 
     broker_module: ModuleType | None = broker_loader.load_broker(
         broker_path=broker_info["path"],
@@ -88,9 +89,18 @@ def main(args: Namespace) -> int:
     # Brokers publish a module-level 'Broker' alias so the class name is free to
     # diverge from the directory name (TSP, Schwab529Plan). Fall back to the
     # capitalized directory name for brokers that predate the alias.
-    broker_class: Any = getattr(broker_module, "Broker", None)
+    # cast, not a check: these come out of a file loaded by path, so nothing
+    # static can confirm the shape. What the cast buys is the other end -- every
+    # use below is checked against the protocol, and a broker missing `name` or
+    # not callable is caught by ty here rather than by a thread pool at runtime.
+    broker_class: Callable[[], BrokerProtocol] | None = cast(
+        "Callable[[], BrokerProtocol] | None", getattr(broker_module, "Broker", None)
+    )
     if broker_class is None:
-        broker_class = getattr(broker_module, broker_name.capitalize(), None)
+        broker_class = cast(
+            "Callable[[], BrokerProtocol] | None",
+            getattr(broker_module, broker_name.capitalize(), None),
+        )
 
     if broker_class is None:
         stonksmith_logger.error(
@@ -101,7 +111,9 @@ def main(args: Namespace) -> int:
         )
         return 1
 
-    db_class: Any = db_module.Database
+    db_class: Callable[[Engine, str], BrokerDbProtocol] = cast(
+        "Callable[[Engine, str], BrokerDbProtocol]", db_module.Database
+    )
 
     # 5. Database Setup
     db_path: Path = (
@@ -130,7 +142,7 @@ def main(args: Namespace) -> int:
     else:
         # 7. Broker Object Preparation
         requested: list[str] = list(args.module)
-        modules: list[Any] = loader.prepare()
+        modules: list[ModuleProtocol] = loader.prepare()
         if not modules:
             stonksmith_logger.error(msg="No modules could be loaded. Nothing to run.")
             db_engine.dispose()
@@ -150,7 +162,7 @@ def main(args: Namespace) -> int:
             )
             exit_code = 1
 
-        broker_instance: Any = broker_class()
+        broker_instance: BrokerProtocol = broker_class()
         broker_instance.module = modules
 
         # 8. Execution
