@@ -55,12 +55,19 @@ def _snapshot(root: Path) -> dict[str, tuple[bytes | None, int]]:
     if not root.exists():
         return {}
 
+    # rglob() yields the children and never the root, so the watched directory's
+    # own mode was outside this. That is the one restrict_dir() actually changes
+    # -- _restrict_google_credentials() chmods the gspread directory itself --
+    # and it would go unseen whenever the files beneath it were already correct.
     return {
-        str(path.relative_to(root)): (
-            None if path.is_dir() else path.read_bytes(),
-            path.stat().st_mode & 0o777,
-        )
-        for path in sorted(path for path in root.rglob(pattern="*"))
+        ".": (None, root.stat().st_mode & 0o777),
+        **{
+            str(path.relative_to(root)): (
+                None if path.is_dir() else path.read_bytes(),
+                path.stat().st_mode & 0o777,
+            )
+            for path in sorted(root.rglob(pattern="*"))
+        },
     }
 
 
@@ -110,6 +117,17 @@ class SuiteLeavesHomeAloneTests(unittest.TestCase):
             after = _snapshot(root=state)
             after_gspread = _snapshot(root=gspread_dir)
 
+            # First, not last. A suite that never ran proves nothing about what
+            # it touches -- and a nested run that died half way through leaves
+            # state that trips the assertions below, so checking it afterwards
+            # reports a phantom escape and buries the actual failure. This is
+            # the only assertion here whose message wants the nested output;
+            # the rest name a specific file and a specific remedy, and the
+            # nested run is a page of dots when they fire.
+            self.assertEqual(
+                result.returncode, 0, result.stdout[-4000:] + result.stderr[-4000:]
+            )
+
             self.assertEqual(
                 after_gspread,
                 before_gspread,
@@ -141,11 +159,6 @@ class SuiteLeavesHomeAloneTests(unittest.TestCase):
                 self.assertFalse(
                     (Path(home) / name).exists(), f"the suite created ~/{name}"
                 )
-
-            # A suite that never ran proves nothing about what it touches.
-            self.assertEqual(
-                result.returncode, 0, result.stdout[-4000:] + result.stderr[-4000:]
-            )
 
 
 if __name__ == "__main__":
