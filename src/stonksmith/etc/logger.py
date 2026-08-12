@@ -13,6 +13,7 @@ from rich.logging import RichHandler
 
 from stonksmith.etc.console import stonksmith_console
 from stonksmith.etc.paths import logs_path
+from stonksmith.etc.permissions import OWNER_ONLY_DIR, restrict, restrict_dir
 
 
 class TermEscapeCodeFormatter(logging.Formatter):
@@ -111,6 +112,12 @@ class StonkSmithAdapter(logging.LoggerAdapter[logging.Logger]):
 
         if not output_file.exists():
             output_file.touch()
+            # Only a file this call created. --log names a path the operator
+            # chose, and one that already exists is theirs -- possibly a shared
+            # or appended log they set up deliberately. What goes into it is
+            # every line the run printed, which is every account name and every
+            # balance.
+            restrict(path=output_file)
 
         file_handler = RotatingFileHandler(
             filename=output_file, maxBytes=100000, backupCount=5
@@ -134,7 +141,8 @@ class StonkSmithAdapter(logging.LoggerAdapter[logging.Logger]):
         daily_folder: Path = logs_path / datetime.now(tz=UTC).strftime(
             format="%Y-%m-%d"
         )
-        daily_folder.mkdir(parents=True, exist_ok=True)
+        daily_folder.mkdir(mode=OWNER_ONLY_DIR, parents=True, exist_ok=True)
+        restrict_dir(path=daily_folder)
 
         filename: str = f"log_{datetime.now(tz=UTC).strftime(format='%H-%M-%S')}.log"
         return daily_folder / filename

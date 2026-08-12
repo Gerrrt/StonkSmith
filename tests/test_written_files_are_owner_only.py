@@ -22,6 +22,7 @@ which is the right way round for a thing nobody is watching. If a Windows job is
 ever added, this file is where it lands first.
 """
 
+import logging
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,6 +31,7 @@ from unittest.mock import patch
 import stonksmith.etc.config as etc_config
 from config_isolation import UserConfigMixin
 from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.etc.logger import StonkSmithAdapter
 from stonksmith.etc.permissions import (
     OWNER_ONLY_DIR,
     OWNER_ONLY_FILE,
@@ -111,6 +113,41 @@ class DatabaseFileTests(_TempRoot):
             pass
 
         self.assertEqual(path.stat().st_mode & 0o777, OWNER_ONLY_FILE)
+
+
+class RunLogTests(_TempRoot):
+    def _add_handler(self, path: Path) -> None:
+        adapter = StonkSmithAdapter(logger=logging.getLogger("stonksmith"))
+        before: list[logging.Handler] = list(adapter.logger.handlers)
+        self.addCleanup(setattr, adapter.logger, "handlers", before)
+
+        adapter.add_file_log(log_file=path)
+
+        # RotatingFileHandler holds the file open; filterwarnings = ["error"]
+        # turns the ResourceWarning from leaving it that way into a failure.
+        for handler in adapter.logger.handlers:
+            if handler not in before:
+                self.addCleanup(handler.close)
+
+    def test_a_log_file_it_creates_is_owner_only(self) -> None:
+        # Every line the run printed goes in here, which is every account name
+        # and every balance.
+        path: Path = self.tmp / "run.log"
+
+        self._add_handler(path=path)
+
+        self.assertEqual(path.stat().st_mode & 0o777, OWNER_ONLY_FILE)
+
+    def test_a_log_file_the_operator_already_had_is_left_alone(self) -> None:
+        # --log names a path they chose. One that already exists is theirs, and
+        # may be a shared or appended log they set up deliberately.
+        path: Path = self.tmp / "theirs.log"
+        path.touch()
+        path.chmod(mode=0o644)
+
+        self._add_handler(path=path)
+
+        self.assertEqual(path.stat().st_mode & 0o777, 0o644)
 
 
 class ConfigFileTests(UserConfigMixin, unittest.TestCase):
