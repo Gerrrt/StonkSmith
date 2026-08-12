@@ -38,34 +38,28 @@ MONEY_PATTERN = re.compile(r"-?\$\s*-?[\d,]+(?:\.\d+)?")
 
 
 def clean_money(text: str) -> str:
-    """Pull the amount out of Fidelity's screen-reader balance text.
-
-    Args:
-        text (str): Raw element text, e.g. ", balance:  $1,234.56".
-
-    Returns:
-        str: Just the amount, or the stripped input if no amount is present.
-
     """
+    Pull the amount out of Fidelity's screen-reader balance text.
+    :param text: Raw element text, e.g. ", balance:  $1,234.56"
+    :return: Just the amount, or the stripped input if no amount is present
+    """
+
     found = MONEY_PATTERN.search(text)
     return found.group(0).replace(" ", "") if found else text.strip()
 
 
 def capture_summary(connection: Connection) -> str | None:
-    """Save the rendered page so selectors can be fixed from real markup.
+    """
+    Save the rendered page so selectors can be fixed from real markup.
 
     Reuses the broker's capture, which writes the HTML and a screenshot to
     ~/.stonksmith/logs with owner-only permissions.
-
-    Args:
-        connection (Connection): The live broker.
-
-    Returns:
-        str | None: Path to the saved HTML, or None if it could not be
-        captured. The broker returns a Path; it is normalised to str here
-        because the value is only ever displayed.
-
+    :param connection: The live broker
+    :return: Path to the saved HTML, or None if it could not be captured. The broker
+    returns a Path; it is normalised to str here because the value is only ever
+    displayed
     """
+
     capture = getattr(connection, "capture_page", None)
     if not callable(capture):
         return None
@@ -83,36 +77,32 @@ class FidelityModule:
 
     def __init__(self) -> None:
         """Initialize the class attributes."""
+
         self.export_format: str = "print"
         self.summary_url = "https://digital.fidelity.com/ftgw/digital/portfolio/summary"
 
     def options(
         self, context: Context | None, module_options: dict[str, Any] | None = None
     ) -> None:
-        """Set up module options.
-
-        Args:
-            context (Context | None): Execution context supplied by ModuleLoader.
-            module_options (dict[str, Any] | None): EXPORT sets the export
-            format.
-
         """
+        Set up module options.
+        :param context: Execution context supplied by ModuleLoader
+        :param module_options: EXPORT sets the export format
+        """
+
         del context
         options: dict[str, Any] = module_options or {}
         self.export_format = options.get("EXPORT", "print")
 
     def on_login(self, context: Context, connection: Connection) -> bool:
-        """Scrape the portfolio summary and persist the balances.
-
-        Args:
-            context (Context): Logging, database, and shared resources.
-            connection (Connection): The authenticated Fidelity broker, whose
-            `active_page` holds the logged-in Playwright page.
-
-        Returns:
-            bool: False when nothing reached the database.
-
         """
+        Scrape the portfolio summary and persist the balances.
+        :param context: Logging, database, and shared resources
+        :param connection: The authenticated Fidelity broker, whose `active_page` holds
+        the logged-in Playwright page
+        :return: False when nothing reached the database
+        """
+
         context.log.highlight(msg=f"Starting Fidelity sync for: {connection.username}")
 
         # The attribute, not the active_page property. getattr's default only
@@ -232,23 +222,19 @@ class FidelityModule:
         return db_ok
 
     def scrape_accounts(self, page: Any, context: Context) -> list[dict[str, str]]:
-        """Pull account names and balances off the rendered summary page.
+        """
+        Pull account names and balances off the rendered summary page.
 
         Each selector group is tried in order so a Fidelity markup change only
         needs a new entry at the top of the corresponding tuple.
-
-        Args:
-            page (Any): The authenticated Playwright page.
-            context (Context): Used for logging.
-
-        Returns:
-            list[dict[str, str]]: One dict per account, with "Account" and
-            "Balance" as the dashboard shows them plus the "Name" and "Number"
-            they were built from. The composite label stays the database's
-            identity key -- it is what previous runs stored -- while the number
-            is recorded alongside it as the account's own identifier.
-
+        :param page: The authenticated Playwright page
+        :param context: Used for logging
+        :return: One dict per account, with "Account" and "Balance" as the dashboard
+        shows them plus the "Name" and "Number" they were built from. The composite
+        label stays the database's identity key -- it is what previous runs stored --
+        while the number is recorded alongside it as the account's own identifier
         """
+
         rows: list[Any] = []
 
         for selector in ACCOUNT_ROW_SELECTORS:
@@ -299,16 +285,13 @@ class FidelityModule:
 
     @staticmethod
     def _first_text(row: Any, selectors: tuple[str, ...]) -> str:
-        """Return the text of the first selector that matches within a row.
-
-        Args:
-            row (Any): A Playwright locator for one account row.
-            selectors (tuple[str, ...]): Candidate selectors, most specific first.
-
-        Returns:
-            str: The stripped text, or "" when nothing matched.
-
         """
+        Return the text of the first selector that matches within a row.
+        :param row: A Playwright locator for one account row
+        :param selectors: Candidate selectors, most specific first
+        :return: The stripped text, or "" when nothing matched
+        """
+
         for selector in selectors:
             cell = row.locator(selector).first
             if cell.count():

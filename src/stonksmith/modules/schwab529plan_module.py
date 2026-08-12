@@ -40,6 +40,7 @@ class Schwab529Module:
 
     def __init__(self) -> None:
         """Initialize the class attributes."""
+
         self.export_format: str | None = "print"
         self.login_url = "https://www.schwab529plan.com/swatpl/aggregator/sessionCreate/collectAggrCredentials.cs"
         self.dashboard_url = "https://www.schwab529plan.com/swatpl/aggregator/overview/viewAggrOverview.cs"
@@ -47,35 +48,30 @@ class Schwab529Module:
     def options(
         self, context: Context | None, module_options: dict[str, Any] | None = None
     ) -> None:
-        """Set up module options, such as export format.
-
-        Args:
-            context (Context | None): Execution context supplied by ModuleLoader.
-            Unused today, but part of the module contract.
-            module_options (dict[str, Any] | None): Optional dictionary of
-            module-specific options.
-
         """
+        Set up module options, such as export format.
+        :param context: Execution context supplied by ModuleLoader. Unused today, but
+        part of the module contract
+        :param module_options: Optional dictionary of module-specific options
+        """
+
         del context
         options: dict[str, Any] = module_options or {}
         self.export_format: Any = options.get("EXPORT", "print")
 
     @staticmethod
     def holdings_for(investments: list[dict[str, Any]], index: int) -> list[Holding]:
-        """Collect the fund rows belonging to one account.
+        """
+        Collect the fund rows belonging to one account.
 
         The page renders one fund table per account in the same order as the
         balance headings, and the parser stamps each row with the index of the
         table it came from -- so this is the pairing, not a guess.
-
-        Args:
-            investments (list[dict[str, Any]]): Parsed fund rows.
-            index (int): Position of the account being saved.
-
-        Returns:
-            list[Holding]: That account's holdings, in page order.
-
+        :param investments: Parsed fund rows
+        :param index: Position of the account being saved
+        :return: That account's holdings, in page order
         """
+
         return [
             holding_from_row(row=row)
             for row in investments
@@ -86,21 +82,18 @@ class Schwab529Module:
     def account_candidates(
         beneficiaries: list[dict[str, Any]], balances: list[dict[str, Any]]
     ) -> list[list[str]]:
-        """Collect every string that identifies each account on the page.
+        """
+        Collect every string that identifies each account on the page.
 
         What a transaction row calls an account and what the balance headings
         call it need not be the same word: a row might name the beneficiary, or
         print a masked account number. All three known spellings go into the
         pool and ``match_account`` decides.
-
-        Args:
-            beneficiaries (list[dict[str, Any]]): Parsed beneficiary rows.
-            balances (list[dict[str, Any]]): Parsed balance rows, one per account.
-
-        Returns:
-            list[list[str]]: Identifying strings per account, in balance order.
-
+        :param beneficiaries: Parsed beneficiary rows
+        :param balances: Parsed balance rows, one per account
+        :return: Identifying strings per account, in balance order
         """
+
         return [
             [
                 value
@@ -129,7 +122,8 @@ class Schwab529Module:
         beneficiaries: list[dict[str, Any]] | None = None,
         structure: Callable[[], list[dict[str, Any]]] | None = None,
     ) -> dict[int, list[Transaction]]:
-        """Work out which account each scraped transaction belongs to.
+        """
+        Work out which account each scraped transaction belongs to.
 
         Four rules, tried in order and each weaker than the one before:
 
@@ -153,24 +147,19 @@ class Schwab529Module:
 
         Not fatal in any case. The balances and holdings are the run's main
         product and they are unaffected.
-
-        Args:
-            transactions (list[dict[str, Any]]): Parsed transaction rows.
-            balances (list[dict[str, Any]]): Parsed balance rows, one per account.
-            context (Context): Used for logging.
-            beneficiaries (list[dict[str, Any]] | None): Parsed beneficiary rows,
-            used to recognise an account a row names.
-            structure (Callable[[], list[dict[str, Any]]] | None): Reads the
-            shape of the transaction markup. Deferred rather than a value
-            because it walks every row, and it is only ever wanted on the paths
-            where attribution falls short -- which is neither the single-account
-            path nor the one where the page names its accounts.
-
-        Returns:
-            dict[int, list[Transaction]]: Transactions keyed by the position of
-            the account they belong to. Accounts with none are absent.
-
+        :param transactions: Parsed transaction rows
+        :param balances: Parsed balance rows, one per account
+        :param context: Used for logging
+        :param beneficiaries: Parsed beneficiary rows, used to recognise an account a
+        row names
+        :param structure: Reads the shape of the transaction markup. Deferred rather
+        than a value because it walks every row, and it is only ever wanted on the paths
+        where attribution falls short -- which is neither the single-account path nor
+        the one where the page names its accounts
+        :return: Transactions keyed by the position of the account they belong to.
+        Accounts with none are absent
         """
+
         if not transactions:
             return {}
 
@@ -273,21 +262,19 @@ class Schwab529Module:
         hints: list[str],
         structure: Callable[[], list[dict[str, Any]]] | None,
     ) -> None:
-        """Say which rows were dropped when only some could be attributed.
+        """
+        Say which rows were dropped when only some could be attributed.
 
         The rows that did match are stored, so this is not the run failing; it
         is the part of the history that is missing, named rather than left to be
         noticed as a gap months later.
-
-        Args:
-            context (Context): Used for logging.
-            count (int): How many rows could not be attributed.
-            total (int): How many were scraped.
-            hints (list[str]): What those rows said about their account.
-            structure (Callable[[], list[dict[str, Any]]] | None): Reads the
-            markup's shape.
-
+        :param context: Used for logging
+        :param count: How many rows could not be attributed
+        :param total: How many were scraped
+        :param hints: What those rows said about their account
+        :param structure: Reads the markup's shape
         """
+
         distinct: list[str] = sorted({hint for hint in hints if hint})
         named: str = (
             f" They named: {', '.join(distinct)}."
@@ -308,20 +295,18 @@ class Schwab529Module:
     def _log_structure(
         context: Context, structure: Callable[[], list[dict[str, Any]]] | None
     ) -> None:
-        """Print the shape of the transaction markup, values excluded.
+        """
+        Print the shape of the transaction markup, values excluded.
 
         Issue #36's blocking question is what a multi-beneficiary transaction
         table actually renders, and it can only be answered from a live login.
         Printing the shape whenever attribution falls short answers it from a
         run somebody was doing anyway.
-
-        Args:
-            context (Context): Used for logging.
-            structure (Callable[[], list[dict[str, Any]]] | None): Reads one
-            entry per table. Called here and nowhere else, so a run that
-            attributes cleanly never walks the markup a second time.
-
+        :param context: Used for logging
+        :param structure: Reads one entry per table. Called here and nowhere else, so a
+        run that attributes cleanly never walks the markup a second time
         """
+
         if structure is None:
             return
 
@@ -350,18 +335,15 @@ class Schwab529Module:
             )
 
     def on_login(self, context: Context, connection: Connection) -> bool:
-        """Perform the login and scraping process for Schwab529Plan.
-
-        Args:
-            context (Context): The execution context, providing access to logging,
-            database, and other shared resources.
-            connection (Connection): The connection object containing session and
-            authentication details for the broker.
-
-        Returns:
-            bool: False when nothing reached the database.
-
         """
+        Perform the login and scraping process for Schwab529Plan.
+        :param context: The execution context, providing access to logging, database,
+        and other shared resources
+        :param connection: The connection object containing session and authentication
+        details for the broker
+        :return: False when nothing reached the database
+        """
+
         context.log.highlight(msg=f"Starting Schwab529 sync for: {connection.username}")
 
         # 1. Scrape: Use session from broker
@@ -502,15 +484,12 @@ class Schwab529Module:
 
     @staticmethod
     def _looks_like_login_page(response: Response) -> bool:
-        """Check if the response looks like a login page rather than a dashboard.
-
-        Args:
-            response (Response): The HTTP response to check.
-
-        Returns:
-            bool: True if the response appears to be a login page, False otherwise.
-
         """
+        Check if the response looks like a login page rather than a dashboard.
+        :param response: The HTTP response to check
+        :return: True if the response appears to be a login page, False otherwise
+        """
+
         response_url: str = str(object=response.url).lower()
         if "collectaggrcredentials.cs" in response_url:
             return True

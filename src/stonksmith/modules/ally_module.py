@@ -87,21 +87,17 @@ DAY_GAIN_LOSS = "Today's G/L"
 
 
 def capture_holdings(connection: Connection, reason: str = "no-holdings") -> str | None:
-    """Save the rendered page so selectors can be fixed from real markup.
+    """
+    Save the rendered page so selectors can be fixed from real markup.
 
     Reuses the broker's capture, which writes the HTML and a screenshot to
     ~/.stonksmith/logs with owner-only permissions.
-
-    Args:
-        connection (Connection): The live broker.
-        reason (str): Slug for the filename, naming what surprised the run.
-            Defaults to the page never rendering its holdings at all.
-
-    Returns:
-        str | None: Path to the saved HTML, or None if it could not be
-        captured.
-
+    :param connection: The live broker
+    :param reason: Slug for the filename, naming what surprised the run. Defaults to the
+    page never rendering its holdings at all
+    :return: Path to the saved HTML, or None if it could not be captured
     """
+
     capture = getattr(connection, "capture_page", None)
     if not callable(capture):
         return None
@@ -119,20 +115,19 @@ class AllyModule:
 
     def __init__(self) -> None:
         """Initialize the class attributes."""
+
         self.export_format: str = "print"
         self.holdings_url = "https://live.invest.ally.com/accounts/holdings-balances"
 
     def options(
         self, context: Context | None, module_options: dict[str, Any] | None = None
     ) -> None:
-        """Set up module options.
-
-        Args:
-            context (Context | None): Execution context supplied by ModuleLoader.
-            module_options (dict[str, Any] | None): EXPORT sets the export
-            format.
-
         """
+        Set up module options.
+        :param context: Execution context supplied by ModuleLoader
+        :param module_options: EXPORT sets the export format
+        """
+
         del context
         options: dict[str, Any] = module_options or {}
         self.export_format = options.get("EXPORT", "print")
@@ -140,18 +135,14 @@ class AllyModule:
     def fetch_closes(
         self, context: Context, connection: Connection, symbol: str
     ) -> dict[datetime.date, float] | None:
-        """Published closes for one symbol.
-
-        Args:
-            context (Context): Used for logging.
-            connection (Connection): Supplies the requests session.
-            symbol (str): The ticker to price.
-
-        Returns:
-            dict[datetime.date, float] | None: Closes by day, or None when the
-            feed could not be read.
-
         """
+        Published closes for one symbol.
+        :param context: Used for logging
+        :param connection: Supplies the requests session
+        :param symbol: The ticker to price
+        :return: Closes by day, or None when the feed could not be read
+        """
+
         session = getattr(connection, "session", None)
 
         if session is None:
@@ -176,7 +167,8 @@ class AllyModule:
             return None
 
     def value_from_prices(self, context: Context, connection: Connection) -> bool:
-        """Value the account from published prices and the last known units.
+        """
+        Value the account from published prices and the last known units.
 
         Ally refuses a restored session however it is stored, so a daily run
         cannot scrape. It does not have to: units only change when a deposit
@@ -189,15 +181,11 @@ class AllyModule:
         old either half is would be claiming a freshness it does not have --
         and the units are the half that goes quietly wrong, because a deposit
         adds units this run cannot see.
-
-        Args:
-            context (Context): Logging, database, and shared resources.
-            connection (Connection): The broker, for its HTTP session.
-
-        Returns:
-            bool: False when nothing could be valued.
-
+        :param context: Logging, database, and shared resources
+        :param connection: The broker, for its HTTP session
+        :return: False when nothing could be valued
         """
+
         db: BrokerDbProtocol = context.db
 
         if not isinstance(db, SnapshotReadDbProtocol):
@@ -359,7 +347,8 @@ class AllyModule:
         return True
 
     def on_login(self, context: Context, connection: Connection) -> bool:
-        """Scrape the holdings page and persist what it says.
+        """
+        Scrape the holdings page and persist what it says.
 
         Ally shows one account's positions at a time, so this reads the sidebar
         as well: it is the only place the page says how many accounts exist.
@@ -367,16 +356,12 @@ class AllyModule:
         investment account gets the balance the sidebar prints, and a line
         saying its positions were not read. Neither is silently dropped, which
         is the outcome that would otherwise look exactly like success.
-
-        Args:
-            context (Context): Logging, database, and shared resources.
-            connection (Connection): The authenticated Ally broker, whose
-            `active_page` holds the logged-in Playwright page.
-
-        Returns:
-            bool: False when nothing reached the database.
-
+        :param context: Logging, database, and shared resources
+        :param connection: The authenticated Ally broker, whose `active_page` holds the
+        logged-in Playwright page
+        :return: False when nothing reached the database
         """
+
         context.log.highlight(msg=f"Starting Ally sync for: {connection.username}")
 
         # Asked for explicitly, never inferred from the browser being absent. A
@@ -551,7 +536,8 @@ class AllyModule:
     def scrape_accounts(
         self, soup: BeautifulSoup, context: Context
     ) -> list[dict[str, Any]]:
-        """Turn one rendered holdings page into per-account rows.
+        """
+        Turn one rendered holdings page into per-account rows.
 
         The page shows every account in the sidebar but only one account's
         positions, so the two have to be reconciled: the sidebar's masked
@@ -559,16 +545,12 @@ class AllyModule:
         pair up the positions attach to that account; when the heading names an
         account the sidebar does not list, its number is masked the same way so
         both routes produce one identity rather than two.
-
-        Args:
-            soup (BeautifulSoup): The parsed holdings page.
-            context (Context): Used for logging.
-
-        Returns:
-            list[dict[str, Any]]: One dict per investment account, carrying the
-            worksheet's columns plus "Number" and "Holdings".
-
+        :param soup: The parsed holdings page
+        :param context: Used for logging
+        :return: One dict per investment account, carrying the worksheet's columns plus
+        "Number" and "Holdings"
         """
+
         listed: list[dict[str, str]] = sidebar_accounts(soup=soup)
         totals: dict[str, str] = account_totals(soup=soup)
         positions: list[Holding] = holdings(soup=soup)
@@ -666,7 +648,8 @@ class AllyModule:
         number: str,
         context: Context,
     ) -> int | None:
-        """Decide which sidebar account the positions on screen belong to.
+        """
+        Decide which sidebar account the positions on screen belong to.
 
         Normally the account number does it: the sidebar masks it, the heading
         does not. The awkward case is a heading with no number at all, which
@@ -677,18 +660,14 @@ class AllyModule:
           one account's positions under another, and that is worse than the
           balances-only run this falls back to, because a wrong holding reads
           as fact while a missing one is reported.
-
-        Args:
-            investments (list[dict[str, str]]): Sidebar investment accounts.
-            name (str): The nickname from the page heading.
-            number (str): The account number from the heading, possibly "".
-            context (Context): Used for logging.
-
-        Returns:
-            int | None: Index into `investments`, or None when the positions
-            cannot be attributed to any of them.
-
+        :param investments: Sidebar investment accounts
+        :param name: The nickname from the page heading
+        :param number: The account number from the heading, possibly ""
+        :param context: Used for logging
+        :return: Index into `investments`, or None when the positions cannot be
+        attributed to any of them
         """
+
         if number:
             return next(
                 (
@@ -723,20 +702,17 @@ class AllyModule:
         totals: dict[str, str],
         positions: list[Holding],
     ) -> dict[str, Any]:
-        """Assemble one account's row.
-
-        Args:
-            label (str): The account's display and identity string.
-            number (str): The account number, masked or full.
-            balance (str): The account value as text.
-            totals (dict[str, str]): The headline figures, empty for an account
-            whose page was not on screen.
-            positions (list[Holding]): The account's positions, possibly empty.
-
-        Returns:
-            dict[str, Any]: The row.
-
         """
+        Assemble one account's row.
+        :param label: The account's display and identity string
+        :param number: The account number, masked or full
+        :param balance: The account value as text
+        :param totals: The headline figures, empty for an account whose page was not on
+        screen
+        :param positions: The account's positions, possibly empty
+        :return: The row
+        """
+
         return {
             "Account": label,
             "Balance": balance,

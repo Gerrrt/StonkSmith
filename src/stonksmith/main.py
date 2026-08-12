@@ -29,15 +29,12 @@ if TYPE_CHECKING:
 
 
 def main(args: Namespace) -> int:
-    """Execute the main entry point for Stonksmith.
-
-    Args:
-        args (Namespace): Parsed command-line arguments.
-
-    Returns:
-        int: Exit code (0 for success, non-zero for errors).
-
     """
+    Execute the main entry point for Stonksmith.
+    :param args: Parsed command-line arguments
+    :return: Exit code (0 for success, non-zero for errors)
+    """
+
     # 1. Tool Setup
     setup_tool(logger=stonksmith_logger)
 
@@ -187,14 +184,13 @@ def main(args: Namespace) -> int:
 
 
 def cli_entry() -> int:
-    """Parse command-line arguments and run Stonksmith.
+    """
+    Parse command-line arguments and run Stonksmith.
 
     Console-script entry point for the ``stonksmith`` command.
-
-    Returns:
-        int: Exit code (0 for success, non-zero for errors).
-
+    :return: Exit code (0 for success, non-zero for errors)
     """
+
     return main(args=gen_cli_args())
 
 

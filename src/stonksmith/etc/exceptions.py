@@ -23,11 +23,10 @@ class SwitchBroker(UserExitedProto):
     """
 
     def __init__(self, broker: str = "") -> None:
-        """Record the broker to switch to.
-
-        Args:
-            broker: Name requested, or "" to just list the available brokers.
-
         """
+        Record the broker to switch to.
+        :param broker: Name requested, or "" to just list the available brokers
+        """
+
         super().__init__(broker)
         self.broker = broker
