@@ -49,8 +49,19 @@ def _loader() -> BrokerLoader:
 
 
 def _load(path: Path) -> ModuleType:
+    """
+    Load a module file the way ModuleLoader does.
+
+    Raises rather than asserting: python -O strips assert, and a stripped
+    precondition here would surface as an AttributeError on None several lines
+    later, naming neither the file nor the reason.
+    """
+
     spec = importlib.util.spec_from_file_location("conformance_probe", path)
-    assert spec is not None and spec.loader is not None
+    if spec is None or spec.loader is None:
+        msg = f"{path} produced no loadable spec"
+        raise RuntimeError(msg)
+
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -94,6 +105,11 @@ class BrokerConformanceTests(unittest.TestCase):
                 broker_class = getattr(module, "Broker", None) or getattr(
                     module, name.capitalize(), None
                 )
+                # Checked before use, as above: reading __call__ off None is an
+                # AttributeError that names neither the broker nor what was
+                # wrong with it.
+                self.assertIsNotNone(broker_class, "no Broker alias or named class")
+
                 signature = inspect.signature(broker_class.__call__)
 
                 # self is bound out; args, db and host are what start_run passes.
