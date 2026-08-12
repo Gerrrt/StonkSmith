@@ -24,20 +24,16 @@ class Parser:
         :return: List of beneficiary data dictionaries
         """
 
-        beneficiary_data: list[dict[str, str | None]] = []
-
-        for beneficiary in self.selector.xpath(
-            query="/html/body/div/div/div[1]/div/div/div[1]/h2"
-        ):
-            beneficiary_data.append(
-                {
-                    "Title": beneficiary.xpath(query=".//text()").get(),
-                    "Name": beneficiary.xpath(query=".//span[1]/text()").get(),
-                    "Account": beneficiary.xpath(query=".//span[2]/text()").get(),
-                }
+        return [
+            {
+                "Title": beneficiary.xpath(query=".//text()").get(),
+                "Name": beneficiary.xpath(query=".//span[1]/text()").get(),
+                "Account": beneficiary.xpath(query=".//span[2]/text()").get(),
+            }
+            for beneficiary in self.selector.xpath(
+                query="/html/body/div/div/div[1]/div/div/div[1]/h2"
             )
-
-        return beneficiary_data
+        ]
 
     def balance_data(self) -> list[dict[str, str | None]]:
         """
@@ -45,20 +41,16 @@ class Parser:
         :return: List of balance data dictionaries
         """
 
-        balance_data: list[dict[str, str | None]] = []
-
-        for balance in self.selector.xpath(
-            query="/html/body/div/div/div[1]/div/div/div[2]/h2"
-        ):
-            balance_data.append(
-                {
-                    "Title": balance.xpath(query=".//text()").get(),
-                    "Amount": balance.xpath(query=".//span[1]/text()").get(),
-                    "Date": balance.xpath(query=".//span[2]/text()").get(),
-                }
+        return [
+            {
+                "Title": balance.xpath(query=".//text()").get(),
+                "Amount": balance.xpath(query=".//span[1]/text()").get(),
+                "Date": balance.xpath(query=".//span[2]/text()").get(),
+            }
+            for balance in self.selector.xpath(
+                query="/html/body/div/div/div[1]/div/div/div[2]/h2"
             )
-
-        return balance_data
+        ]
 
     def investment_data(self) -> list[dict[str, Any]]:
         """

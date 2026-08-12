@@ -14,7 +14,6 @@ def highlight(text: object, color: str = "yellow") -> str | object:
     """
     if color == "yellow":
         return f"{colored(text=text, color='yellow', attrs=['bold'])}"
-    elif color == "red":
+    if color == "red":
         return f"{colored(text=text, color='red', attrs=['bold'])}"
-    else:
-        return text
+    return text
