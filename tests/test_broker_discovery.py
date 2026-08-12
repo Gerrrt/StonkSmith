@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from package_tree import BROKERS, PACKAGE, REPO, SRC
 from stonksmith.etc.broker_db import BrokerDatabase
@@ -157,6 +158,36 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
             (package / "database.py").write_text("# nothing here\n")
 
             self.assertIsNone(_fresh_loader(Path(tmp)).database_class(name="empty"))
+
+    def test_a_database_symbol_that_is_not_a_class_is_refused(self) -> None:
+        # The callers instantiate what comes back, so `Database = "oops"` would
+        # reach `database(engine, broker)` and raise TypeError from inside the
+        # run -- the outcome load_broker exists to prevent, arriving one step
+        # later. Refused here instead, with the file named.
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / "brokers" / "stringly"
+            package.mkdir(parents=True)
+            (package / "broker.py").write_text("Broker = object\n")
+            (package / "database.py").write_text('Database = "not a class"\n')
+
+            self.assertIsNone(_fresh_loader(Path(tmp)).database_class(name="stringly"))
+
+    def test_a_broker_alias_that_cannot_be_called_falls_through(self) -> None:
+        # main.py calls what this returns. A module with a junk alias and a real
+        # class beside it is still a broker somebody can run, so the second name
+        # is tried rather than the whole module refused.
+        from stonksmith.main import broker_class_of
+
+        module = SimpleNamespace(Broker="not callable", Stringly=object)
+
+        self.assertIs(broker_class_of(module=module, broker_name="stringly"), object)
+
+    def test_a_broker_with_no_callable_at_all_is_refused(self) -> None:
+        from stonksmith.main import broker_class_of
+
+        module = SimpleNamespace(Broker="not callable")
+
+        self.assertIsNone(broker_class_of(module=module, broker_name="stringly"))
 
     def test_no_flat_module_shadows_a_broker_package(self) -> None:
         # The bug this layout closed: brokers/fidelity.py beside brokers/fidelity/

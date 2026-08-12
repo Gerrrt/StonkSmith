@@ -8,6 +8,7 @@ import keyring
 import keyring.backend
 from sqlalchemy import text
 
+from package_tree import REPO
 from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.loaders.brokerloader import BrokerLoader
 
@@ -39,9 +40,17 @@ def _load_database_class() -> type:
     ships a database.py, and neither do the other four. Asking the loader is
     what production does, so this exercises the same answer rather than a path
     that happens to exist.
+
+    The second search root is pointed somewhere harmless first, the way
+    tests/test_broker_discovery.py does it. BrokerLoader.__init__ hardcodes
+    ~/.stonksmith, and a suite that reads it answers differently depending on
+    what the developer happens to have installed there.
     """
 
-    resolved = BrokerLoader().database_class(name="schwab529plan")
+    loader = BrokerLoader()
+    loader.stonksmith_path = REPO / "absent"
+
+    resolved = loader.database_class(name="schwab529plan")
     assert resolved is not None
     return resolved
 

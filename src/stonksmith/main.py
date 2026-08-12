@@ -49,10 +49,15 @@ def broker_class_of(
     :rtype: Callable[[], BrokerProtocol] | None
     """
 
+    # callable(), not "is not None": the result is called immediately, so
+    # `Broker = "..."` would reach `broker_class()` and raise TypeError instead
+    # of the message below. Falling through to the second name rather than
+    # refusing outright, because a module with a junk alias and a real class is
+    # still a broker somebody can run.
     for attribute in ("Broker", broker_name.capitalize()):
         found: object = getattr(module, attribute, None)
 
-        if found is not None:
+        if callable(found):
             return cast("Callable[[], BrokerProtocol]", found)
 
     return None

@@ -130,15 +130,21 @@ class BrokerLoader:
         if module is None:
             return None
 
-        found: type | None = getattr(module, symbol, None)
+        found: object = getattr(module, symbol, None)
 
-        if found is None:
+        # isinstance, not just "is not None". The callers instantiate what comes
+        # back, so `Database = "oops"` would reach `database(engine, broker)` and
+        # raise TypeError from inside the run -- exactly the outcome load_broker
+        # exists to prevent, arriving one step later.
+        if not isinstance(found, type):
             stonksmith_logger.fail(
                 msg=(
-                    f"{path} does not publish a '{symbol}'. Remove the file to "
-                    f"take the default, or give it one."
+                    f"{path} does not publish a '{symbol}' class"
+                    f"{'' if found is None else f' (found {type(found).__name__})'}"
+                    f". Remove the file to take the default, or give it one."
                 ),
             )
+            return None
 
         return found
 
