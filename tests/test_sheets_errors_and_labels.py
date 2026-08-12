@@ -11,11 +11,12 @@ from unittest.mock import MagicMock, patch
 import gspread.exceptions
 from google.auth.exceptions import RefreshError
 
+from gspread_isolation import GspreadConfigMixin
 from stonksmith.helpers.schwab529plan import account_label, strip_label
 from stonksmith.helpers.sheets import SheetsUnavailable, open_worksheet
 
 
-class OpenWorksheetErrorTests(unittest.TestCase):
+class OpenWorksheetErrorTests(GspreadConfigMixin, unittest.TestCase):
     def test_deleted_oauth_client_reports_how_to_fix_it(self) -> None:
         # The exact error from the field.
         failure = RefreshError(
@@ -181,7 +182,7 @@ class AccountLabelTests(unittest.TestCase):
         self.assertEqual(strip_label(text="  Total   Balance :  "), "Total Balance")
 
 
-class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
+class ModuleReportsSheetsFailureCleanlyTests(GspreadConfigMixin, unittest.TestCase):
     # refresh() rather than sync(), deliberately. The "sync skipped" wording and
     # the decision not to fail the run both live inside sync() now, so patching
     # sync() would remove the behaviour this is here to check. Faulting the read
@@ -242,7 +243,7 @@ class ModuleReportsSheetsFailureCleanlyTests(unittest.TestCase):
         self.assertIn("dashboard was not updated", succeeded)
 
 
-class NoSheetSkipsTheRefreshTests(unittest.TestCase):
+class NoSheetSkipsTheRefreshTests(GspreadConfigMixin, unittest.TestCase):
     """`--no-sheet` exists so a batch rewrites the sheet once, not once a broker.
 
     Every broker calls sync() when it finishes, so a schedule running four of
