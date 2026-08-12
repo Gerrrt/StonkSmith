@@ -1,4 +1,4 @@
-"""Discovery must be exercised against the real src/brokers tree.
+"""Discovery must be exercised against the real brokers tree.
 
 Nothing did, so the glob that found brokers was untested: it could have stopped
 matching and the whole suite would still have passed. The pair-of-entries layout

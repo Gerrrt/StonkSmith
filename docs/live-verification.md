@@ -585,7 +585,7 @@ curl -sS -A "Mozilla/5.0 (compatible; stonksmith/0.1.0; +https://github.com/Gerr
 ```
 
 That URL and that User-Agent are `QUOTE_URL` and `QUOTE_USER_AGENT` in
-`src/modules/ally_module.py`, copied rather than approximated — the feed's answer is
+`src/stonksmith/modules/ally_module.py`, copied rather than approximated — the feed's answer is
 allowed to depend on who asks.
 
 ```text
@@ -593,7 +593,7 @@ allowed to depend on who asks.
 ```
 
 **A 200 is half the claim.** The other half is that `daily_closes()` in
-`src/helpers/quotes.py` can still read what came back, which is a different question and
+`src/stonksmith/helpers/quotes.py` can still read what came back, which is a different question and
 the one that a silent change of shape would fail. Against that payload it returned 23
 dated closes, 2026-07-08 to 2026-08-07, and two specific things held:
 
@@ -1246,7 +1246,7 @@ drives. It is also the only one here that writes anywhere but a local database.
 **What it needs.** An OAuth client `gspread.oauth()` can authorize — a Desktop-app
 client ID with **both** the Sheets and the Drive API enabled, saved as
 `~/.config/gspread/credentials.json`, the path `GSPREAD_CONFIG_DIR` in
-`src/helpers/sheets.py` names — and a spreadsheet called `Investment Account Scrapes` in
+`src/stonksmith/helpers/sheets.py` names — and a spreadsheet called `Investment Account Scrapes` in
 that Google account or shared with it. That name is `SPREADSHEET_NAME` in the same file
 and nothing reads it from config. Then a workspace with at least one broker database
 already in it, and for check 5 specifically, a broker with a long transaction history
@@ -1388,7 +1388,7 @@ The seven checks, and which of them `verify tabs` settles:
    and then read it back.* All five,
    `Dashboard` included, since a banner cannot be read back off a tab that was never
    created. On the four that carry columns, row 2 is the column contract exactly as
-   `src/etc/portfolio.py` spells it; the dashboard has no such row, and its labels run
+   `src/stonksmith/etc/portfolio.py` spells it; the dashboard has no such row, and its labels run
    down the summary column instead. `Holdings` is the one worth counting: sixteen
    columns, ending at `P`, `Units As Of` — `HOLDING_COLUMNS` in that same file. A tab
    still ending at `O` after a sync is a visible sign the sync did not run, and TSP is

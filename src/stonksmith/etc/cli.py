@@ -53,8 +53,9 @@ def get_version() -> str:
         return installed_version(distribution_name="stonksmith")
 
     except PackageNotFoundError:
-        # Running from a source tree that was never installed -- python src/main.py
-        # rather than uv run. There is no metadata to read and nothing to guess.
+        # Running from a source tree that was never installed -- python
+        # src/stonksmith/main.py rather than uv run. There is no metadata to read
+        # and nothing to guess.
         return UNKNOWN_VERSION
 
 

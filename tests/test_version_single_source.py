@@ -72,7 +72,7 @@ class SingleSourceTests(unittest.TestCase):
             self.assertNotEqual(get_version(), declared())
 
     def test_an_uninstalled_source_tree_says_so_rather_than_guessing(self) -> None:
-        # `python src/main.py` rather than `uv run` has no metadata to read.
+        # `python src/stonksmith/main.py` rather than `uv run` has no metadata to read.
         # Every number this could fall back to would be a guess presented as a
         # fact, and a version is only worth printing if it is the one running.
         with patch.object(

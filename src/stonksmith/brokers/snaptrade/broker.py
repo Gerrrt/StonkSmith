@@ -210,7 +210,8 @@ class SnapTradeBroker(ApiConnection):
 
         # Imported here rather than at module scope. The generated SDK costs
         # roughly 0.4s and 500 modules to import, and every broker.py under
-        # src/brokers is imported by path whenever stonksmithdb lists brokers.
+        # src/stonksmith/brokers is imported by path whenever stonksmithdb lists
+        # brokers.
         # A run that never touches SnapTrade should not pay for it.
         try:
             from snaptrade_client import SnapTrade, SnapTradeAuth
