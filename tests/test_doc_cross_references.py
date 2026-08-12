@@ -43,6 +43,7 @@ SOURCES: tuple[Path, ...] = (
     REPO / "README.md",
     REPO / "SECURITY.md",
     REPO / "CONTRIBUTING.md",
+    REPO / "CHANGELOG.md",
     *sorted((REPO / "docs").glob("*.md")),
 )
 
