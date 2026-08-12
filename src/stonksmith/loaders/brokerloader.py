@@ -112,7 +112,10 @@ class BrokerLoader:
         """
 
         info: BrokerInfo | None = self.get_brokers().get(name)
-        path: str | None = info.get(key) if info else None  # type: ignore[assignment]
+        # cast rather than a type: ignore -- .get() on a TypedDict with a key
+        # held in a variable cannot be narrowed, and _OPTIONAL_FILES is itself
+        # the statement of which keys exist.
+        path: str | None = cast("str | None", info.get(key)) if info else None
 
         if path is None:
             return None
@@ -120,7 +123,14 @@ class BrokerLoader:
         module: ModuleType | None = self.load_broker(
             broker_path=path, label=f"{name}'s {symbol}"
         )
-        found: type | None = getattr(module, symbol, None) if module else None
+
+        # load_broker has already said what went wrong and named the file. It
+        # would be wrong as well as duplicated to add "does not publish a
+        # Database" on top: a file that failed to import may well publish one.
+        if module is None:
+            return None
+
+        found: type | None = getattr(module, symbol, None)
 
         if found is None:
             stonksmith_logger.fail(

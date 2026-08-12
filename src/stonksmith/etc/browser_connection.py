@@ -299,9 +299,16 @@ def refusal_payload(response: PlaywrightResponse) -> dict[object, object] | None
     """
     The JSON body of a refused response, when there is one worth reading.
 
-    Read only for refused responses, only when the body is small enough to be
-    an error rather than a page, and never for the streaming endpoints -- a
-    body read inside a response handler blocks until the response completes.
+    Read only for refused responses, and only when the body is small enough to
+    be an error rather than a page.
+
+    Requiring a numeric content-length is also what keeps this off the streaming
+    endpoints Ally polls, where a body read inside a response handler blocks
+    until the response completes: those answer chunked and carry no such header,
+    so this returns above without touching ``body()``. That is a consequence of
+    the size check rather than a separate guard, which is worth saying because
+    the handler that calls this does not filter by resource type -- it sees
+    every refused response there is.
     :param response: The Playwright response
     :return: The decoded object, or None when there is nothing safe to read
     :rtype: dict[object, object] | None
