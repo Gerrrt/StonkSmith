@@ -28,6 +28,38 @@ readme = "README.md"
 requires-python = ">=3.14"
 version = "0.1.0"
 
+authors = [ { name = "Garrett Allen", email = "garrettallen2@gmail.com" } ]
+keywords = [ "brokerage", "finance", "investing", "portfolio", "scraping" ]
+
+# An SPDX expression rather than the old table form, which is deprecated: the
+# build produces Metadata-Version 2.5, where this becomes License-Expression and
+# hatchling picks up the LICENSE file beside it on its own.
+license = "MIT"
+
+# Read by PyPI, and the reason for the first two: this needs 3.14 -- it is not a
+# package anyone should be pip-installing into 3.12 and discovering that at
+# import. Development Status is "3 - Alpha" because that is what an 0.1.0 with
+# no prior release is, whatever the test count says.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/Gerrrt/StonkSmith"
+Repository = "https://github.com/Gerrrt/StonkSmith"
+Changelog = "https://github.com/Gerrrt/StonkSmith/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Gerrrt/StonkSmith/issues"
+Security = "https://github.com/Gerrrt/StonkSmith/blob/main/SECURITY.md"
+
 [project.scripts]
 stonksmith = "stonksmith.main:cli_entry"
 stonksmithdb = "stonksmith.etc.stonksmithdb:main"
