@@ -76,7 +76,12 @@ jobs:
           body = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
 
           if not re.search(rf"^## \[{re.escape(version)}\]", body, re.MULTILINE):
-              sys.exit(f"::error::CHANGELOG.md has no '## [{version}]' section")
+              # print then exit, not sys.exit(message): that writes to stderr,
+              # and a ::error:: is only reliably read off stdout -- so the step
+              # would fail with no annotation saying why. The tag check above
+              # echoes for the same reason.
+              print(f"::error::CHANGELOG.md has no '## [{version}]' section")
+              sys.exit(1)
           PY
 
       - name: Install dependencies

@@ -170,6 +170,23 @@ class ReleaseWorkflowTests(unittest.TestCase):
         )
         self.assertIn("tomllib.load(f)", self.text)
 
+    def test_every_error_annotation_goes_to_stdout(self) -> None:
+        # A ::error:: is only reliably read off stdout, and sys.exit(message)
+        # writes to stderr -- so a gate spelled that way still fails the step
+        # but with nothing saying why, which is the half that matters when the
+        # thing that stopped is a release.
+        stderr_bound: list[str] = [
+            line.strip()
+            for line in self.text.splitlines()
+            if "::error::" in line and "sys.exit(" in line
+        ]
+
+        self.assertEqual(
+            stderr_bound,
+            [],
+            f"these would annotate nothing: {stderr_bound}",
+        )
+
     def test_publishing_asks_for_no_more_than_it_needs(self) -> None:
         # id-token: write is what makes trusted publishing work without an API
         # token in repository secrets. contents: write creates the release. The
