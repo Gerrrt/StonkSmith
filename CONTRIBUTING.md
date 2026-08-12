@@ -132,6 +132,42 @@ arguing with the comment, which is fine — reopening it without reading it is n
   it off the installed distribution, so bumping it is one edit plus `uv sync`.
   `tests/test_version_single_source.py` fails if the two part company.
 
+## Releasing
+
+A release is a version bump, a changelog entry and a tag. Nothing else is by
+hand — the tag is what publishes.
+
+1. Bump `version` in `pyproject.toml`. It lives there and nowhere else.
+2. Move the `Unreleased` entries under a new `## [x.y.z] - YYYY-MM-DD` heading in
+   `CHANGELOG.md`, and add the two link definitions at the bottom.
+3. `uv sync`, then run the gates. `tests/test_release_contract.py` is the one
+   that fails if steps 1 and 2 disagree.
+4. Merge that as an ordinary pull request.
+5. Tag the merge commit on `main` and push the tag:
+
+   ```bash
+   git tag v0.1.0 && git push origin v0.1.0
+   ```
+
+`.github/workflows/release.yml` then re-runs every gate against the tagged tree,
+builds the sdist and wheel, publishes to PyPI, and creates the GitHub release
+with the artifacts attached. It refuses before building anything if the tag and
+`pyproject.toml` disagree, or if the changelog has no section for that version.
+
+Two things worth knowing before you tag:
+
+- **The tag is the release.** There is no `workflow_dispatch`, deliberately: a
+  release that can be fired by hand against an arbitrary ref is one whose
+  contents cannot be reconstructed from the tag afterwards.
+- **PyPI is one-way.** A version number is spent whether or not what went under
+  it was right — you cannot re-upload it, only yank it and burn another. That is
+  why every check runs before the upload, and why the PyPI step goes before the
+  GitHub release rather than after.
+
+Tags matching `v*` are protected by a ruleset: they cannot be deleted or moved
+once pushed. If you tagged the wrong commit, the fix is a new version, not a
+moved tag.
+
 ## Docs
 
 Files under `docs/` are records, and each names the section of the README that
