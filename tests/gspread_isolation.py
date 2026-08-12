@@ -29,9 +29,11 @@ import stonksmith.helpers.sheets as sheets
 class GspreadConfigMixin:
     """Redirect GSPREAD_CONFIG_DIR for the duration of a TestCase."""
 
-    #: Whether to lay down credential files inside it. Off by default: the
-    #: directory not existing is what an install that never authorized looks
-    #: like, and it is the case most tests want.
+    #: Whether to lay down a gspread config directory with credentials in it.
+    #: Off by default, and off means the directory does not exist at all --
+    #: which is what an install that never authorized looks like, and is the
+    #: baseline most tests want. Same shape as UserConfigMixin.config_body,
+    #: which writes no file unless it is given one.
     seed_credentials: bool = False
 
     def setUp(self) -> None:
@@ -39,9 +41,15 @@ class GspreadConfigMixin:
 
         self._gspread_home = tempfile.TemporaryDirectory()
         self.gspread_dir: Path = Path(self._gspread_home.name) / "gspread"
-        self.gspread_dir.mkdir()
 
+        # Created only when seeding. Leaving it absent is not merely tidier:
+        # _restrict_google_credentials() returns early on a directory that is
+        # not there, so this is the branch a test which never authorized should
+        # be taking, rather than one that chmods an empty directory it was
+        # handed for no reason.
         if self.seed_credentials:
+            self.gspread_dir.mkdir()
+
             for name in ("authorized_user.json", "credentials.json"):
                 path: Path = self.gspread_dir / name
                 path.write_text(data="{}", encoding="utf-8")
