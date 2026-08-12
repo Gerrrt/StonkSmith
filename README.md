@@ -219,11 +219,23 @@ beyond the install below.
 
 ### Installation
 
+From PyPI, which gets you the two console scripts and nothing else:
+
+```bash
+uv tool install stonksmith
+```
+
+Or from a clone, which is what you want to change anything:
+
 ```bash
 git clone https://github.com/Gerrrt/StonkSmith.git
 cd StonkSmith
 uv sync
 ```
+
+Both are supported and both stay current — see
+[Supported versions](SECURITY.md#supported-versions). Every command below is
+written for the clone, so drop the `uv run` if you installed the tool.
 
 Then, if you intend to use Fidelity or Ally:
 

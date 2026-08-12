@@ -11,12 +11,18 @@ something below stops being true, that is a bug in this file.
 
 | Version | Supported |
 | --- | --- |
-| `main` (latest commit) | Yes |
-| anything else | No |
+| the latest release | Yes |
+| `main` | Yes |
+| any earlier release | No |
 
-One row, because there is nothing else to put in it. The version in
-`pyproject.toml` reads `0.1.0`, there are no tags, no releases and no PyPI
-package. "Upgrade" means `git pull && uv sync`.
+Two rows and no more. This is a single-maintainer project: fixes land on `main`
+and go out in the next release, and there is no branch on which an older version
+gets patched. If you are on an earlier release, the upgrade *is* the fix.
+
+Releases are on [PyPI](https://pypi.org/p/stonksmith) and as GitHub releases,
+built from a tag by `.github/workflows/release.yml` — which refuses to publish
+when the tag and `pyproject.toml` disagree about the version. Running from a
+clone is equally supported; there "upgrade" means `git pull && uv sync`.
 
 ## Reporting a vulnerability
 
@@ -167,4 +173,12 @@ those only fire once an advisory exists.
 
 The published wheel pins nothing — `pyproject.toml` uses open `>=` ranges. The
 hash pinning above applies to this repository's own environment, not to anyone
-installing the package.
+installing the package. That is the ordinary trade a library makes and is worth
+naming rather than leaving to be discovered: `pip install stonksmith` resolves
+its dependencies fresh, and what it resolves to is not what CI tested.
+
+Uploads use PyPI [trusted publishing](https://docs.pypi.org/trusted-publishers/)
+rather than a long-lived API token, so there is no publishing credential in
+repository secrets to leak or rotate. The workflow mints a short-lived OIDC token
+scoped to one repository, one workflow file and one environment; the job that
+holds it does nothing but download an already-built artifact and upload it.
