@@ -29,8 +29,8 @@ requires-python = ">=3.14"
 version = "0.1.0"
 
 [project.scripts]
-stonksmith = "main:cli_entry"
-stonksmithdb = "etc.stonksmithdb:main"
+stonksmith = "stonksmith.main:cli_entry"
+stonksmithdb = "stonksmith.etc.stonksmithdb:main"
 
 [dependency-groups]
 dev = [
@@ -46,8 +46,11 @@ build-backend = "hatchling.build"
 requires = [ "hatchling" ]
 
 [tool.hatch.build.targets.wheel]
-include = [ "src" ]
-sources = [ "src" ]
+# `packages`, not `include` + `sources`. The latter pair does not declare a package
+# root: `sources` strips the "src" prefix, so every child of src/ was installed at
+# the top level of site-packages -- `etc`, `helpers`, `modules`, `loaders`,
+# `brokers`, `main`. Naming the package directory instead ships exactly one name.
+packages = [ "src/stonksmith" ]
 
 [tool.pytest.ini_options]
 addopts = [ "-ra", "--strict-config", "--strict-markers" ]
@@ -68,7 +71,7 @@ xfail_strict = true
 [tool.coverage.run]
 branch = true
 # The template is never executed; it exists to be read and copied.
-omit = [ "src/modules/example.py" ]
+omit = [ "src/stonksmith/modules/example.py" ]
 source = [ "src" ]
 
 [tool.coverage.report]
@@ -146,7 +149,7 @@ max-complexity = 16
 
 [tool.ruff.lint.per-file-ignores]
 # The template is illustrative; its unused args are the point.
-"src/modules/example.py" = [ "B", "RUF" ]
+"src/stonksmith/modules/example.py" = [ "B", "RUF" ]
 # INP001 wants an __init__.py here. It should not have one: these are hand-run
 # operator tools, not part of the shipped package -- the same reason [tool.ty.src]
 # excludes them.
