@@ -1,0 +1,8 @@
+# Not load-bearing today. This is a single-maintainer repository and no branch
+# protection rule requires code-owner review, so this file gates nothing and is
+# not pretending to. It is here so that if review is ever required, the default
+# owner is already right rather than empty.
+#
+# Deliberately one line. A finer-grained split -- /docs/, /src/stonksmith/brokers/
+# -- would name the same person five times and read as though it meant something.
+* @Gerrrt

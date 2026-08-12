@@ -40,7 +40,6 @@ What it inherits is everything above, plus ``create_conn_obj()`` and
 ``teardown()`` already wired into ``broker_flow()``.
 """
 
-import contextlib
 import json
 import re
 import warnings
@@ -68,6 +67,7 @@ from requests.exceptions import RequestException
 
 from stonksmith.etc.connection import Connection
 from stonksmith.etc.paths import logs_path, playwright_path
+from stonksmith.etc.permissions import OWNER_ONLY_DIR, restrict, restrict_dir
 
 #: Playwright raises TargetClosedError when the browser goes away mid-call, but
 #: that class is not exported from playwright.sync_api -- only from a private
@@ -395,22 +395,6 @@ def error_shape(response: PlaywrightResponse) -> str:
     return f" {{{' | '.join(parts)}}}" if parts else ""
 
 
-def restrict(path: Path) -> None:
-    """
-    Make a captured file owner-readable only.
-
-    Captures are raw markup from a signed-in brokerage session and can contain
-    account numbers, balances, and 2FA context. Default permissions follow the
-    process umask, which is commonly world-readable.
-    :param path: The file to restrict
-    """
-
-    # Best-effort: a filesystem without POSIX permissions must not turn a
-    # diagnostic capture into a failure.
-    with contextlib.suppress(OSError):
-        path.chmod(mode=0o600)
-
-
 class BrowserConnection(Connection):
     """
     A broker whose login needs a real browser.
@@ -607,7 +591,22 @@ class BrowserConnection(Connection):
         """
 
         profile_dir: Path = self.chrome_profile_dir()
-        profile_dir.mkdir(parents=True, exist_ok=True)
+        profile_dir.mkdir(mode=OWNER_ONLY_DIR, parents=True, exist_ok=True)
+
+        # Only a directory under playwright_path. --profile-dir can name the
+        # operator's real Chrome profile -- chrome_profile_dir() says so and both
+        # brokers' --help offer it -- and tightening the mode on that is a change
+        # to state this tool did not create, cannot put back, and which another
+        # process or another user may legitimately be reaching.
+        #
+        # Resolved on both sides before comparing, because is_relative_to() is
+        # purely lexical: it reads the path components and does not walk them.
+        # `--profile-dir ~/.stonksmith/playwright/../../Documents` sits under
+        # playwright_path as far as it is concerned, and does not once the path
+        # is normalised. Resolving also collapses a symlink, so the check is
+        # about where the directory really is rather than how it was spelled.
+        if profile_dir.resolve().is_relative_to(playwright_path.resolve()):
+            restrict_dir(path=profile_dir)
 
         assert self.playwright is not None
 
@@ -1128,6 +1127,10 @@ class BrowserConnection(Connection):
             if self.tracing_started:
                 try:
                     self.context.tracing.stop(path=str(object=self.trace_path))
+                    # Started with screenshots=True and snapshots=True, so this
+                    # is a DOM recording of a signed-in brokerage session and
+                    # the largest single file this tool writes.
+                    restrict(path=self.trace_path)
 
                 except Exception as e:
                     self.logger.fail(msg=f"Could not write Playwright trace: {e}")

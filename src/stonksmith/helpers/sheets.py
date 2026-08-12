@@ -3,11 +3,14 @@
 
 """Google Sheets helpers shared by everything that writes to the dashboard."""
 
+from pathlib import Path
 from typing import Any
 
 import gspread
 import gspread.exceptions
 from google.auth.exceptions import GoogleAuthError
+
+from stonksmith.etc.permissions import restrict, restrict_dir
 
 #: The spreadsheet StonkSmith writes into. It owns a named handful of tabs in
 #: there; every other tab in the book is the user's and is never opened.
@@ -128,6 +131,8 @@ def open_spreadsheet(spreadsheet: str = SPREADSHEET_NAME) -> Any:
     except GoogleAuthError as e:
         raise SheetsUnavailable(_authorization_failure(e=e)) from e
 
+    _restrict_google_credentials()
+
     try:
         return client.open(spreadsheet)
 
@@ -149,6 +154,36 @@ def open_spreadsheet(spreadsheet: str = SPREADSHEET_NAME) -> Any:
             f"Google rejected the request ({e}). Check that the Sheets API and "
             "the Drive API are both enabled for this project."
         ) from e
+
+
+def _restrict_google_credentials() -> None:
+    """
+    Make gspread's stored Google credentials owner-readable only.
+
+    These are another library's files, in a directory StonkSmith does not own,
+    and gspread writes them at the process umask -- 0644 here, in a 0755
+    directory with nothing above it. They are also the highest-value secret on
+    the machine: ``authorized_user.json`` is a refresh token, renewable
+    indefinitely, and gspread.oauth() asks for full ``spreadsheets`` and
+    ``drive`` rather than the file-scoped variants, so it reaches the operator's
+    entire Drive rather than the one spreadsheet this tool writes.
+
+    Done here rather than documented as a step for the operator to run, because
+    an instruction is not a mechanism. Only ever tightening, and best-effort, so
+    the worst case is that it changes nothing.
+    """
+
+    config_dir: Path = Path(GSPREAD_CONFIG_DIR).expanduser()
+
+    if not config_dir.is_dir():
+        return
+
+    restrict_dir(path=config_dir)
+
+    for name in ("authorized_user.json", "credentials.json"):
+        candidate: Path = config_dir / name
+        if candidate.is_file():
+            restrict(path=candidate)
 
 
 def _find_worksheet(book: Any, worksheet_name: str, spreadsheet: str) -> Any:

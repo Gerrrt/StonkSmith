@@ -16,6 +16,7 @@ from stonksmith.etc.exceptions import SwitchBroker, UserExitedProto
 from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.etc.logger import StonkSmithAdapter
 from stonksmith.etc.paths import config_path, workspace_dir, ws_path
+from stonksmith.etc.permissions import OWNER_ONLY_DIR, restrict_dir
 from stonksmith.loaders.brokerloader import BrokerInfo, BrokerLoader
 
 #: Commands that only exist inside a broker's sub-shell. Typing one at the top
@@ -585,7 +586,8 @@ class StonkSmithDBMenu(cmd.Cmd):
         """
 
         new_path: Path = Path(workspace_dir) / name
-        new_path.mkdir(parents=True, exist_ok=True)
+        new_path.mkdir(mode=OWNER_ONLY_DIR, parents=True, exist_ok=True)
+        restrict_dir(path=new_path)
 
         for broker_name, info in self.brokers.items():
             if "dbpath" in info:
@@ -613,7 +615,8 @@ def initialize_db(logger: StonkSmithAdapter) -> None:
     """
 
     default_ws: Path = Path(ws_path) / "default"
-    default_ws.mkdir(parents=True, exist_ok=True)
+    default_ws.mkdir(mode=OWNER_ONLY_DIR, parents=True, exist_ok=True)
+    restrict_dir(path=default_ws)
 
     loader = BrokerLoader()
     brokers: dict[str, BrokerInfo] = loader.get_brokers()

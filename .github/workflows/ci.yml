@@ -12,6 +12,13 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Stated rather than inherited. Without a permissions block the job gets the
+    # repository default, which on an older repository is write on every scope --
+    # and pull_request runs carry that token on a workflow any fork's PR can
+    # influence through uv.lock and the dependency tree. This job checks out,
+    # installs, lints, type checks and tests: it writes nothing.
+    permissions:
+      contents: read
     steps:
       # Pinned to commits, not tags. A tag is a pointer its owner can move at
       # any time, onto any commit, and whatever it lands on runs here with this

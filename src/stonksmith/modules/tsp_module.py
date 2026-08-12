@@ -81,7 +81,8 @@ class Accrual:
 
 
 def posting_dates(start: dt.date, end: dt.date, day: int | None) -> list[dt.date]:
-    """Every date a contribution posted over a window.
+    """
+    Every date a contribution posted over a window.
 
     One per month, strictly after ``start`` and on or before ``end``. Strictly
     after, because ``start`` is the date the unit count was already true: a
@@ -90,17 +91,13 @@ def posting_dates(start: dt.date, end: dt.date, day: int | None) -> list[dt.date
 
     A day past the end of a short month is clamped to that month's last day, so
     a member paid on the 31st still accrues in February rather than skipping it.
-
-    Args:
-        start (dt.date): The date the anchoring unit count was true.
-        end (dt.date): The run date.
-        day (int | None): Day of the month a contribution posts; None means the
-        last day of each month.
-
-    Returns:
-        list[dt.date]: The posting dates, in order.
-
+    :param start: The date the anchoring unit count was true
+    :param end: The run date
+    :param day: Day of the month a contribution posts; None means the last day of each
+        month
+    :return: The posting dates, in order
     """
+
     dates: list[dt.date] = []
     year, month = start.year, start.month
 
@@ -125,7 +122,8 @@ def accrue_units(
     percent: float,
     dates: list[dt.date],
 ) -> tuple[list[Accrual], list[str]]:
-    """Turn a run of posting dates into the units they bought.
+    """
+    Turn a run of posting dates into the units they bought.
 
     Each month is priced on its own terms. Time in service is recomputed at
     every posting date rather than once for the window, because a member who
@@ -136,21 +134,17 @@ def accrue_units(
     month with no contribution in it. A silent zero is indistinguishable from a
     month the member genuinely did not contribute, and it understates the
     account by exactly the amount nobody was told about.
-
-    Args:
-        prices (dict[dt.date, dict[str, float]]): The parsed price file.
-        fund (str): The fund the contributions buy into.
-        table (dict[str, dict[str, float]]): A parsed DFAS pay table.
-        grade (str): The canonical pay grade.
-        basd (dt.date): Basic Active Service Date.
-        percent (float): Member and agency percentages, added together.
-        dates (list[dt.date]): The posting dates to price.
-
-    Returns:
-        tuple[list[Accrual], list[str]]: One record per month that could be
-        priced, and one note per month that could not.
-
+    :param prices: The parsed price file
+    :param fund: The fund the contributions buy into
+    :param table: A parsed DFAS pay table
+    :param grade: The canonical pay grade
+    :param basd: Basic Active Service Date
+    :param percent: Member and agency percentages, added together
+    :param dates: The posting dates to price
+    :return: One record per month that could be priced, and one note per month that
+        could not
     """
+
     accruals: list[Accrual] = []
     notes: list[str] = []
 
@@ -196,7 +190,8 @@ def accrue_units(
 
 
 def pdf_text(pages: Iterable[Any]) -> str:
-    """Join a PDF's pages into one string, page by page.
+    """
+    Join a PDF's pages into one string, page by page.
 
     Per page rather than in one comprehension, because a statement is several
     pages and the units live on exactly one of them. A page that extracts to
@@ -207,14 +202,10 @@ def pdf_text(pages: Iterable[Any]) -> str:
     ``or ""`` is belt-and-braces: ``extract_text()`` is annotated ``-> str`` and
     returns an empty string for a page with no text, but a None here would
     otherwise turn a readable statement into an unreadable one via TypeError.
-
-    Args:
-        pages (Iterable[Any]): The reader's pages.
-
-    Returns:
-        str: The text of every page that could be read.
-
+    :param pages: The reader's pages
+    :return: The text of every page that could be read
     """
+
     out: list[str] = []
 
     for page in pages:
@@ -230,21 +221,17 @@ def pdf_text(pages: Iterable[Any]) -> str:
 
 
 def read_statement(path: str) -> tuple[float | None, str, dt.date | None]:
-    """Pull the authoritative unit count out of a quarterly statement.
+    """
+    Pull the authoritative unit count out of a quarterly statement.
 
     Statements are the only place TSP states a unit count without a login, and
     the count they state is exact -- multiply it by the printed share price and
     it reproduces the printed balance to the cent.
-
-    Args:
-        path (str): Path to the statement, as text or PDF.
-
-    Returns:
-        tuple[float | None, str, dt.date | None]: Units, the fund they belong
-        to, and the period end they were true on. Units is None when the file
-        could not be read or carries no activity table.
-
+    :param path: Path to the statement, as text or PDF
+    :return: Units, the fund they belong to, and the period end they were true on. Units
+        is None when the file could not be read or carries no activity table
     """
+
     target = Path(path).expanduser()
 
     try:
@@ -314,7 +301,8 @@ def read_statement(path: str) -> tuple[float | None, str, dt.date | None]:
 def units_from_balance(
     prices: dict[dt.date, dict[str, float]], fund: str, balance: float, day: dt.date
 ) -> tuple[float, dt.date, float] | None:
-    """Turn a balance read off the TSP site back into a unit count.
+    """
+    Turn a balance read off the TSP site back into a unit count.
 
     The site states a balance and the date it is true for, and never states a
     unit count. But the balance *is* units times that day's price, so the
@@ -327,18 +315,14 @@ def units_from_balance(
     Friday's price, and that is the price the balance was computed with. The
     date actually used is returned so the caller can show it, which is what
     makes a mistyped balance date visible rather than silently absorbed.
-
-    Args:
-        prices (dict[dt.date, dict[str, float]]): The parsed price file.
-        fund (str): The fund the balance belongs to.
-        balance (float): The balance as printed.
-        day (dt.date): The date printed beside it.
-
-    Returns:
-        tuple[float, dt.date, float] | None: Units, the price date used, and
-        that price. None when the fund has no price on or before that day.
-
+    :param prices: The parsed price file
+    :param fund: The fund the balance belongs to
+    :param balance: The balance as printed
+    :param day: The date printed beside it
+    :return: Units, the price date used, and that price. None when the fund has no price
+        on or before that day
     """
+
     found: tuple[dt.date, float] | None = price_on(prices=prices, fund=fund, day=day)
 
     if found is None:
@@ -353,7 +337,8 @@ def units_from_balance(
 
 
 def statement_reconciles(text_units: float, price: float, closing: float) -> bool:
-    """Whether a statement's own numbers multiply out.
+    """
+    Whether a statement's own numbers multiply out.
 
     A cheap integrity check on the parse: TSP computes the balance it prints as
     units times the unit price on the same page, so if those three disagree the
@@ -368,16 +353,12 @@ def statement_reconciles(text_units: float, price: float, closing: float) -> boo
     is right and a cent of tolerance would have called it broken. The fixtures
     never showed this because their figures are round: 100.000 x 20.000000 is
     exactly 2000.00 and reconciles under any tolerance at all.
-
-    Args:
-        text_units (float): Closing units as parsed.
-        price (float): Unit price as parsed.
-        closing (float): Closing balance as parsed.
-
-    Returns:
-        bool: True when the three agree as closely as the printing allows.
-
+    :param text_units: Closing units as parsed
+    :param price: Unit price as parsed
+    :param closing: Closing balance as parsed
+    :return: True when the three agree as closely as the printing allows
     """
+
     # Half a printed unit either way, plus the half-cent the balance is itself
     # rounded to. Not a tolerance on how wrong the numbers may be -- a tolerance
     # on how much the page rounded them before printing.
@@ -395,20 +376,20 @@ class TspModule:
 
     def __init__(self) -> None:
         """Initialize the class attributes."""
+
         self.export_format: str = "print"
         self.statement: str = ""
 
     def options(
         self, context: Context | None, module_options: dict[str, Any] | None = None
     ) -> None:
-        """Set up module options.
-
-        Args:
-            context (Context | None): Execution context supplied by ModuleLoader.
-            module_options (dict[str, Any] | None): EXPORT sets the export
-            format; STATEMENT names a quarterly statement to take units from.
-
         """
+        Set up module options.
+        :param context: Execution context supplied by ModuleLoader
+        :param module_options: EXPORT sets the export format; STATEMENT names a
+            quarterly statement to take units from
+        """
+
         del context
         options: dict[str, Any] = module_options or {}
         self.export_format = options.get("EXPORT", "print")
@@ -420,7 +401,8 @@ class TspModule:
         prices: dict[dt.date, dict[str, float]] | None = None,
         fund: str = "",
     ) -> tuple[float | None, str, str]:
-        """Decide which unit count to value, and say where it came from.
+        """
+        Decide which unit count to value, and say where it came from.
 
         Precedence runs most-authoritative first. A statement and a balance are
         both exact -- the statement states units outright, and a balance
@@ -435,18 +417,12 @@ class TspModule:
         answer -- the opposite of what this module exists to prevent. The unit
         count it derives is what belongs in config, and the run prints it ready
         to paste.
-
-        Args:
-            context (Context): Logging, and the parsed CLI arguments.
-            prices (dict[dt.date, dict[str, float]] | None): The parsed price
-            file, needed only to back-solve ``--balance``.
-            fund (str): The fund a balance belongs to.
-
-        Returns:
-            tuple[float | None, str, str]: Units, the date they were true, and
-            which source supplied them.
-
+        :param context: Logging, and the parsed CLI arguments
+        :param prices: The parsed price file, needed only to back-solve ``--balance``
+        :param fund: The fund a balance belongs to
+        :return: Units, the date they were true, and which source supplied them
         """
+
         if self.statement:
             # Not `fund`: rebinding the parameter here read the statement's own
             # fund, printed it, and threw it away, because only the units are
@@ -538,24 +514,20 @@ class TspModule:
         fund: str,
         balance: float,
     ) -> tuple[float, str, str] | None:
-        """Back-solve ``--balance`` into a unit count, or say why it could not.
+        """
+        Back-solve ``--balance`` into a unit count, or say why it could not.
 
         Every way this fails is reported and falls through to the next source
         rather than aborting the run, because a mistyped balance should cost
         the correction and not the mark. Returning None is that fall-through.
-
-        Args:
-            context (Context): Logging, and the parsed CLI arguments.
-            prices (dict[dt.date, dict[str, float]] | None): The parsed price
-            file.
-            fund (str): The fund the balance belongs to.
-            balance (float): The balance as printed on the site.
-
-        Returns:
-            tuple[float, str, str] | None: Units, the date they are true, and
-            the source label. None when the balance could not be converted.
-
+        :param context: Logging, and the parsed CLI arguments
+        :param prices: The parsed price file
+        :param fund: The fund the balance belongs to
+        :param balance: The balance as printed on the site
+        :return: Units, the date they are true, and the source label. None when the
+            balance could not be converted
         """
+
         written: str = str(object=getattr(context.args, "balance_as_of", "") or "")
 
         if not written:
@@ -636,17 +608,14 @@ class TspModule:
         return units, day.isoformat(), FROM_BALANCE
 
     def on_login(self, context: Context, connection: Connection) -> bool:
-        """Mark the account and persist it.
-
-        Args:
-            context (Context): Logging, database, and shared resources.
-            connection (Connection): The TSP connection, whose client holds the
-            parsed share price file.
-
-        Returns:
-            bool: False when nothing reached the database.
-
         """
+        Mark the account and persist it.
+        :param context: Logging, database, and shared resources
+        :param connection: The TSP connection, whose client holds the parsed share price
+            file
+        :return: False when nothing reached the database
+        """
+
         prices: Any = getattr(connection, "client", None)
         fund: str = str(object=getattr(connection, "fund", "") or "")
 
@@ -737,7 +706,8 @@ class TspModule:
         units_as_of: str,
         today: dt.date,
     ) -> tuple[float, str]:
-        """Estimate the units bought since the unit count was last true.
+        """
+        Estimate the units bought since the unit count was last true.
 
         The gap this closes is the broker's one known inaccuracy: units move
         when a contribution posts, contributions post monthly, and a count from
@@ -751,23 +721,19 @@ class TspModule:
         estimate. The anchored mark is correct arithmetic on its own and was the
         whole product until now; an accrual that cannot be computed must cost
         the accrual, and say so.
-
-        Args:
-            context (Context): Logging, and the parsed CLI arguments.
-            connection (Connection): The TSP connection, carrying the pay table,
-            the canonical grade and the service date the broker validated.
-            prices (dict[dt.date, dict[str, float]]): The parsed price file.
-            fund (str): The fund the contributions buy into.
-            units_as_of (str): The date the anchoring unit count was true.
-            today (dt.date): The run date.
-
-        Returns:
-            tuple[float, str]: Estimated units accrued and the date they run
-            through -- the last contribution that could be priced, not the run
-            date, since a month that could not be priced is not in the number.
-            (0.0, "") when no estimate could be made.
-
+        :param context: Logging, and the parsed CLI arguments
+        :param connection: The TSP connection, carrying the pay table, the canonical
+            grade and the service date the broker validated
+        :param prices: The parsed price file
+        :param fund: The fund the contributions buy into
+        :param units_as_of: The date the anchoring unit count was true
+        :param today: The run date
+        :return: Estimated units accrued and the date they run through -- the last
+            contribution that could be priced, not the run date, since a month that
+            could not be priced is not in the number. (0.0, "") when no estimate could
+            be made
         """
+
         table: Any = getattr(connection, "pay_table", None)
         basd: Any = getattr(connection, "basd", None)
         grade: Any = getattr(connection, "grade", "")
@@ -877,20 +843,19 @@ class TspModule:
 
     @staticmethod
     def report(context: Context, units_as_of: str, source: str, today: dt.date) -> None:
-        """Say how old the unit count is before reporting a value from it.
+        """
+        Say how old the unit count is before reporting a value from it.
 
         The whole point of the broker. A mark carried on a three-month-old unit
         count is still arithmetic, but it is missing every contribution since --
         and the number gives no sign of that, which is precisely how a stale
         figure passes for a current one.
-
-        Args:
-            context (Context): Used for logging.
-            units_as_of (str): The date the unit count was true, as written.
-            source (str): Which input supplied it.
-            today (dt.date): The run date.
-
+        :param context: Used for logging
+        :param units_as_of: The date the unit count was true, as written
+        :param source: Which input supplied it
+        :param today: The run date
         """
+
         if not units_as_of:
             context.log.highlight(
                 msg=(
@@ -935,7 +900,8 @@ class TspModule:
         units_as_of: str,
         accrued_as_of: str = "",
     ) -> bool:
-        """Write the mark to the broker database.
+        """
+        Write the mark to the broker database.
 
         Three dates, and none of them is the same fact. ``scraped_at`` is when
         the run happened. The snapshot's ``as_of`` is the price date the value is
@@ -953,23 +919,19 @@ class TspModule:
         sheet, which is a view of it -- instead of leaving "how much of this is a
         guess" answerable only from a log line nobody kept. It also means a run
         with no accrual writes exactly the row it always wrote.
-
-        Args:
-            context (Context): Logging and the database.
-            fund (str): The fund held.
-            units (float): Units the anchoring count states.
-            accrued (float): Units estimated to have been bought since.
-            price (float): Share price used.
-            value (float): The resulting mark, over both.
-            price_date (dt.date): The date that price was published.
-            units_as_of (str): The date the anchoring unit count was true.
-            accrued_as_of (str): The date the estimate runs through, which is
-            the last contribution it could price rather than the run date.
-
-        Returns:
-            bool: False on a database contract violation.
-
+        :param context: Logging and the database
+        :param fund: The fund held
+        :param units: Units the anchoring count states
+        :param accrued: Units estimated to have been bought since
+        :param price: Share price used
+        :param value: The resulting mark, over both
+        :param price_date: The date that price was published
+        :param units_as_of: The date the anchoring unit count was true
+        :param accrued_as_of: The date the estimate runs through, which is the last
+            contribution it could price rather than the run date
+        :return: False on a database contract violation
         """
+
         timestamp: str = dt.datetime.now(tz=dt.UTC).strftime(format="%Y-%m-%d %H:%M:%S")
         db: BrokerDbProtocol = context.db
         label: str = f"TSP {fund}"

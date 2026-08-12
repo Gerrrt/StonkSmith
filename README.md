@@ -472,10 +472,20 @@ Current safeguards:
   open: each plaintext password moves into the keyring and the column is
   cleared in place.
 
+- **Everything StonkSmith writes is owner-only** — `0600` for files, `0700` for
+  the directories under `~/.stonksmith`. That covers the databases, the config,
+  the run log, page captures, the saved browser session and the Playwright
+  trace.
+
 > [!IMPORTANT]
 > Passing `-p` on the command line still exposes the secret to your shell
 > history and process list. Prefer `add creds` in `stonksmithdb` plus `-id`.
 > Never commit credentials to source control.
+
+[`SECURITY.md`](SECURITY.md) is the full account, including the risks this
+project accepts rather than solves — the CDP debugging port, the width of the
+Google grant, and what a migrated database still has in its freed pages — and
+how to report a vulnerability.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -486,25 +496,22 @@ Current safeguards:
 This is currently a personal project, but contributions may open up in the
 future.
 
-1. Fork the project
-2. Create your feature branch (`git checkout -b some-amazing-feature`)
-3. Run the gates: `uv run ruff check`, `uv run ruff format --check`,
-   `uv run ty check`, `uv run pytest -q`
-4. Commit your changes (`git commit -m 'Add some amazing feature'`)
-5. Push to the branch (`git push origin some-amazing-feature`)
-6. Open a Pull Request
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the gates, the commit and branch
+conventions, the test house rules, and the handful of settings whose reasons are
+worth reading before changing them. The four gates are:
+
+```bash
+uv run ruff check
+uv run ruff format --check
+uv run ty check
+uv run pytest -q --cov --cov-fail-under=87
+```
 
 The version lives in `pyproject.toml` and nowhere else. `--version` and the
 banner read it off the installed distribution, so bumping it is one edit
 followed by `uv sync` — and `tests/test_version_single_source.py` fails if the
 two ever part company. The codename beside it in `src/stonksmith/etc/cli.py` is the one
 piece still written by hand, because nothing can derive one.
-
-A change to anything under `docs/` carries one extra obligation: those files are
-records, and each names the section that summarises it. Change a claim in one
-and change its summary here in the same pass —
-`tests/test_doc_cross_references.py` will tell you if a link went stale, but not
-whether the prose still means what it did.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
