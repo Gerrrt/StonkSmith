@@ -28,6 +28,99 @@ if TYPE_CHECKING:
     from stonksmith.etc.context import BrokerDbProtocol, BrokerProtocol, ModuleProtocol
 
 
+def broker_class_of(
+    module: ModuleType, broker_name: str
+) -> Callable[[], BrokerProtocol] | None:
+    """
+    The login class a broker module publishes.
+
+    Brokers publish a module-level ``Broker`` alias so the class name is free to
+    diverge from the directory name (TSP, Schwab529Plan). Falls back to the
+    capitalized directory name for brokers that predate the alias.
+
+    cast, not a check: this comes out of a file loaded by path, so nothing
+    static can confirm the shape. What the cast buys is the other end -- every
+    use of the result is checked against the protocol, and a broker missing
+    ``name`` or not callable is caught by ty at the call site rather than by a
+    thread pool at runtime.
+    :param module: The loaded broker module
+    :param broker_name: The directory the broker was found in
+    :return: The class, or None when the module publishes neither
+    :rtype: Callable[[], BrokerProtocol] | None
+    """
+
+    for attribute in ("Broker", broker_name.capitalize()):
+        found: object = getattr(module, attribute, None)
+
+        if found is not None:
+            return cast("Callable[[], BrokerProtocol]", found)
+
+    return None
+
+
+#: What a broker resolves to: the class that logs in, and the class that stores
+#: what it finds.
+type _Resolved = tuple[
+    Callable[[], BrokerProtocol], Callable[[Engine, str], BrokerDbProtocol]
+]
+
+
+def resolve_broker(broker_name: str) -> _Resolved | None:
+    """
+    Work out what to run for a broker, or say why nothing can be.
+
+    Split from ``main`` at the seam between deciding and doing: everything here
+    can fail and every failure is the same outcome -- a message and exit 1 --
+    which is what made ``main`` a column of early returns with the actual run
+    buried underneath them.
+    :param broker_name: The broker, lowercased
+    :return: The login class and the store class, or None after reporting
+    :rtype: _Resolved | None
+    """
+
+    broker_loader: BrokerLoader = BrokerLoader()
+    brokers: dict[str, BrokerInfo] = broker_loader.get_brokers()
+
+    if broker_name not in brokers:
+        stonksmith_logger.error(msg=f"Broker '{broker_name}' not found.")
+        return None
+
+    broker_info: BrokerInfo = brokers[broker_name]
+    broker_module: ModuleType | None = broker_loader.load_broker(
+        broker_path=broker_info["path"],
+    )
+
+    if broker_module is None:
+        stonksmith_logger.error(
+            msg=f"Failed to load broker module: {broker_info['path']}",
+        )
+        return None
+
+    # No "is there a database.py" branch: a broker without one takes
+    # BrokerDatabase, which is what all five of them used to subclass and
+    # nothing more. None here means the broker shipped one and it does not
+    # work, which the loader has already said out loud.
+    database: type | None = broker_loader.database_class(name=broker_name)
+
+    if database is None:
+        return None
+
+    broker_class: Callable[[], BrokerProtocol] | None = broker_class_of(
+        module=broker_module, broker_name=broker_name
+    )
+
+    if broker_class is None:
+        stonksmith_logger.error(
+            msg=(
+                f"Broker module '{broker_info['path']}' does not define a "
+                f"'Broker' alias or a '{broker_name.capitalize()}' class."
+            ),
+        )
+        return None
+
+    return broker_class, cast("Callable[[Engine, str], BrokerDbProtocol]", database)
+
+
 def main(args: Namespace) -> int:
     """
     Execute the main entry point for Stonksmith.
@@ -50,67 +143,12 @@ def main(args: Namespace) -> int:
 
     # 4. Broker Data Setup
     broker_name: str = args.broker.lower()
-    broker_loader: BrokerLoader = BrokerLoader()
-    brokers: dict[str, BrokerInfo] = broker_loader.get_brokers()
+    resolved: _Resolved | None = resolve_broker(broker_name=broker_name)
 
-    if broker_name not in brokers:
-        stonksmith_logger.error(msg=f"Broker '{broker_name}' not found.")
+    if resolved is None:
         return 1
 
-    broker_info: BrokerInfo = brokers[broker_name]
-
-    broker_module: ModuleType | None = broker_loader.load_broker(
-        broker_path=broker_info["path"],
-    )
-    if broker_module is None:
-        stonksmith_logger.error(
-            msg=f"Failed to load broker module: {broker_info['path']}",
-        )
-        return 1
-
-    if "dbpath" not in broker_info:
-        stonksmith_logger.error(
-            msg=f"Database module missing for broker '{broker_name}'.",
-        )
-        return 1
-
-    db_module: ModuleType | None = broker_loader.load_broker(
-        broker_path=broker_info["dbpath"],
-    )
-    if db_module is None or not hasattr(db_module, "Database"):
-        stonksmith_logger.error(
-            msg=f"Failed to load Database class from: {broker_info['dbpath']}",
-        )
-        return 1
-
-    # Brokers publish a module-level 'Broker' alias so the class name is free to
-    # diverge from the directory name (TSP, Schwab529Plan). Fall back to the
-    # capitalized directory name for brokers that predate the alias.
-    # cast, not a check: these come out of a file loaded by path, so nothing
-    # static can confirm the shape. What the cast buys is the other end -- every
-    # use below is checked against the protocol, and a broker missing `name` or
-    # not callable is caught by ty here rather than by a thread pool at runtime.
-    broker_class: Callable[[], BrokerProtocol] | None = cast(
-        "Callable[[], BrokerProtocol] | None", getattr(broker_module, "Broker", None)
-    )
-    if broker_class is None:
-        broker_class = cast(
-            "Callable[[], BrokerProtocol] | None",
-            getattr(broker_module, broker_name.capitalize(), None),
-        )
-
-    if broker_class is None:
-        stonksmith_logger.error(
-            msg=(
-                f"Broker module '{broker_info['path']}' does not define a "
-                f"'Broker' alias or a '{broker_name.capitalize()}' class."
-            ),
-        )
-        return 1
-
-    db_class: Callable[[Engine, str], BrokerDbProtocol] = cast(
-        "Callable[[Engine, str], BrokerDbProtocol]", db_module.Database
-    )
+    broker_class, db_class = resolved
 
     # 5. Database Setup
     db_path: Path = (

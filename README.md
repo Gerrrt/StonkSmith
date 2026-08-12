@@ -149,12 +149,18 @@ importable name. It used to install six — `main`, `etc`, `helpers`, `modules`,
 collide with an unrelated package in the same environment.
 
 Each broker is one package. `brokers/<name>/broker.py` holds the login class and
-publishes it as `Broker`, alongside `database.py`, `db_navigator.py`,
-`broker_args.py` and any `parser.py`. A directory containing
-`broker.py` *is* a broker — that is how `BrokerLoader` discovers them, scanning
-`src/stonksmith/brokers/` first and then `~/.stonksmith/brokers/`. Everything except
-`broker.py` is optional; a broker without `database.py` and `db_navigator.py` is
-listed as "incomplete" by `stonksmithdb`. A broker that *raises* while loading is
+publishes it as `Broker`, optionally alongside `broker_args.py` and any
+`parser.py`. A directory containing `broker.py` *is* a broker — that is how
+`BrokerLoader` discovers them, scanning `src/stonksmith/brokers/` first and then
+`~/.stonksmith/brokers/`.
+
+**`broker.py` is the only file a broker needs.** Without a `database.py` it gets
+`BrokerDatabase`, and without a `db_navigator.py` it gets `BrokerNavigator` —
+which is what every bundled broker now takes, SnapTrade's navigator aside. A
+broker that *does* ship one and gets it wrong is reported rather than quietly
+given the default: the file exists because somebody meant something by it.
+
+A broker that *raises* while loading is
 reported by name and skipped — it registers no subparser and is simply
 unavailable for that run, so a half-finished broker under
 `~/.stonksmith/brokers/` never takes the rest of the tool down with it.

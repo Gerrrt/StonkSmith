@@ -8,6 +8,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import ClassVar, NotRequired, TypedDict, cast
 
+from stonksmith.etc.broker_db import BrokerDatabase
+from stonksmith.etc.broker_nav import BrokerNavigator
 from stonksmith.etc.logger import stonksmith_logger
 from stonksmith.etc.paths import package_root
 from stonksmith.loaders._legacy_names import legacy_top_level_names
@@ -90,6 +92,97 @@ class BrokerLoader:
             return broker
 
         return None
+
+    def _class_from(self, name: str, key: str, symbol: str) -> type | None:
+        """
+        The class a broker publishes in one of its optional files.
+
+        Absent file and broken file are different answers, which is why
+        ``ships()`` exists beside this. A broker with no database.py has not
+        made a mistake -- it is taking the default. One that ships a file which
+        will not load, or which loads without the symbol, *has*, and defaulting
+        there would quietly run it against a store it did not ask for. This
+        returns None for the second case; callers check ``ships()`` first and
+        stop rather than substitute.
+        :param name: The broker
+        :param key: Which of _OPTIONAL_FILES to look in
+        :param symbol: The name the file is expected to publish
+        :return: The class, or None when the file is absent or unusable
+        :rtype: type | None
+        """
+
+        info: BrokerInfo | None = self.get_brokers().get(name)
+        path: str | None = info.get(key) if info else None  # type: ignore[assignment]
+
+        if path is None:
+            return None
+
+        module: ModuleType | None = self.load_broker(
+            broker_path=path, label=f"{name}'s {symbol}"
+        )
+        found: type | None = getattr(module, symbol, None) if module else None
+
+        if found is None:
+            stonksmith_logger.fail(
+                msg=(
+                    f"{path} does not publish a '{symbol}'. Remove the file to "
+                    f"take the default, or give it one."
+                ),
+            )
+
+        return found
+
+    def ships(self, name: str, key: str) -> bool:
+        """
+        Whether a broker provides one of the optional files at all.
+
+        Separates "took the default" from "published something unusable", which
+        a bare None cannot.
+        :param name: The broker
+        :param key: Which of _OPTIONAL_FILES to look for
+        :return: True when the file is there
+        :rtype: bool
+        """
+
+        info: BrokerInfo | None = self.get_brokers().get(name)
+        return bool(info) and key in info
+
+    def database_class(self, name: str) -> type | None:
+        """
+        The Database class for a broker.
+
+        ``BrokerDatabase`` unless the broker overrides it. Every shipped broker
+        used to carry a database.py that subclassed it and set ``broker_name``
+        and nothing else -- sixteen lines each, restating a fact this loader
+        already knows from the directory it found the broker in. The base class
+        takes the broker as a constructor argument and always did, so the
+        subclasses were never doing anything.
+        :param name: The broker
+        :return: The class, or None when the broker ships a broken one
+        :rtype: type | None
+        """
+
+        if not self.ships(name=name, key="dbpath"):
+            return BrokerDatabase
+
+        return self._class_from(name=name, key="dbpath", symbol="Database")
+
+    def navigator_class(self, name: str) -> type | None:
+        """
+        The DatabaseNavigator class for a broker.
+
+        ``BrokerNavigator`` unless the broker overrides it, which only SnapTrade
+        does. The other four db_navigator.py files subclassed it and added
+        nothing at all -- not even a name.
+        :param name: The broker
+        :return: The class, or None when the broker ships a broken one
+        :rtype: type | None
+        """
+
+        if not self.ships(name=name, key="nvpath"):
+            return BrokerNavigator
+
+        return self._class_from(name=name, key="nvpath", symbol="DatabaseNavigator")
 
     def get_brokers(self) -> dict[str, BrokerInfo]:
         """

@@ -7,7 +7,6 @@ import configparser
 import datetime as dt
 from pathlib import Path
 from sys import argv
-from types import ModuleType
 from typing import Any
 
 from sqlalchemy import Engine
@@ -156,12 +155,12 @@ class StonkSmithDBMenu(cmd.Cmd):
         print("[*] Available brokers:")
 
         for name in sorted(self.brokers):
-            info: BrokerInfo = self.brokers[name]
             db_file: Path = Path(workspace_dir) / self.workspace / f"{name}.db"
 
-            if not {"nvpath", "dbpath"} <= set(info):
-                status = "incomplete (broker package is missing files)"
-            elif not db_file.exists():
+            # No "incomplete" state any more: a broker that ships neither a
+            # database.py nor a db_navigator.py takes the defaults, which is
+            # what all five of the bundled ones now do.
+            if not db_file.exists():
                 status = f"no database in workspace '{self.workspace}' yet"
             else:
                 status = "ready"
@@ -491,43 +490,27 @@ class StonkSmithDBMenu(cmd.Cmd):
             self.list_brokers()
             return None
 
-        info: BrokerInfo = self.brokers[broker]
-        missing: list[str] = [key for key in ("nvpath", "dbpath") if key not in info]
-        if missing:
-            print(f"[-] Broker '{broker}' is incomplete; missing {', '.join(missing)}")
-            return None
-
         db_file: Path = Path(workspace_dir) / self.workspace / f"{broker}.db"
 
         if not db_file.exists():
             print(f"[-] Database file missing: {db_file}")
             return None
 
-        nav_mod: ModuleType | None = self.broker_loader.load_broker(
-            broker_path=info["nvpath"]
-        )
-        db_mod: ModuleType | None = self.broker_loader.load_broker(
-            broker_path=info["dbpath"]
-        )
+        navigator = self.broker_loader.navigator_class(name=broker)
+        database = self.broker_loader.database_class(name=broker)
 
-        if nav_mod is None or db_mod is None:
+        if navigator is None or database is None:
             print(f"[-] Failed to load broker modules for: {broker}")
             return None
 
-        db_class = getattr(db_mod, "Database", None)
-        nav_class = getattr(nav_mod, "DatabaseNavigator", None)
-        if db_class is None or nav_class is None:
-            print(f"[-] Broker '{broker}' is missing Database or DatabaseNavigator")
-            return None
-
         engine: Engine = create_db_engine(db_path=db_file)
-        db_instance = db_class(engine, broker)
+        db_instance = database(engine, broker)
 
         self.config.set(section="STONKSMITH", option="last_used_db", value=broker)
         self.write_config()
 
         try:
-            broker_menu = nav_class(self, db_instance, broker)
+            broker_menu = navigator(self, db_instance, broker)
             broker_menu.cmdloop()
 
         except SwitchBroker as switch:
@@ -589,22 +572,16 @@ class StonkSmithDBMenu(cmd.Cmd):
         new_path.mkdir(mode=OWNER_ONLY_DIR, parents=True, exist_ok=True)
         restrict_dir(path=new_path)
 
-        for broker_name, info in self.brokers.items():
-            if "dbpath" in info:
-                db_file: Path = new_path / f"{broker_name}.db"
-                mod: ModuleType | None = self.broker_loader.load_broker(
-                    broker_path=info["dbpath"]
-                )
-                db_class = getattr(mod, "Database", None) if mod is not None else None
-                if db_class is None:
-                    print(
-                        f"[-] Skipping {broker_name}: {info['dbpath']} does not "
-                        "define a Database class."
-                    )
-                    continue
-                engine: Engine = create_db_engine(db_path=db_file)
-                db_instance = db_class(engine, broker_name)
-                db_instance.shutdown_db()
+        for broker_name in self.brokers:
+            db_class = self.broker_loader.database_class(name=broker_name)
+
+            if db_class is None:
+                print(f"[-] Skipping {broker_name}: its Database will not load.")
+                continue
+
+            engine: Engine = create_db_engine(db_path=new_path / f"{broker_name}.db")
+            db_instance = db_class(engine, broker_name)
+            db_instance.shutdown_db()
 
 
 def initialize_db(logger: StonkSmithAdapter) -> None:
@@ -621,23 +598,22 @@ def initialize_db(logger: StonkSmithAdapter) -> None:
     loader = BrokerLoader()
     brokers: dict[str, BrokerInfo] = loader.get_brokers()
 
-    for name, info in brokers.items():
+    for name in brokers:
         db_file: Path = default_ws / f"{name}.db"
-        if not db_file.exists() and "dbpath" in info:
-            logger.highlight(msg=f"Initializing {name.upper()} database")
-            mod: ModuleType | None = loader.load_broker(broker_path=info["dbpath"])
-            db_class = getattr(mod, "Database", None) if mod is not None else None
-            if db_class is None:
-                logger.fail(
-                    msg=(
-                        f"Skipping {name}: {info['dbpath']} does not define a "
-                        "Database class."
-                    )
-                )
-                continue
-            engine: Engine = create_db_engine(db_path=db_file)
-            db_instance = db_class(engine, name)
-            db_instance.shutdown_db()
+
+        if db_file.exists():
+            continue
+
+        logger.highlight(msg=f"Initializing {name.upper()} database")
+        db_class = loader.database_class(name=name)
+
+        if db_class is None:
+            logger.fail(msg=f"Skipping {name}: its Database will not load.")
+            continue
+
+        engine: Engine = create_db_engine(db_path=db_file)
+        db_instance = db_class(engine, name)
+        db_instance.shutdown_db()
 
 
 def main() -> None:

@@ -1,7 +1,9 @@
 """Fidelity broker package.
 
-``broker.py`` holds the login class; ``database.py``, ``db_navigator.py``,
-``broker_args.py`` and ``saver.py`` are loaded by BrokerLoader by path.
+``broker.py`` holds the login class; ``broker_args.py`` and ``saver.py`` are
+loaded by BrokerLoader by path. There is no ``database.py`` or
+``db_navigator.py``: BrokerLoader falls back to ``etc.broker_db.BrokerDatabase``
+and ``etc.broker_nav.BrokerNavigator``, which is all the deleted ones ever were.
 
 ``Fidelity`` is exported lazily. ``modules/fidelity_module.py`` imports
 ``brokers.fidelity.saver`` on every run -- ModuleLoader metadata-scans every file in

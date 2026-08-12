@@ -75,11 +75,16 @@ class TopLevelGuidanceTests(unittest.TestCase):
         self.assertIn("Unknown broker: schwab", output)
         self.assertIn("schwab529plan", output)
 
-    def test_incomplete_broker_is_flagged_in_the_listing(self) -> None:
+    def test_a_broker_without_a_database_yet_says_so(self) -> None:
+        # It used to read "incomplete (broker package is missing files)", which
+        # described the package. A package with only broker.py is complete now;
+        # what it lacks is a database in this workspace, which is a different
+        # thing and the one the operator can act on.
         menu = _menu(brokers={"lonely": {"path": "l.py"}})
         output = _capture(menu.list_brokers)
 
-        self.assertIn("incomplete", output)
+        self.assertNotIn("incomplete", output)
+        self.assertIn("no database in workspace", output)
 
     def test_no_brokers_says_so(self) -> None:
         output = _capture(_menu(brokers={}).list_brokers)

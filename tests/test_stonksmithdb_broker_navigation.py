@@ -51,9 +51,12 @@ class StonkSmithDBNavigationTests(unittest.TestCase):
                 "dbpath": "fake/db",
             },
         }
-        # Wire broker_loader.load_broker to return nav_mod then db_mod.
+        # do_broker asks the loader for classes now, not for modules by path:
+        # a broker that ships neither file takes the base classes, so resolving
+        # them is the loader's job rather than the shell's.
         menu.broker_loader = MagicMock()
-        menu.broker_loader.load_broker.side_effect = [nav_mod, db_mod]
+        menu.broker_loader.navigator_class.return_value = nav_mod.DatabaseNavigator
+        menu.broker_loader.database_class.return_value = db_mod.Database
 
         # Make the db_file path appear to exist.
         fake_db_file = MagicMock(spec=Path)

@@ -173,12 +173,16 @@ select = [
 ]
 
 [tool.ruff.lint.mccabe]
-# 16 is what the worst function in src/ scores today (error_shape, in
-# browser_connection.py). Set here as a ceiling rather than an aspiration: it
-# cannot be met by accident, and it stops anything new from being worse than the
-# worst thing already here. Lowering it towards 10 is a refactor of ten named
-# functions, which is its own piece of work and not a lint setting.
-max-complexity = 16
+# 12 is what the worst function in src/ scores today, after four were split:
+# error_shape (16), to_amount (15), main (15) and ally's on_login (14). Set as a
+# ceiling rather than an aspiration -- it cannot be met by accident, and it stops
+# anything new being worse than the worst thing already here.
+#
+# Not lowered further on purpose. Below 12 the list stops being outliers and
+# becomes six functions sitting at exactly 10, most of them broker scrape loops
+# where the branching *is* the domain: a page that renders three ways needs three
+# branches, and splitting them buys a smaller number and a worse read.
+max-complexity = 12
 
 [tool.ruff.lint.per-file-ignores]
 # The template is illustrative; its unused args are the point.

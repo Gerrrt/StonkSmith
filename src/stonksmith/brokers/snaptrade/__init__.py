@@ -1,7 +1,16 @@
 """SnapTrade broker package.
 
-``broker.py`` holds the API client; ``database.py``, ``db_navigator.py``,
-``broker_args.py`` and ``saver.py`` are loaded by BrokerLoader by path.
+``broker.py`` holds the API client; ``db_navigator.py``, ``broker_args.py`` and
+``saver.py`` are loaded by BrokerLoader by path. There is no ``database.py``:
+BrokerLoader falls back to ``etc.broker_db.BrokerDatabase``, which is all the
+deleted one ever was.
+
+The inherited ``credentials`` table goes unused here. SnapTrade authenticates
+with a client id from the config file and a consumer key from the OS keyring,
+not with a username and password -- see ``broker.py``. That is why ``add creds``
+against this broker is not the setup step it looks like; ``db_navigator.py``
+overrides the shell to say so, which is why this is the one broker that still
+has one.
 
 ``SnapTradeBroker`` is exported lazily. ``modules/snaptrade_module.py`` imports
 ``brokers.snaptrade.saver`` on every run -- ModuleLoader metadata-scans every

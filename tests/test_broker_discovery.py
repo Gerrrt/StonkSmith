@@ -15,6 +15,8 @@ import unittest
 from pathlib import Path
 
 from package_tree import BROKERS, PACKAGE, REPO, SRC
+from stonksmith.etc.broker_db import BrokerDatabase
+from stonksmith.etc.broker_nav import BrokerNavigator
 from stonksmith.loaders.brokerloader import BrokerLoader
 
 EXPECTED_KEYS = {"path", "dbpath", "nvpath", "argspath"}
@@ -69,22 +71,92 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
                     getattr(module, "Broker", None), type, "missing Broker alias"
                 )
 
-    def test_the_shipped_brokers_are_complete(self) -> None:
-        # stonksmithdb calls a broker "incomplete" without nvpath and dbpath.
-        brokers = _fresh_loader().get_brokers()
+    def test_every_shipped_broker_resolves_a_store_and_a_shell(self) -> None:
+        # This used to assert that each broker *shipped* a database.py and a
+        # db_navigator.py, which is what "incomplete" meant. Four of the five
+        # navigators subclassed BrokerNavigator and added nothing at all, and
+        # all five databases set a broker_name the loader already knew, so they
+        # are gone and the loader substitutes the base classes.
+        #
+        # What matters was never which files exist. It is that asking for the
+        # two classes gets you usable ones, whether the broker overrode them or
+        # took the default -- so that is what this asks now.
+        loader = _fresh_loader()
 
         for name in SHIPPED:
-            info = brokers[name]
             with self.subTest(broker=name):
-                self.assertTrue({"nvpath", "dbpath"} <= set(info))
+                database = loader.database_class(name=name)
+                navigator = loader.navigator_class(name=name)
 
-                db_mod = BrokerLoader.load_broker(broker_path=info["dbpath"])
-                nav_mod = BrokerLoader.load_broker(broker_path=info["nvpath"])
-                args_mod = BrokerLoader.load_broker(broker_path=info["argspath"])
+                self.assertIsInstance(database, type, "no Database resolved")
+                self.assertIsInstance(navigator, type, "no DatabaseNavigator resolved")
+                self.assertTrue(issubclass(database, BrokerDatabase))
+                self.assertTrue(issubclass(navigator, BrokerNavigator))
 
-                self.assertIsInstance(getattr(db_mod, "Database", None), type)
-                self.assertIsInstance(getattr(nav_mod, "DatabaseNavigator", None), type)
+                args_mod = BrokerLoader.load_broker(
+                    broker_path=loader.get_brokers()[name]["argspath"]
+                )
                 self.assertTrue(callable(getattr(args_mod, "broker_args", None)))
+
+    def test_only_snaptrade_still_overrides_anything(self) -> None:
+        # The whole point of the deletion, stated as a fact that will fail if a
+        # broker quietly grows a file back. SnapTrade's navigator says `add
+        # creds` is not the setup step it looks like, which is real behaviour;
+        # nothing else had any.
+        loader = _fresh_loader()
+
+        overriding: dict[str, list[str]] = {
+            name: [key for key in ("dbpath", "nvpath") if loader.ships(name, key)]
+            for name in SHIPPED
+        }
+
+        self.assertEqual(
+            {name: keys for name, keys in overriding.items() if keys},
+            {"snaptrade": ["nvpath"]},
+        )
+
+    def test_a_user_broker_needs_only_broker_py(self) -> None:
+        # The point of the whole change, from the outside. A directory holding
+        # one file is a working broker: the loader supplies the store and the
+        # shell, and neither has anything the broker could usefully say about
+        # it -- BrokerDatabase takes the broker name as an argument and always
+        # did, and BrokerNavigator takes it too.
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / "brokers" / "minimal"
+            package.mkdir(parents=True)
+            (package / "broker.py").write_text("Broker = object\n")
+
+            loader = _fresh_loader(Path(tmp))
+
+            self.assertIn("minimal", loader.get_brokers())
+            self.assertIs(loader.database_class(name="minimal"), BrokerDatabase)
+            self.assertIs(loader.navigator_class(name="minimal"), BrokerNavigator)
+
+    def test_a_broker_that_ships_a_broken_database_is_not_defaulted(self) -> None:
+        # Absent and broken are different answers. Substituting here would run
+        # the broker against a store it did not ask for, which is worse than
+        # stopping -- the file exists because somebody meant something by it.
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / "brokers" / "rotten"
+            package.mkdir(parents=True)
+            (package / "broker.py").write_text("Broker = object\n")
+            (package / "database.py").write_text('raise ValueError("rotten")\n')
+
+            loader = _fresh_loader(Path(tmp))
+
+            self.assertTrue(loader.ships("rotten", "dbpath"))
+            self.assertIsNone(loader.database_class(name="rotten"))
+
+    def test_a_database_file_without_the_symbol_is_not_defaulted_either(self) -> None:
+        # Loads fine, publishes nothing. Same reasoning: silence here would look
+        # exactly like the default having been chosen deliberately.
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / "brokers" / "empty"
+            package.mkdir(parents=True)
+            (package / "broker.py").write_text("Broker = object\n")
+            (package / "database.py").write_text("# nothing here\n")
+
+            self.assertIsNone(_fresh_loader(Path(tmp)).database_class(name="empty"))
 
     def test_no_flat_module_shadows_a_broker_package(self) -> None:
         # The bug this layout closed: brokers/fidelity.py beside brokers/fidelity/
