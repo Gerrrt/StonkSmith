@@ -4,7 +4,7 @@ Attempt connection
 
 import argparse
 from argparse import Namespace
-from os.path import isfile
+from pathlib import Path
 from threading import BoundedSemaphore
 from typing import Any, cast
 
@@ -433,16 +433,22 @@ class Connection:
             )
 
         for user in self.args.username:
-            if isfile(path=user):
-                with open(file=user) as f:
+            # A value that names a readable file is a list of usernames; one
+            # that does not is a username. Path.is_file() answers False for the
+            # unreadable and the malformed alike, which is the same answer
+            # os.path.isfile gave, so a login name is never mistaken for a path.
+            user_file = Path(user)
+            if user_file.is_file():
+                with user_file.open() as f:
                     u_final.extend([line.strip().split(sep="\\")[-1] for line in f])
 
             else:
                 u_final.append(user.split("\\")[-1])
 
         for password in self.args.password:
-            if isfile(path=password):
-                with open(file=password) as f:
+            password_file = Path(password)
+            if password_file.is_file():
+                with password_file.open() as f:
                     s_final.extend([line.strip() for line in f])
 
             else:

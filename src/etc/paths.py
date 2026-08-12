@@ -15,11 +15,11 @@ package_root: Path = Path(paths_parent).parent
 data_path: Path = package_root / "data"
 etc_path: Path = package_root / "etc"
 
-stonksmith_path = Path(os.path.expanduser(path="~/.stonksmith"))
+stonksmith_path = Path("~/.stonksmith").expanduser()
 # Logs belong with the rest of the user's state, not inside the installed
 # package. setup_tool() already creates ~/.stonksmith/logs.
 logs_path: Path = stonksmith_path / "logs"
-home_path = Path(os.path.expanduser(path="~"))
+home_path = Path("~").expanduser()
 ws_path: Path = stonksmith_path / "workspaces"
 playwright_path: Path = stonksmith_path / "playwright"
 workspace_dir: Path = ws_path
@@ -29,9 +29,10 @@ token_path: Path = home_path / "token.json"
 creds_path: Path = home_path / "credentials.json"
 
 if os.name == "nt":
-    tmp_base: Path = (
-        Path(os.getenv(key="LOCALAPPDATA", default=os.path.expanduser(path="~")))
-        / "Temp"
+    # `or`, not a getenv default: LOCALAPPDATA set but empty would otherwise
+    # give Path(""), which is the current directory rather than a temp one.
+    tmp_base: Path = Path(os.getenv(key="LOCALAPPDATA") or Path("~").expanduser()) / (
+        "Temp"
     )
 
 else:

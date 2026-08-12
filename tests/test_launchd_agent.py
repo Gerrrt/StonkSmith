@@ -34,7 +34,7 @@ def _load() -> tuple[dict[str, Any] | None, str]:
     """
 
     try:
-        with open(AGENT, "rb") as handle:
+        with AGENT.open("rb") as handle:
             return plistlib.load(handle), ""
 
     except Exception as e:

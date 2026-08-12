@@ -579,9 +579,7 @@ class BrowserConnection(Connection):
 
         if not self.profile_path.exists():
             self.profile_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(
-                file=str(object=self.profile_path), mode="w", encoding="utf-8"
-            ) as f:
+            with self.profile_path.open(mode="w", encoding="utf-8") as f:
                 json.dump(obj={}, fp=f)
 
         assert self.playwright is not None

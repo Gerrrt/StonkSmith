@@ -20,7 +20,11 @@ def isolated_home_env(home: str, **extra: str) -> dict[str, str]:
     :return: An environment mapping ready for subprocess.run(env=...)
     """
 
-    drive, tail = os.path.splitdrive(p=os.path.abspath(path=home))
+    # Not Path.resolve(): it follows symlinks, and the temp directory this is
+    # handed is reached through one on macOS (/var -> /private/var). Resolving
+    # would hand the subprocess a HOMEPATH naming a different string than HOME,
+    # which is the one thing a home-isolation helper must not do.
+    drive, tail = os.path.splitdrive(p=os.path.abspath(path=home))  # noqa: PTH100
 
     return dict(
         os.environ,

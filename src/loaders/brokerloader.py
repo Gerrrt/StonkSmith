@@ -4,7 +4,6 @@ Load the broker specified from command line arguments.
 
 import importlib.util
 from importlib.machinery import ModuleSpec
-from os.path import expanduser
 from pathlib import Path
 from types import ModuleType
 from typing import ClassVar
@@ -28,7 +27,7 @@ class BrokerLoader:
     }
 
     def __init__(self) -> None:
-        self.stonksmith_path = Path(expanduser(path="~/.stonksmith"))
+        self.stonksmith_path = Path("~/.stonksmith").expanduser()
         self._cache = {}
 
     @staticmethod
