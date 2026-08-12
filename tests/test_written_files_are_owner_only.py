@@ -22,14 +22,19 @@ which is the right way round for a thing nobody is watching. If a Windows job is
 ever added, this file is where it lands first.
 """
 
+import contextlib
 import logging
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import stonksmith.etc.browser_connection as browser_mod
 import stonksmith.etc.config as etc_config
+import stonksmith.helpers.sheets as sheets
 from config_isolation import UserConfigMixin
+from stonksmith.etc.browser_connection import BrowserConnection
 from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.etc.logger import StonkSmithAdapter
 from stonksmith.etc.permissions import (
@@ -148,6 +153,117 @@ class RunLogTests(_TempRoot):
         self._add_handler(path=path)
 
         self.assertEqual(path.stat().st_mode & 0o777, 0o644)
+
+
+class TraceAndProfileTests(_TempRoot):
+    """The two artifacts StonkSmith does not write but does cause to exist."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = patch.object(browser_mod, "playwright_path", self.tmp)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _connection(self) -> BrowserConnection:
+        connection = BrowserConnection.__new__(BrowserConnection)
+        connection.logger = MagicMock()
+        connection.context = MagicMock()
+        connection.attached = True
+        connection.tracing_started = True
+        connection.trace_path = self.tmp / "Fidelity_trace.zip"
+        connection.browser = None
+        connection.page = None
+        connection.playwright = None
+        connection.args = Namespace(profile_dir=None)
+        return connection
+
+    def test_the_trace_is_owner_only(self) -> None:
+        # screenshots=True and snapshots=True: a DOM recording of a signed-in
+        # brokerage session, and the largest single file this tool writes.
+        connection = self._connection()
+        connection.context.tracing.stop.side_effect = lambda path: Path(
+            path
+        ).write_bytes(b"PK\x03\x04")
+
+        with (
+            patch.object(BrowserConnection, "save_response_log"),
+            patch.object(BrowserConnection, "save_session"),
+        ):
+            connection.teardown()
+
+        self.assertEqual(connection.trace_path.stat().st_mode & 0o777, OWNER_ONLY_FILE)
+
+    def test_the_default_profile_directory_is_owner_only(self) -> None:
+        connection = self._connection()
+        profile: Path = self.tmp / "chrome-profile"
+        profile.mkdir(mode=0o755)
+
+        with (
+            patch.object(BrowserConnection, "chrome_profile_dir", return_value=profile),
+            contextlib.suppress(Exception),
+        ):
+            connection.start_chromium(headed=False, channel=None)
+
+        self.assertEqual(profile.stat().st_mode & 0o777, OWNER_ONLY_DIR)
+
+    def test_a_profile_directory_the_operator_named_is_left_alone(self) -> None:
+        # --profile-dir can point at a real Chrome profile. Tightening that is a
+        # change to state this tool did not create, cannot put back, and which
+        # another process or another user may legitimately be reaching. This is
+        # the test that stops the guard being "simplified" away.
+        theirs: Path = Path(self._tmp.name).parent / "their-chrome-profile"
+        theirs.mkdir(mode=0o755, exist_ok=True)
+        self.addCleanup(theirs.rmdir)
+        connection = self._connection()
+
+        with (
+            patch.object(BrowserConnection, "chrome_profile_dir", return_value=theirs),
+            contextlib.suppress(Exception),
+        ):
+            connection.start_chromium(headed=False, channel=None)
+
+        self.assertEqual(theirs.stat().st_mode & 0o777, 0o755)
+
+
+class GoogleCredentialTests(_TempRoot):
+    def _seed(self) -> None:
+        self.tmp.chmod(mode=0o755)
+        for name in ("authorized_user.json", "credentials.json"):
+            path: Path = self.tmp / name
+            path.write_text(data="{}", encoding="utf-8")
+            path.chmod(mode=0o644)
+
+    def test_opening_the_book_tightens_the_stored_credentials(self) -> None:
+        # authorized_user.json is a refresh token for the operator's whole Drive,
+        # renewable indefinitely. gspread writes it at umask, and it is the
+        # highest-value secret on the machine.
+        self._seed()
+
+        with (
+            patch.object(sheets, "GSPREAD_CONFIG_DIR", str(object=self.tmp)),
+            patch("stonksmith.helpers.sheets.gspread.oauth", return_value=MagicMock()),
+        ):
+            sheets.open_spreadsheet()
+
+        self.assertEqual(self.tmp.stat().st_mode & 0o777, OWNER_ONLY_DIR)
+        for name in ("authorized_user.json", "credentials.json"):
+            with self.subTest(credential=name):
+                self.assertEqual(
+                    (self.tmp / name).stat().st_mode & 0o777, OWNER_ONLY_FILE
+                )
+
+    def test_a_config_directory_that_is_not_there_is_not_created(self) -> None:
+        # An install that has never authorized has no such directory, and making
+        # one would be this tool inventing state in another library's namespace.
+        absent: Path = self.tmp / "never-authorized"
+
+        with (
+            patch.object(sheets, "GSPREAD_CONFIG_DIR", str(object=absent)),
+            patch("stonksmith.helpers.sheets.gspread.oauth", return_value=MagicMock()),
+        ):
+            sheets.open_spreadsheet()
+
+        self.assertFalse(absent.exists())
 
 
 class ConfigFileTests(UserConfigMixin, unittest.TestCase):

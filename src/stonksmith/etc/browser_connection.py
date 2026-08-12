@@ -67,7 +67,7 @@ from requests.exceptions import RequestException
 
 from stonksmith.etc.connection import Connection
 from stonksmith.etc.paths import logs_path, playwright_path
-from stonksmith.etc.permissions import restrict
+from stonksmith.etc.permissions import OWNER_ONLY_DIR, restrict, restrict_dir
 
 #: Playwright raises TargetClosedError when the browser goes away mid-call, but
 #: that class is not exported from playwright.sync_api -- only from a private
@@ -591,7 +591,15 @@ class BrowserConnection(Connection):
         """
 
         profile_dir: Path = self.chrome_profile_dir()
-        profile_dir.mkdir(parents=True, exist_ok=True)
+        profile_dir.mkdir(mode=OWNER_ONLY_DIR, parents=True, exist_ok=True)
+
+        # Only a directory under playwright_path. --profile-dir can name the
+        # operator's real Chrome profile -- chrome_profile_dir() says so and both
+        # brokers' --help offer it -- and tightening the mode on that is a change
+        # to state this tool did not create, cannot put back, and which another
+        # process or another user may legitimately be reaching.
+        if profile_dir.is_relative_to(playwright_path):
+            restrict_dir(path=profile_dir)
 
         assert self.playwright is not None
 
@@ -1112,6 +1120,10 @@ class BrowserConnection(Connection):
             if self.tracing_started:
                 try:
                     self.context.tracing.stop(path=str(object=self.trace_path))
+                    # Started with screenshots=True and snapshots=True, so this
+                    # is a DOM recording of a signed-in brokerage session and
+                    # the largest single file this tool writes.
+                    restrict(path=self.trace_path)
 
                 except Exception as e:
                     self.logger.fail(msg=f"Could not write Playwright trace: {e}")
