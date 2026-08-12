@@ -1,6 +1,5 @@
 """Credential storage must keep secrets in the OS keyring, never in SQLite."""
 
-import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,8 +8,9 @@ import keyring
 import keyring.backend
 from sqlalchemy import text
 
-from package_tree import PACKAGE
+from package_tree import REPO
 from stonksmith.etc.infrastructure import create_db_engine
+from stonksmith.loaders.brokerloader import BrokerLoader
 
 
 class _MemoryKeyring(keyring.backend.KeyringBackend):
@@ -33,14 +33,26 @@ class _MemoryKeyring(keyring.backend.KeyringBackend):
 
 
 def _load_database_class() -> type:
-    """Load the broker Database the way BrokerLoader does: by file path."""
+    """
+    Resolve the broker Database the way main.py does.
 
-    path = PACKAGE / "brokers/schwab529plan/database.py"
-    spec = importlib.util.spec_from_file_location("schwab529_database", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.Database
+    Through the loader rather than by loading a file: schwab529plan no longer
+    ships a database.py, and neither do the other four. Asking the loader is
+    what production does, so this exercises the same answer rather than a path
+    that happens to exist.
+
+    The second search root is pointed somewhere harmless first, the way
+    tests/test_broker_discovery.py does it. BrokerLoader.__init__ hardcodes
+    ~/.stonksmith, and a suite that reads it answers differently depending on
+    what the developer happens to have installed there.
+    """
+
+    loader = BrokerLoader()
+    loader.stonksmith_path = REPO / "absent"
+
+    resolved = loader.database_class(name="schwab529plan")
+    assert resolved is not None
+    return resolved
 
 
 class CredentialKeyringTests(unittest.TestCase):

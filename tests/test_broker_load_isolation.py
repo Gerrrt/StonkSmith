@@ -222,14 +222,18 @@ class MainSurvivesABrokenDatabaseTests(_CaptureMixin, unittest.TestCase):
                 patch.object(main_module, "create_db_engine", return_value=MagicMock()),
                 patch.object(main_module, "BrokerLoader") as broker_loader,
             ):
-                loader = broker_loader.return_value
-                loader.get_brokers.return_value = {
+                # A real loader with its discovery result planted, rather than a
+                # mock: database_class() is the thing under test here, and a
+                # MagicMock would hand main() a truthy class and never load the
+                # rotten file at all.
+                loader = BrokerLoader()
+                loader._cache = {
                     "rotten": {
                         "path": str(package / "broker.py"),
                         "dbpath": str(package / "database.py"),
                     },
                 }
-                loader.load_broker = BrokerLoader.load_broker
+                broker_loader.return_value = loader
 
                 # Before the guard this raised ValueError out of main().
                 self.assertEqual(main_module.main(args=args), 1)

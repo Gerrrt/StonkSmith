@@ -2,10 +2,12 @@
 
 ``broker.py`` holds the login class. The rest is loaded by BrokerLoader by path:
 - `broker_args`: Argument parsing utilities specific to the Schwab 529 Plan broker.
-- `database`: Database-related utilities specific to the Schwab 529 Plan broker.
-- `db_navigator`: Utilities for navigating the Schwab 529 Plan database.
 - `parser`: A module for parsing the Schwab 529 Plan data.
 - `saver`: A module for saving the parsed Schwab 529 Plan data to a database.
+
+There is no `database` or `db_navigator` module: BrokerLoader falls back to
+`etc.broker_db.BrokerDatabase` and `etc.broker_nav.BrokerNavigator`, which is
+all the deleted ones ever were.
 
 ``Schwab529plan`` is exported lazily, matching brokers/fidelity. This module's own
 imports are cheap, but keeping one pattern means a future heavyweight import cannot

@@ -117,6 +117,23 @@ def to_amount(text: Any) -> float | None:
         # perfectly plausible number.
         return None
 
+    return _amount_from_text(text=text)
+
+
+def _amount_from_text(text: str) -> float | None:
+    """
+    Read a scraped string as a number.
+
+    Split from ``to_amount`` at the seam between the two questions it answers:
+    above, whether this is already a number; here, what the string says. The
+    branching below is the set of formats the brokers actually emit and is not
+    reducible without dropping one of them -- which is why it lives on its own
+    rather than being simplified.
+    :param text: A scraped string
+    :return: The value, or None when there is not one
+    :rtype: float | None
+    """
+
     raw: str = text.strip()
 
     if raw.casefold() in _BLANKS:

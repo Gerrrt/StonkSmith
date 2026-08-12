@@ -9,6 +9,20 @@ the two disagree.
 
 ## [Unreleased]
 
+### Changed
+
+- A broker package needs only `broker.py`. `BrokerLoader` supplies
+  `BrokerDatabase` and `BrokerNavigator` when a broker ships no `database.py` or
+  `db_navigator.py`, which is what all five bundled brokers now do — nine files
+  deleted, and a broker written by hand under `~/.stonksmith/brokers` is one file
+  rather than three. A broker that ships one of those files and gets it wrong is
+  still reported rather than defaulted.
+- `stonksmithdb` no longer calls a broker "incomplete". A package with only
+  `broker.py` is complete; what it may lack is a database in the current
+  workspace, which is a different thing and the one an operator can act on.
+- `max-complexity` lowered from 16 to 12, splitting `error_shape`, `to_amount`,
+  `main` and Ally's `on_login`.
+
 ## [0.1.1] - 2026-08-12
 
 No change to the tool. `v0.1.0` was tagged and published nothing: the release

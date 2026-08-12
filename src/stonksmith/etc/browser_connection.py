@@ -295,6 +295,113 @@ def names_a_code(key: str) -> bool:
     )
 
 
+def refusal_payload(response: PlaywrightResponse) -> dict[object, object] | None:
+    """
+    The JSON body of a refused response, when there is one worth reading.
+
+    Read only for refused responses, and only when the body is small enough to
+    be an error rather than a page.
+
+    Requiring a numeric content-length is also what keeps this off the streaming
+    endpoints Ally polls, where a body read inside a response handler blocks
+    until the response completes: those answer chunked and carry no such header,
+    so this returns above without touching ``body()``. That is a consequence of
+    the size check rather than a separate guard, which is worth saying because
+    the handler that calls this does not filter by resource type -- it sees
+    every refused response there is.
+    :param response: The Playwright response
+    :return: The decoded object, or None when there is nothing safe to read
+    :rtype: dict[object, object] | None
+    """
+
+    if response.status < FAILED_RESPONSE_FLOOR:
+        return None
+
+    try:
+        kind: str | None = response.header_value(name="content-type")
+        length: str | None = response.header_value(name="content-length")
+
+        if kind is None or "json" not in kind.lower():
+            return None
+
+        if length is None or not length.strip().isdigit():
+            return None
+
+        if int(length.strip()) > ERROR_BODY_LIMIT:
+            return None
+
+        payload: object = json.loads(s=response.body())
+
+    except Exception:
+        # Best-effort throughout: an unreadable refusal is still worth its
+        # status line, and nothing here may raise out of an event handler.
+        return None
+
+    return payload if isinstance(payload, dict) else None
+
+
+def code_of(name: str, value: object) -> str | None:
+    """
+    The value under ``name``, if printing it cannot leak anything.
+
+    This is the whole redaction decision for a refusal body, in one place: a
+    refusal can carry a name, an email or a masked account number beside its
+    reason, and none of that belongs in a log meant to be pasted into an issue.
+    :param name: The key the value sits under
+    :param value: The value
+    :return: What to print, or None to withhold it
+    :rtype: str | None
+    """
+
+    # Numbers and booleans cannot be a name, an email or an account number, so
+    # they are safe to print whatever key they sit under.
+    if isinstance(value, bool | int | float):
+        return f"{name}={value}"
+
+    if not isinstance(value, str):
+        return None
+
+    if REASON_CODE.match(string=value):
+        return value
+
+    # A short, single-token value under a key that says "code" is one.
+    if (
+        names_a_code(key=name)
+        and len(value) <= CODE_VALUE_LIMIT
+        and value.split() == [value]
+    ):
+        return f"{name}={value}"
+
+    return None
+
+
+def target_of(name: str, value: object) -> str | None:
+    """
+    Where a refusal says to go next, when it says so.
+
+    Matched on the key rather than on the value looking like a URL: a refusal
+    can carry a support link beside its reason, and only a field whose *name*
+    says it is a destination qualifies.
+    :param name: The key the value sits under
+    :param value: The value
+    :return: The redacted endpoint, or None
+    :rtype: str | None
+    """
+
+    if not isinstance(value, str) or not REDIRECT_KEY.search(string=name):
+        return None
+
+    # A host is what makes it a destination. "https:///path" carries a scheme
+    # and nothing to go to, and a relative path is indistinguishable from free
+    # text -- neither is reported.
+    if not urlparse(url=value).netloc:
+        return None
+
+    # Through endpoint_of, not raw: a handoff URL carries its token in the
+    # query, and where it points is answered by the host and path alone.
+    return endpoint_of(url=value)
+
+
 def error_shape(response: PlaywrightResponse) -> str:
     """
     Why a refused request was refused, without printing what it refused.
@@ -304,85 +411,31 @@ def error_shape(response: PlaywrightResponse) -> str:
     to an anonymous one, and whether that 401 says the session expired or the
     device is unrecognised decides whether there is anything to fix.
 
-    Only keys are printed, plus values that look like machine-readable codes.
-    A refusal can carry a name, an email or a masked account number beside its
-    reason, and none of that belongs in a log meant to be pasted into an issue.
-
-    Read only for refused responses, only when the body is small enough to be
-    an error rather than a page, and never for the streaming endpoints -- a
-    body read inside a response handler blocks until the response completes.
+    What may be printed is decided by ``code_of`` and ``target_of``; this
+    assembles what they allow.
     :param response: The Playwright response
     :return: " {keys: a, b | codes: SESSION_EXPIRED}", or "" when unreadable
     :rtype: str
     """
 
-    if response.status < FAILED_RESPONSE_FLOOR:
+    payload: dict[object, object] | None = refusal_payload(response=response)
+
+    if payload is None:
         return ""
 
-    try:
-        kind: str | None = response.header_value(name="content-type")
-        length: str | None = response.header_value(name="content-length")
-
-        if kind is None or "json" not in kind.lower():
-            return ""
-
-        if length is None or not length.strip().isdigit():
-            return ""
-
-        if int(length.strip()) > ERROR_BODY_LIMIT:
-            return ""
-
-        payload: object = json.loads(s=response.body())
-
-    except Exception:
-        # Best-effort throughout: an unreadable refusal is still worth its
-        # status line, and nothing here may raise out of an event handler.
-        return ""
-
-    if not isinstance(payload, dict):
-        return ""
-
-    keys: list[str] = [str(object=k) for k in payload]
+    keys: list[str] = [str(object=key) for key in payload]
     codes: list[str] = []
     targets: list[str] = []
 
     for key, value in payload.items():
         name: str = str(object=key)
 
-        # Numbers and booleans cannot be a name, an email or an account
-        # number, so they are safe to print whatever key they sit under.
-        if isinstance(value, bool | int | float):
-            codes.append(f"{name}={value}")
+        if (code := code_of(name=name, value=value)) is not None:
+            codes.append(code)
             continue
 
-        if not isinstance(value, str):
-            continue
-
-        if REASON_CODE.match(string=value):
-            codes.append(value)
-            continue
-
-        # A short, single-token value under a key that says "code" is one.
-        if (
-            names_a_code(key=name)
-            and len(value) <= CODE_VALUE_LIMIT
-            and value.split() == [value]
-        ):
-            codes.append(f"{name}={value}")
-            continue
-
-        if not REDIRECT_KEY.search(string=str(object=key)):
-            continue
-
-        # A host is what makes it a destination. "https:///path" carries a
-        # scheme and nothing to go to, and a relative path is indistinguishable
-        # from free text -- neither is reported.
-        if not urlparse(url=value).netloc:
-            continue
-
-        # Through endpoint_of, not raw: a handoff URL carries its token in the
-        # query, and where it points is answered by the host and path alone.
-        targets.append(endpoint_of(url=value))
+        if (target := target_of(name=name, value=value)) is not None:
+            targets.append(target)
 
     parts: list[str] = [f"keys: {', '.join(keys)}"] if keys else []
 

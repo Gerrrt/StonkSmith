@@ -106,6 +106,22 @@ def capture_holdings(connection: Connection, reason: str = "no-holdings") -> str
     return str(object=saved) if saved else None
 
 
+def capture_note(connection: Connection, reason: str = "no-holdings") -> str:
+    """
+    Save the page and describe where it went, for a message to append it to.
+
+    The three places that report a scrape problem all wanted the same sentence,
+    and all three spelled the "only if it saved" part themselves.
+    :param connection: The live broker
+    :param reason: Slug for the filename, naming what surprised the run
+    :return: " Page markup saved to <path>.", or "" when it could not be saved
+    :rtype: str
+    """
+
+    saved: str | None = capture_holdings(connection=connection, reason=reason)
+    return f" Page markup saved to {saved}." if saved else ""
+
+
 class AllyModule:
     """Scrape Ally Invest balances and positions and sync them to the dashboard."""
 
@@ -346,46 +362,22 @@ class AllyModule:
         context.log.success(msg="Ally valued from published prices.")
         return True
 
-    def on_login(self, context: Context, connection: Connection) -> bool:
+    def open_holdings(
+        self, context: Context, connection: Connection, page: Any
+    ) -> bool:
         """
-        Scrape the holdings page and persist what it says.
+        Navigate to the holdings page and wait for it to render.
 
-        Ally shows one account's positions at a time, so this reads the sidebar
-        as well: it is the only place the page says how many accounts exist.
-        The selected account gets its balance and its positions; any other
-        investment account gets the balance the sidebar prints, and a line
-        saying its positions were not read. Neither is silently dropped, which
-        is the outcome that would otherwise look exactly like success.
+        Split from ``on_login`` because getting there and reading it are
+        separate jobs with separate failures: everything here ends in a report
+        and False, while everything after it has a page to work with.
         :param context: Logging, database, and shared resources
-        :param connection: The authenticated Ally broker, whose `active_page` holds the
-            logged-in Playwright page
-        :return: False when nothing reached the database
+        :param connection: The authenticated Ally broker, for the capture path
+        :param page: The logged-in Playwright page
+        :return: False when the page never rendered
+        :rtype: bool
         """
 
-        context.log.highlight(msg=f"Starting Ally sync for: {connection.username}")
-
-        # Asked for explicitly, never inferred from the browser being absent. A
-        # scrape whose browser failed to start also has no page, and quietly
-        # valuing from stale units in that case would answer a question nobody
-        # asked -- with a number that looks like a scrape and is not one.
-        if bool(getattr(context.args, "from_prices", False)):
-            return self.value_from_prices(context=context, connection=connection)
-
-        # The attribute, not the active_page property. getattr's default only
-        # covers AttributeError, and active_page raises RuntimeError when the
-        # browser was never started -- so asking for the property turns "no
-        # page" into a traceback instead of the message below. Reading `page`
-        # answers None for both cases: a connection that is not browser-backed
-        # at all, and one whose browser did not start.
-        page: Any = getattr(connection, "page", None)
-        if page is None:
-            context.log.fail(
-                msg="Ally module requires a browser-backed connection; "
-                "no active page was found."
-            )
-            return False
-
-        # 1. Scrape
         try:
             page.goto(url=self.holdings_url)
             page.wait_for_selector(
@@ -393,8 +385,7 @@ class AllyModule:
             )
 
         except PlaywrightTimeout:
-            saved: str | None = capture_holdings(connection=connection)
-            where: str = f" Page markup saved to {saved}." if saved else ""
+            where: str = capture_note(connection=connection)
             context.log.fail(
                 msg=(
                     "The holdings page never rendered its account totals. "
@@ -413,50 +404,27 @@ class AllyModule:
         # exactly like one whose selectors moved -- which is the wrong
         # conclusion, and it was drawn once already, from a run whose successor
         # parsed the same rail without complaint. A timeout here is fine: the
-        # branch below reports an absent rail properly.
+        # caller reports an absent rail properly.
         with contextlib.suppress(PlaywrightTimeout):
             page.wait_for_selector(
                 SIDEBAR_SELECTOR, timeout=SIDEBAR_TIMEOUT_MS, state="attached"
             )
 
-        soup = BeautifulSoup(markup=page.content(), features="html.parser")
-        accounts: list[dict[str, Any]] = self.scrape_accounts(
-            soup=soup, context=context
-        )
+        return True
 
-        if not accounts:
-            saved = capture_holdings(connection=connection)
-            where = f" Page markup saved to {saved}." if saved else ""
-            context.log.fail(
-                msg=(
-                    "No investment accounts found on the holdings page. The "
-                    f"selectors in helpers/ally.py need updating.{where}"
-                )
-            )
-            return False
+    def save_accounts(self, context: Context, accounts: list[dict[str, Any]]) -> bool:
+        """
+        Write what was scraped, through whichever contract the database offers.
 
-        # A run that reaches here has its positions, so this is not a failure --
-        # but the rail is the only place the page says how many accounts exist,
-        # and scrape_accounts() falls back to the heading when it parses empty.
-        # That fallback describes exactly one account, so a second one would go
-        # unmentioned by a run that looked entirely successful. Capture the
-        # markup while it is on screen: the failure paths above never see a
-        # rendered page, so nothing else in the run can.
-        if not sidebar_accounts(soup=soup):
-            saved = capture_holdings(connection=connection, reason="empty-account-rail")
-            where = f" Page markup saved to {saved}." if saved else ""
-            context.log.highlight(
-                msg=(
-                    "The account rail was still empty after waiting, on a page "
-                    "that did render its holdings. Only the account on screen "
-                    "was read, so any other account is missing from this run. "
-                    f"Compare the markup against helpers/ally.py.{where}"
-                )
-            )
+        Split from ``on_login`` at the seam between reading the page and
+        recording it: the three branches here are about what the store supports,
+        which is a different question from anything above them.
+        :param context: Logging, database, and shared resources
+        :param accounts: The scraped accounts
+        :return: False when the database implements neither contract
+        :rtype: bool
+        """
 
-        context.log.success(msg=f"Found {len(accounts)} investment account(s)")
-
-        # 2. Save to the local broker database
         timestamp: str = datetime.datetime.now(tz=datetime.UTC).strftime(
             format="%Y-%m-%d %H:%M:%S",
         )
@@ -509,6 +477,89 @@ class AllyModule:
                 "save_account_data. Skipping DB save.",
             )
             db_ok = False
+
+        return db_ok
+
+    def on_login(self, context: Context, connection: Connection) -> bool:
+        """
+        Scrape the holdings page and persist what it says.
+
+        Ally shows one account's positions at a time, so this reads the sidebar
+        as well: it is the only place the page says how many accounts exist.
+        The selected account gets its balance and its positions; any other
+        investment account gets the balance the sidebar prints, and a line
+        saying its positions were not read. Neither is silently dropped, which
+        is the outcome that would otherwise look exactly like success.
+        :param context: Logging, database, and shared resources
+        :param connection: The authenticated Ally broker, whose `active_page` holds the
+            logged-in Playwright page
+        :return: False when nothing reached the database
+        """
+
+        context.log.highlight(msg=f"Starting Ally sync for: {connection.username}")
+
+        # Asked for explicitly, never inferred from the browser being absent. A
+        # scrape whose browser failed to start also has no page, and quietly
+        # valuing from stale units in that case would answer a question nobody
+        # asked -- with a number that looks like a scrape and is not one.
+        if bool(getattr(context.args, "from_prices", False)):
+            return self.value_from_prices(context=context, connection=connection)
+
+        # The attribute, not the active_page property. getattr's default only
+        # covers AttributeError, and active_page raises RuntimeError when the
+        # browser was never started -- so asking for the property turns "no
+        # page" into a traceback instead of the message below. Reading `page`
+        # answers None for both cases: a connection that is not browser-backed
+        # at all, and one whose browser did not start.
+        page: Any = getattr(connection, "page", None)
+        if page is None:
+            context.log.fail(
+                msg="Ally module requires a browser-backed connection; "
+                "no active page was found."
+            )
+            return False
+
+        # 1. Scrape
+        if not self.open_holdings(context=context, connection=connection, page=page):
+            return False
+
+        soup = BeautifulSoup(markup=page.content(), features="html.parser")
+        accounts: list[dict[str, Any]] = self.scrape_accounts(
+            soup=soup, context=context
+        )
+
+        if not accounts:
+            where: str = capture_note(connection=connection)
+            context.log.fail(
+                msg=(
+                    "No investment accounts found on the holdings page. The "
+                    f"selectors in helpers/ally.py need updating.{where}"
+                )
+            )
+            return False
+
+        # A run that reaches here has its positions, so this is not a failure --
+        # but the rail is the only place the page says how many accounts exist,
+        # and scrape_accounts() falls back to the heading when it parses empty.
+        # That fallback describes exactly one account, so a second one would go
+        # unmentioned by a run that looked entirely successful. Capture the
+        # markup while it is on screen: the failure paths above never see a
+        # rendered page, so nothing else in the run can.
+        if not sidebar_accounts(soup=soup):
+            where = capture_note(connection=connection, reason="empty-account-rail")
+            context.log.highlight(
+                msg=(
+                    "The account rail was still empty after waiting, on a page "
+                    "that did render its holdings. Only the account on screen "
+                    "was read, so any other account is missing from this run. "
+                    f"Compare the markup against helpers/ally.py.{where}"
+                )
+            )
+
+        context.log.success(msg=f"Found {len(accounts)} investment account(s)")
+
+        # 2. Save to the local broker database
+        db_ok: bool = self.save_accounts(context=context, accounts=accounts)
 
         # 3. Sync to Google Sheets
         sheets_ok: bool = sync(context=context)

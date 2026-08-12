@@ -98,13 +98,15 @@ class StonkSmithDBGuardTests(unittest.TestCase):
     """do_broker indexed brokers[...]['nvpath'] without checking it existed."""
 
     @patch("stonksmith.etc.stonksmithdb.BrokerLoader")
-    def test_incomplete_broker_reports_instead_of_raising(
+    def test_a_broker_with_only_broker_py_is_not_called_incomplete(
         self, mock_loader: MagicMock
     ) -> None:
         from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
 
-        # A broker package with broker.py but no database.py/db_navigator.py:
-        # 'path' only, no nvpath/dbpath.
+        # There is no "incomplete" state any more. A package holding only
+        # broker.py takes BrokerDatabase and BrokerNavigator, so the only thing
+        # standing between it and a shell is whether its database exists yet --
+        # which is what it should say instead.
         mock_loader.return_value.get_brokers.return_value = {
             "lonely": {"path": "/tmp/lonely/broker.py"}
         }
@@ -117,7 +119,8 @@ class StonkSmithDBGuardTests(unittest.TestCase):
             menu.do_broker(broker="lonely")
 
         printed = " ".join(str(c) for c in mock_print.call_args_list)
-        self.assertIn("incomplete", printed)
+        self.assertNotIn("incomplete", printed)
+        self.assertIn("Database file missing", printed)
 
     def test_exit_is_a_command_method_returning_true(self) -> None:
         from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
