@@ -43,6 +43,7 @@ from sqlalchemy import (
     Table,
     UniqueConstraint,
     func,
+    select,
     text,
 )
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -1087,12 +1088,17 @@ class BrokerDatabase:
             # Counted before the delete, not after: the rows are gone by then
             # and the number is the only evidence of how much history this took
             # with it.
-            marks: int = len(
+            #
+            # COUNT(*) rather than len() over the selected rows. An account with
+            # a year of twice-daily marks has five hundred of them, and loading
+            # every column of every one to discard all but the length is work
+            # the database will do for free.
+            marks: int = int(
                 conn.execute(
-                    self.snapshots_table.select().where(
-                        snapshots.account_id == account_id
-                    )
-                ).all()
+                    select(func.count())
+                    .select_from(self.snapshots_table)
+                    .where(snapshots.account_id == account_id)
+                ).scalar_one()
             )
 
             conn.execute(self.accounts_table.delete().where(accounts.id == account_id))

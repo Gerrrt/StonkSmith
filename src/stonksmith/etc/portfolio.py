@@ -1366,12 +1366,17 @@ def apply_aliases(portfolio: Portfolio, aliases: dict[str, str]) -> Portfolio:
     def rename[RowT: AccountRow | HoldingRow | TransactionRow | NetWorthRow](
         rows: tuple[RowT, ...],
     ) -> tuple[RowT, ...]:
-        return tuple(
-            replace(row, account=named[normalize_label(label=account_label(row=row))])
-            if normalize_label(label=account_label(row=row)) in named
-            else row
-            for row in rows
-        )
+        renamed: list[RowT] = []
+
+        for row in rows:
+            # Normalized once and looked up with get(), rather than normalized
+            # for the test and again for the subscript. holdings_history is one
+            # row per position per snapshot, so this runs tens of thousands of
+            # times on a workspace with any history behind it.
+            alias: str | None = named.get(normalize_label(label=account_label(row=row)))
+            renamed.append(replace(row, account=alias) if alias else row)
+
+        return tuple(renamed)
 
     return replace(
         portfolio,
@@ -1417,7 +1422,14 @@ def unmatched_aliases(portfolio: Portfolio, aliases: dict[str, str]) -> list[str
         # So a label also counts as matched when the account it names is present
         # under the name this alias gives it: the source half of the original,
         # with the new name on the end.
-        source: str = label.rpartition("/")[0].strip()
+        #
+        # Split on the *first* slash, not the last. The separator is the one
+        # between source and account, and an account name may itself contain one
+        # -- "Fidelity / Individual / TOD" is a real shape and normalize_label
+        # supports it deliberately. Taking the last slash makes the source
+        # "Fidelity / Individual" there, so the rebuilt label matches nothing and
+        # a working alias reports as broken.
+        source: str = label.partition("/")[0].strip()
 
         if normalize_label(label=f"{source} / {name}") in present:
             continue

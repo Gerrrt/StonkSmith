@@ -182,6 +182,31 @@ class AnAliasThatMatchesNothingIsReported(unittest.TestCase):
             ["tsp / TSP L 2060"],
         )
 
+    def test_an_account_whose_name_contains_a_slash_is_not_reported(self) -> None:
+        # The rebuilt label takes the source from the *first* slash, not the
+        # last. "Fidelity / Individual / TOD" is a real account shape -- it is in
+        # this project's SnapTrade fixtures -- and splitting on the last slash
+        # makes the source "Fidelity / Individual", so the rebuilt label matches
+        # nothing and a perfectly good alias reports as broken.
+        aliases = {"Fidelity / Individual / TOD": "Joint Brokerage (Fidelity)"}
+        renamed = apply_aliases(
+            portfolio=Portfolio(
+                accounts=(
+                    AccountRow(
+                        broker="snaptrade",
+                        source="Fidelity",
+                        account="Individual / TOD",
+                        account_key="f1",
+                        value=1904.68,
+                    ),
+                )
+            ),
+            aliases=aliases,
+        )
+
+        self.assertEqual(renamed.accounts[0].account, "Joint Brokerage (Fidelity)")
+        self.assertEqual(unmatched_aliases(portfolio=renamed, aliases=aliases), [])
+
 
 class TheConfigParsesWhatTheCommentPromises(UserConfigMixin, unittest.TestCase):
     config_body: str = (
