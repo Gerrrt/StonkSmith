@@ -382,6 +382,39 @@ What each tab promises, why the dashboard has to be constructed rather than
 read, and what `verify` checks that a successful sync cannot show are
 [`docs/sheet.md`](docs/sheet.md).
 
+### The morning brief
+
+**One page that says what changed while you weren't looking, and turns up on its
+own.** The sheet shows what is true now and `stale` reports what has stopped
+moving; neither answers the question you actually open a dashboard with, and
+neither arrives without being asked for.
+
+```bash
+uv run stonksmithdb brief
+```
+
+It reads the databases — no login, no browser, no network — renders one
+self-contained HTML file to `~/.stonksmith/reports/`, and opens it. A LaunchAgent
+at 06:30 on weekdays is what makes it a reminder rather than a file.
+
+Two things about it are worth knowing before you read one.
+
+**The headline is built on the Net Worth series, so a broker that did not run is
+not a fall** — and the page says how much of the number was actually read this
+morning rather than carried forward from the last time that account was seen. A
+night when only TSP ran produces a real movement for one account and a carried
+value for the rest, and the brief will tell you so directly under the total.
+
+**"Since when" is the last brief you were shown, not the last scrape.** Monday's
+brief covers the weekend, and a morning you skip is still covered by the next
+one — because a brief with nothing new to report deliberately does not advance
+its own baseline. Use `brief peek` to look a second time in one day without
+consuming that comparison.
+
+Both files it writes are owner-only; old reports are pruned to `[BRIEF] keep_days`.
+The whole design, the rule that keeps a skipped morning from erasing a day's
+movement, and how to install the agent are [`docs/brief.md`](docs/brief.md).
+
 ### Scheduling
 
 **The five brokers do not schedule alike, and two of them do not schedule at

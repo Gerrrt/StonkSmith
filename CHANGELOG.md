@@ -9,6 +9,31 @@ the two disagree.
 
 ## [Unreleased]
 
+### Added
+
+- **The morning brief.** `stonksmithdb brief` reads the databases — no login, no
+  browser, no network — renders one self-contained HTML page to
+  `~/.stonksmith/reports/<date>.html` and opens it. A LaunchAgent at 06:30 on
+  weekdays (`scripts/com.stonksmith.morning.plist`) is what makes it a reminder
+  rather than a file. Net worth and its overnight change, account and position
+  movers, movements recorded since the last brief, asset-class drift and the
+  staleness list, in that order. See [`docs/brief.md`](docs/brief.md).
+- The brief's headline is built on the Net Worth series rather than on
+  `get_daily_change()`, so a night when only one broker ran is not a fall — and
+  the page states how many accounts were read on the date it reports and how many
+  carried an older value onto it, because a delta over four carried readings is
+  not a portfolio move.
+- The brief compares against the last brief you were shown rather than the last
+  scrape, recorded in `~/.stonksmith/brief_baseline.json`. Monday's brief covers
+  the weekend. A brief with no new scrape to report **holds** its baseline rather
+  than advancing it, which is what stops a skipped morning from erasing a day's
+  movement from every brief that will ever be rendered; `brief peek` renders
+  without advancing.
+- `[BRIEF]` config section: `open_browser`, `keep_days`, `movers`. Reports and the
+  baseline are written owner-only inside an owner-only directory, on the same
+  reasoning as the databases — a rendered brief states the portfolio total and
+  every account behind it.
+
 ### Changed
 
 - A broker package needs only `broker.py`. `BrokerLoader` supplies

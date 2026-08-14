@@ -371,6 +371,42 @@ part that carries the meaning.
 
 ---
 
+## The second agent, in the morning
+
+Everything above runs after the close. `stonksmithdb brief` runs at 06:30 the next
+weekday, from its own LaunchAgent — `scripts/com.stonksmith.morning.plist`, driving
+`scripts/stonksmith-morning.sh`, installed exactly like the nightly pair.
+
+**Two agents rather than one entry appended to the nightly script**, because they answer
+to different clocks. A scrape has to happen after the market closes and after TSP
+publishes. A reminder has to happen when somebody is there to read it. Folding the brief
+into the 18:30 run would render it twelve hours before anyone opens a laptop, at which
+point it is a file rather than a reminder — which is the entire thing it was built to be.
+
+It does not scrape, and that is deliberate rather than a limitation. At half past six the
+market is shut, TSP has not published, and the two browser-backed brokers want a human at
+a sign-in page. `brief` reads the databases and nothing else, so it takes about a second
+and cannot fail in any of the ways the entries above can.
+
+**`gui/$(id -u)` matters twice over for this one.** The nightly agent needs it to read the
+login keychain, as the section above sets out at length. This one needs that too and
+additionally has to open a browser, which an agent outside the GUI session has no display
+to do. Bootstrapped into a system domain it would write a brief every morning and show it
+to nobody — a failure with no error, which is the shape this whole file is about.
+
+It exits `1` when a broker's database would not open, the same escalation `sheet` makes.
+It does not exit non-zero for a stale account: `stale` already made that call the previous
+evening with an exit status a scheduler can act on, and the brief's job is to put the same
+finding in front of a person rather than to page twice about it.
+
+A morning where the brief says *no new scrape since Tuesday* is reporting a failure of the
+**nightly** agent, not of itself — read `/tmp/stonksmith-nightly.log`, not
+`/tmp/stonksmith-morning.log`. And it is worth knowing that such a morning deliberately
+does not advance the brief's baseline, so the movement it could not report is still waiting
+in the next one rather than lost. [`docs/brief.md`](brief.md) is the record for all of it.
+
+---
+
 ## What a scheduled run has, and has not, been observed doing
 
 The honest summary, and it is shorter than the section above deserves.

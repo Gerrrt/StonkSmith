@@ -493,3 +493,78 @@ def get_asset_classes() -> dict[str, str]:
         classes[symbol.strip()] = name.strip()
 
     return classes
+
+
+def get_brief_open_browser() -> bool:
+    """
+    Whether the morning brief opens itself once it is written.
+
+    True by default, which is the opposite of how the rest of this tool behaves
+    and is the whole point of the feature: a brief nobody opens is a file, and
+    the thing being automated here is the remembering. `brief --no-open` overrides
+    it for a scripted run, so the default is about the LaunchAgent rather than
+    about every invocation.
+    :return: True when the rendered file should be opened
+    :rtype: bool
+    """
+
+    try:
+        return get_config().getboolean(
+            section="BRIEF", option="open_browser", fallback=True
+        )
+
+    except ValueError:
+        # As with audit_mode and log_mode: an unreadable value is not a reason to
+        # take down the command on its way to doing the work asked of it. The
+        # brief is still rendered and its path still printed.
+        return True
+
+
+def get_brief_keep_days() -> int:
+    """
+    How many days of rendered briefs to keep.
+
+    Zero means keep everything, and is a real answer rather than a disabled
+    feature: the rendered files are the only record of what a given morning
+    actually showed, and once the baseline has moved past a date the databases
+    cannot reconstruct it.
+
+    A negative is treated as zero. It would otherwise put the cutoff in the
+    future and delete every brief including the one just written, which is not a
+    tidier policy but a broken one -- the same reasoning `stale` applies to a
+    negative day count.
+    :return: A non-negative day count
+    :rtype: int
+    """
+
+    try:
+        configured: int = get_config().getint(
+            section="BRIEF", option="keep_days", fallback=90
+        )
+
+    except ValueError:
+        return 90
+
+    return max(0, configured)
+
+
+def get_brief_movers() -> int:
+    """
+    How many accounts and positions the brief has room for.
+
+    Floored at one rather than at zero. A brief rendering no movers at all is
+    indistinguishable from one where nothing moved, and this feature exists
+    precisely to keep those two apart.
+    :return: A positive row count
+    :rtype: int
+    """
+
+    try:
+        configured: int = get_config().getint(
+            section="BRIEF", option="movers", fallback=8
+        )
+
+    except ValueError:
+        return 8
+
+    return max(1, configured)

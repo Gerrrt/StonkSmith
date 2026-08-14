@@ -25,6 +25,10 @@ playwright_path: Path = stonksmith_path / "playwright"
 workspace_dir: Path = ws_path
 cert_path: Path = stonksmith_path / "stonksmith.pem"
 config_path: Path = stonksmith_path / "stonksmith.conf"
+#: Where the morning brief is written. One rendered file per day it ran.
+reports_path: Path = stonksmith_path / "reports"
+#: What the last brief was shown, so the next one can say what changed.
+baseline_path: Path = stonksmith_path / "brief_baseline.json"
 token_path: Path = home_path / "token.json"
 creds_path: Path = home_path / "credentials.json"
 
@@ -41,4 +45,10 @@ else:
 tmp_path: Path = tmp_base / "stonksmith_hosted"
 
 #: Directories setup_tool() creates. Kept here so the list lives with the paths.
-managed_dirs: tuple[Path, ...] = (stonksmith_path, ws_path, tmp_path)
+#:
+#: reports/ belongs here rather than in tool_setup's second list for the reason
+#: that list's comment gives: every rendered brief states the portfolio total,
+#: every account's value and every position behind them, which is the same
+#: information the databases hold. The directory mode is what covers a file
+#: written before a later run could restrict it.
+managed_dirs: tuple[Path, ...] = (stonksmith_path, ws_path, tmp_path, reports_path)

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    A LaunchAgent for the morning brief. macOS only; see docs/scheduling.md.
+
+    The companion to com.stonksmith.nightly.plist, which scrapes at 18:30. This
+    one reads what that wrote and opens it at 06:30, and the two are separate
+    agents because they answer to different clocks: a scrape has to run after the
+    close, and a reminder has to run when somebody is awake to read it.
+
+    Two values below have to be edited, and they are the same two the nightly
+    agent needs. There is no way for a committed file to know either.
+
+      ProgramArguments   the absolute path to scripts/stonksmith-morning.sh in
+                         your checkout. The script finds the repository from its
+                         own location, so this is the only path to set.
+
+      PATH               must contain uv. `which uv` says where yours is; uv's
+                         installer puts it in ~/.local/bin, which is not in the
+                         list below, and launchd does no tilde expansion here.
+
+    Install, from the repository:
+
+        mkdir -p ~/Library/LaunchAgents
+        sed "s|/PATH/TO/StonkSmith|$PWD|; s|^\(.*<string>\)/usr/local/bin|\1$(dirname "$(command -v uv)"):/usr/local/bin|" \
+            scripts/com.stonksmith.morning.plist > ~/Library/LaunchAgents/com.stonksmith.morning.plist
+        launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.stonksmith.morning.plist
+
+    `launchctl bootout gui/$(id -u)/com.stonksmith.morning` removes it, and
+    `launchctl kickstart -p gui/$(id -u)/com.stonksmith.morning` runs it now
+    rather than waiting for the morning, which is how to test it.
+
+    gui/$(id -u) matters twice over here. It is what lets a LaunchAgent read the
+    login keychain, which is the reason the nightly agent needs it, and this one
+    additionally has to open a browser, which an agent outside the GUI session
+    has no display to do. Bootstrapped into a system domain, this would write a
+    brief every morning and show it to nobody.
+
+    StartCalendarInterval fires on wake if the machine was asleep at the time,
+    which cron does not. A laptop that is shut at 06:30 is the ordinary case
+    rather than the exception, so this is the difference between a brief that
+    appears when the lid opens and one that never appears at all.
+
+    Nothing here re-scrapes. The brief reports on the previous evening's run, so
+    a morning where it says "no new scrape" is reporting a failure of the
+    nightly agent rather than of this one. Read /tmp/stonksmith-nightly.log in
+    that case, not this agent's log.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stonksmith.morning</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/PATH/TO/StonkSmith/scripts/stonksmith-morning.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <!-- Weekdays, because the nightly run is weekdays: a Saturday brief would
+         report a carried-forward flat line by construction. Weekday 1 is
+         Monday; 0 and 7 are both Sunday. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/stonksmith-morning.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/stonksmith-morning.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
