@@ -234,6 +234,21 @@ class TheConfigReadsMoneyAsPeopleWriteIt(UserConfigMixin, unittest.TestCase):
         self.assertEqual(costs, {})
         self.assertIn("not an amount", refused[0])
 
+    def test_a_special_float_is_refused(self) -> None:
+        # float() accepts every one of these, and the sign check below cannot
+        # see them -- `nan < 0` is False. A NaN reaching the cost basis is
+        # contagious: the gain is nan, the growth is nan, the win/loss flag
+        # compares false against everything, and the tile renders the word.
+        # "1e400" is here because it does not look special and overflows to inf.
+        for amount in ("nan", "inf", "-inf", "1e400", "Infinity"):
+            with self.subTest(amount=amount):
+                costs, refused = self._reload(
+                    f"[ACCOUNTS]\ncost_basis =\n\tsrc / Ezekiel = {amount}\n"
+                )
+
+                self.assertEqual(costs, {})
+                self.assertEqual(len(refused), 1)
+
     def test_a_negative_cost_is_refused_rather_than_clamped(self) -> None:
         # Clamping to zero would keep a number nobody meant. It would also
         # invert the sign of the growth percentage on the way through.

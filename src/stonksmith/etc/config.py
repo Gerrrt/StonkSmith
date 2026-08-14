@@ -9,6 +9,7 @@ first use and cached.
 
 import ast
 import configparser
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -673,6 +674,17 @@ def get_account_costs() -> tuple[dict[str, float], list[str]]:
 
         except ValueError:
             refused.append(f"{line.strip()} (not an amount)")
+            continue
+
+        # Checked before the sign, because the sign test cannot see these.
+        # float() accepts "nan", "inf" and anything that overflows to one --
+        # "1e400" parses to inf -- and `nan < 0` is False, so a NaN would sail
+        # through the line below and land in the cost basis. From there it
+        # propagates: the gain is nan, the growth is nan, the win/loss flag
+        # compares false against everything, and the tile renders the word.
+        # Silent, contagious, and not obviously traceable to a config file.
+        if not math.isfinite(cost):
+            refused.append(f"{line.strip()} (not a finite amount)")
             continue
 
         # Negative is refused rather than clamped. A cost basis below zero is
