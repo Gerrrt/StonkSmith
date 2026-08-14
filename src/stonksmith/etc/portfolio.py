@@ -961,6 +961,52 @@ def _account_row(broker: str, row: tuple[Any, ...]) -> AccountRow:
     )
 
 
+def _cost_from_principal(value: Any, principal: Any, earnings: Any) -> float | None:
+    """
+    Principal read as a cost basis, but only where the row proves it is one.
+
+    A 529 states contributions and growth rather than an average purchase price,
+    and principal is the same fact under the other name -- so where a source
+    fills that and not ``cost_basis``, the cost was being shown as a dash with
+    the number sitting one column over.
+
+    **The check is not defensive padding.** ``helpers.schwab529plan`` says it
+    outright: principal and earnings are *table-level totals repeated onto every
+    row*, because the page never splits them per fund. So on an account holding
+    two funds, both rows carry the whole account's principal -- and reading that
+    unconditionally would give each position the entire account's cost, roughly
+    doubling the basis and inverting the gain. Inventing a per-position number
+    from an account-level one, which is the thing this codebase keeps refusing
+    to do.
+
+    The source hands over the means to tell the two apart. It states earnings as
+    well, so ``value - principal`` has to reproduce it: true on the row that owns
+    the whole account, false on any row that is one fund of several. Where it
+    does not hold, the cost stays absent -- a dash, which is honest -- rather than
+    becoming a number nobody can check.
+    :param value: What the position is worth
+    :param principal: What the source says was put in
+    :param earnings: What the source says was made on it
+    :return: The cost basis, or None where the row cannot vouch for it
+    :rtype: float | None
+    """
+
+    if value is None or principal is None or earnings is None:
+        return None
+
+    try:
+        # To the cent, because that is the precision the page reports in. A
+        # looser tolerance would start admitting the two-fund case on a small
+        # enough account.
+        if abs(float(value) - float(principal) - float(earnings)) > 0.01:
+            return None
+
+        return float(principal)
+
+    except TypeError, ValueError:
+        return None
+
+
 def _holding_row(
     broker: str, row: tuple[Any, ...], by_key: dict[str, AccountRow]
 ) -> HoldingRow:
@@ -1018,7 +1064,21 @@ def _holding_row(
         units=units,
         price=price,
         value=value,
-        cost_basis=cost_basis,
+        # Read here rather than left to each consumer. Everything downstream --
+        # purchase price, gain, growth, yield on cost, the win/loss flag -- is
+        # computed from cost_basis, so a source reporting its cost under another
+        # name was showing a dash on all five while the number sat in the column
+        # beside them. Both fields are still carried out unchanged; this fills
+        # the one that was empty, and never the reverse, since a source stating
+        # both means them separately. _cost_from_principal has the rule, and the
+        # reason it is a rule rather than a plain fallback.
+        cost_basis=(
+            cost_basis
+            if cost_basis is not None
+            else _cost_from_principal(
+                value=value, principal=principal, earnings=earnings
+            )
+        ),
         principal=principal,
         earnings=earnings,
         currency=currency or "USD",

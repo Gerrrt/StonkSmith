@@ -606,7 +606,16 @@ class ReadBrokerTests(unittest.TestCase):
 
         self.assertEqual(holdings[0].symbol, "SWX")
         self.assertEqual(holdings[0].principal, 1000.0)
-        self.assertIsNone(holdings[0].cost_basis)
+
+        # Changed deliberately: this used to assert cost_basis was None here.
+        # A plan reports contributions and earnings instead of an average
+        # purchase price, and principal is the same fact under the other name --
+        # so leaving it None dashed the gain, growth, purchase price, yield on
+        # cost and win/loss flag on a holding whose cost was sitting in the
+        # column beside them. Principal still travels out unchanged as well;
+        # see tests/test_principal_is_the_cost_basis.py for the whole rule,
+        # including that a reported cost_basis is never replaced by it.
+        self.assertEqual(holdings[0].cost_basis, 1000.0)
 
     def test_a_ticker_wins_over_an_absent_fund_code(self) -> None:
         _, holdings, _ = read_broker(
