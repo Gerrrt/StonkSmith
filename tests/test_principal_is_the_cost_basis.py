@@ -17,6 +17,21 @@ really do report nothing -- a Fidelity 401k that answers with units and price
 alone, and a TSP unit count anchored to a quarterly statement -- because for
 those, filling anything in would be invention. This fills a field from another
 field of the same row, stated by the same source, in the same currency.
+
+**Which is exactly why it cannot be unconditional**, and the first version of it
+was. ``helpers.schwab529plan`` says so in its own docstring: principal and
+earnings are *table-level totals repeated onto every row*, because the plan's
+page never splits them per fund. A 529 holding two funds therefore carries the
+whole account's principal on both rows -- and reading it blind would hand each
+position the entire account's cost, roughly doubling the basis and inverting the
+gain. An account-level number spread across positions, which is the invention
+this codebase keeps refusing to commit.
+
+The source hands over the means to tell the two apart. It states earnings as
+well, so ``value - principal`` has to reproduce it: true on a row that owns the
+whole account, false on a row that is one fund of several. Where it does not
+hold the cost stays a dash, which is honest, rather than becoming a number
+nobody can check.
 """
 
 import tempfile
@@ -132,6 +147,69 @@ class ThePlanStatesItsCostAsPrincipal(
 
         self.assertIsNone(row.cost_basis)
         self.assertIsNone(row.principal)
+
+    def test_a_multi_fund_plan_gets_no_cost_basis_at_all(self) -> None:
+        # The case an unconditional fallback gets wrong, and the reason the
+        # check exists. The parser repeats the account's principal and earnings
+        # onto every fund row, so reading either blind gives *each* position the
+        # whole account's cost: 1,303.68 against 500.00 of value on one row and
+        # 921.93 on the other, for a portfolio that has spent 2,607.36 to hold
+        # 1,421.93 and shows a catastrophic loss on money that has made 118.25.
+        db = BrokerDatabase(
+            db_engine=create_db_engine(
+                db_path=self.root / "default" / "schwab529plan.db"
+            ),
+            broker="schwab529plan",
+        )
+        db.save_snapshot(
+            account=AccountIdentity(account_key="529-2", display_name="Two Funds"),
+            scraped_at="2026-08-12 18:30:00",
+            as_of="2026-08-12",
+            value=1421.93,
+            currency="USD",
+            holdings=[
+                Holding(
+                    fund_code="14002",
+                    units=46.08,
+                    price=10.85,
+                    value=500.00,
+                    principal=1303.68,
+                    earnings=118.25,
+                ),
+                Holding(
+                    fund_code="14003",
+                    units=84.97,
+                    price=10.85,
+                    value=921.93,
+                    principal=1303.68,
+                    earnings=118.25,
+                ),
+            ],
+            transactions=[],
+        )
+        db.shutdown_db()
+
+        rows = self._read().holdings
+
+        self.assertEqual([row.cost_basis for row in rows], [None, None])
+        # Still carried, because they are what the source said about the
+        # account. It is reading them as a *position's* cost that is refused.
+        self.assertEqual([row.principal for row in rows], [1303.68, 1303.68])
+
+    def test_a_principal_with_no_earnings_beside_it_is_not_read(self) -> None:
+        # Nothing to check the interpretation against, so it is not made. The
+        # 529 always reports the pair -- they come off one table row -- so this
+        # costs nothing real and refuses a source nobody has looked at yet.
+        self._write(
+            symbol="",
+            fund_code="14002",
+            units=10.0,
+            price=10.0,
+            value=100.0,
+            principal=90.0,
+        )
+
+        self.assertIsNone(self._read().holdings[0].cost_basis)
 
     def test_everything_downstream_follows_from_it(self) -> None:
         # The whole reason this matters. Five fields were dashed on that row
