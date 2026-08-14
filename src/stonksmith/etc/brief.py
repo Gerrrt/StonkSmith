@@ -41,6 +41,7 @@ from stonksmith.etc.config import (
     get_asset_classes,
     get_brief_fund_link,
 )
+from stonksmith.etc.dividends import Dividends, Paid
 from stonksmith.etc.permissions import restrict
 from stonksmith.etc.portfolio import (
     OBSERVED,
@@ -272,8 +273,15 @@ class Position:
     day_change: float | None = None
 
     #: Trailing-twelve-month income attributed to this position, from the
-    #: transaction log rather than from a quoted yield.
+    #: transaction log rather than from a quoted yield. Money that arrived.
     div_income: float | None = None
+
+    #: What a year at this position would pay: the fund's trailing per-share
+    #: distributions times the units held. A forecast, not a record -- see
+    #: etc.dividends for why the two are carried apart rather than merged.
+    #: None when the feed has nothing for this symbol, which is not zero.
+    indicated_income: float | None = None
+    indicated_yield: float | None = None
     current_yield: float | None = None
     yield_on_cost: float | None = None
 
@@ -359,6 +367,16 @@ class Performance:
     #: is a quarter of a year's dividends called a year's, and the only way to
     #: tell is to say so.
     dividend_days: int = 0
+
+    #: What a year at the current positions would pay, and over how many of
+    #: them it is known. The coverage travels with the figure for the reason the
+    #: priced/unpriced split does: on this workspace a 401k, a TSP fund and a 529
+    #: are two thirds of the money and none has a public ticker, so a blended
+    #: yield across all twelve positions understates the six that are known.
+    indicated_income: float = 0.0
+    indicated_yield: float | None = None
+    indicated_over: int = 0
+    indicated_value: float = 0.0
 
     #: Whether any dividend was found at all.
     #:
@@ -1112,6 +1130,7 @@ def positions(
     baseline: dict[tuple[str, str, str], Mark] | None = None,
     palette: Iterable[tuple[str, str]] = (),
     link: str = "",
+    paid: dict[str, Paid] | None = None,
 ) -> list[Position]:
     """
     Every holding, with what follows from what the source reported.
@@ -1138,6 +1157,7 @@ def positions(
     """
 
     marks: dict[tuple[str, str, str], Mark] = baseline or {}
+    pays: dict[str, Paid] = paid or {}
     folded: dict[tuple[str, str, str], list[HoldingRow]] = {}
 
     for row in portfolio.holdings:
@@ -1152,7 +1172,17 @@ def positions(
         cost: float | None = _sum(values=[row.cost_basis for row in rows])
         gain: float | None = None if cost is None or value is None else value - cost
         trend: list[float] = history.get(key, [])
-        paid: float | None = income.get(key[2])
+        received: float | None = income.get(key[2])
+
+        # None rather than zero when the feed has nothing for this symbol. A
+        # fund that pays nothing and a 401k fund code no quote page has ever
+        # heard of both come to 0.0, and only the first is a fact about money.
+        rate: Paid | None = pays.get(key[2])
+        forecast: float | None = (
+            None
+            if rate is None or not rate.found or units is None
+            else round(number=rate.per_share * units, ndigits=2)
+        )
 
         # None rather than the whole count when there is no baseline. A first
         # brief has nothing to compare against, and reporting every holding as
@@ -1193,9 +1223,11 @@ def positions(
                     if len(trend) >= 2
                     else None
                 ),
-                div_income=paid,
-                current_yield=_ratio(top=paid, bottom=value),
-                yield_on_cost=_ratio(top=paid, bottom=cost),
+                div_income=received,
+                current_yield=_ratio(top=received, bottom=value),
+                yield_on_cost=_ratio(top=received, bottom=cost),
+                indicated_income=forecast,
+                indicated_yield=_ratio(top=forecast, bottom=value),
                 trend=tuple(trend),
                 units_delta=moved,
             )
@@ -1259,6 +1291,15 @@ def performance(
     # holding paid it, and a portfolio total that dropped it would be short.
     earned: float = sum(income.values())
 
+    # Summed only over the positions the feed answered for, and the count and
+    # their value travel with it. A yield divided by the whole portfolio would
+    # report six known funds against twelve positions' worth of money.
+    known: list[Position] = [row for row in rows if row.indicated_income is not None]
+    forecast: float = sum(row.indicated_income or 0.0 for row in known)
+    # Named apart from the "covered" parameter, which is a day count. ty caught
+    # the shadow: it would have made dividend_days a float without a word.
+    covered_value: float = sum(row.value or 0.0 for row in known)
+
     return Performance(
         value=total,
         invested=invested,
@@ -1277,6 +1318,10 @@ def performance(
         dividend_yield=_ratio(top=earned, bottom=invested),
         dividend_days=covered,
         dividends_seen=bool(income),
+        indicated_income=forecast,
+        indicated_yield=_ratio(top=forecast, bottom=covered_value),
+        indicated_over=len(known),
+        indicated_value=covered_value,
         # Summed separately rather than netted. A book that is $4,331 ahead on
         # eight positions and $507 behind on one is a different book from one
         # quietly $3,824 ahead overall, and the net is the number that hides it.
@@ -1293,6 +1338,7 @@ def build_brief(
     limit: int = 8,
     keep: int = 90,
     floor: float = 0.0,
+    rates: Dividends | None = None,
 ) -> Brief:
     """
     Everything one morning has to say, decided once.
@@ -1308,6 +1354,8 @@ def build_brief(
     :param keep: How many trailing points the sparkline covers
     :param floor: The smallest position that earns a row. Display only -- every
         total still counts what falls below it
+    :param rates: What each symbol pays per share, from the cache. None reads as
+        an empty cache, which renders no indicated figures rather than zeroes
     :return: The assembled brief
     :rtype: Brief
     """
@@ -1342,6 +1390,7 @@ def build_brief(
     # the config is cached, so that is a dictionary lookup -- and names each one.
     palette, _ = get_account_colors()
     link: str = get_brief_fund_link()
+    pays: dict[str, Paid] = (rates or Dividends()).paid
     income, covered = dividends(rows=portfolio.transactions, today=today)
 
     # Computed once rather than inside the Brief() call, because two fields now
@@ -1366,6 +1415,7 @@ def build_brief(
         baseline=since.holdings if since.taken_on else None,
         palette=palette,
         link=link,
+        paid=pays,
     )
 
     # Split for display only. `held` stays whole and is what performance()

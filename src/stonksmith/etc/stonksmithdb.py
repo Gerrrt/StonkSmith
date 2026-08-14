@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlalchemy import Engine
 
+from stonksmith.etc.dividends import STALE_DAYS as DIVIDENDS_STALE_DAYS
 from stonksmith.etc.exceptions import SwitchBroker, UserExitedProto
 from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.etc.logger import StonkSmithAdapter
@@ -41,6 +42,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    verify [tabs|guard]  check what a successful sheet write cannot show\n"
         "    stale [days]      report accounts nothing has refreshed lately\n"
         "    brief [peek|--no-open]  what changed since the last brief\n"
+        "    dividends         refresh what each holding pays per share\n"
         "    help              commands at this level\n"
         "    exit              quit\n"
     )
@@ -366,7 +368,8 @@ class StonkSmithDBMenu(cmd.Cmd):
             get_brief_movers,
             get_brief_open_browser,
         )
-        from stonksmith.etc.paths import baseline_path, reports_path
+        from stonksmith.etc.dividends import Dividends, read_cache
+        from stonksmith.etc.paths import baseline_path, dividends_path, reports_path
         from stonksmith.etc.permissions import restrict
         from stonksmith.etc.portfolio import (
             Portfolio,
@@ -398,6 +401,10 @@ class StonkSmithDBMenu(cmd.Cmd):
             workspace=self.workspace, with_history=True
         )
         baseline: Baseline | None = read_baseline(path=baseline_path)
+        # Read from disk rather than fetched. `brief` reaches no network, which
+        # is what makes it safe to schedule every morning; `dividends` does the
+        # fetching, beside the scrapes.
+        rates: Dividends = read_cache(path=dividends_path)
 
         brief: Brief = build_brief(
             portfolio=portfolio,
@@ -405,6 +412,7 @@ class StonkSmithDBMenu(cmd.Cmd):
             today=now.date(),
             limit=get_brief_movers(),
             floor=get_brief_min_position(),
+            rates=rates,
         )
 
         reports_path.mkdir(mode=OWNER_ONLY_DIR, parents=True, exist_ok=True)
@@ -438,6 +446,22 @@ class StonkSmithDBMenu(cmd.Cmd):
             # outcome the alias was written to prevent. Not a failure: the brief
             # is correct, it is just not saying what was asked.
             print(f"[-] Alias matched no account: {label}")
+
+        stale_by: int | None = rates.age(today=now.date())
+
+        if not rates.paid:
+            print(
+                "[*] No dividend figures cached; run `stonksmithdb dividends` "
+                "to fill the indicated yield in."
+            )
+        elif stale_by is not None and stale_by > DIVIDENDS_STALE_DAYS:
+            # Not a failure: distributions are quarterly at most, so an old file
+            # is not a wrong one. Said anyway, because a refresh that has stopped
+            # running otherwise shows up as a yield that never moves.
+            print(
+                f"[-] Dividend figures are {stale_by} days old; "
+                "run `stonksmithdb dividends` to refresh them."
+            )
 
         if not get_brief_fund_link():
             # Refused rather than silently unlinked, on the rule the colour
@@ -512,6 +536,114 @@ class StonkSmithDBMenu(cmd.Cmd):
 
             except OSError as e:
                 print(f"[-] Could not remove {stale_report}: {e}")
+
+    def do_dividends(self, line: str) -> None:
+        """
+        Fetch what each held symbol pays per share, and cache it.
+
+        The one command here that reaches the network, and it exists so that the
+        brief does not have to. "No login, no browser, no network" is what makes
+        `brief` cheap enough to schedule every morning and what stops it failing
+        the way a broker can -- a dividend figure it had to fetch would trade
+        that away for a number.
+
+        Run beside the scrapes rather than beside the brief. Distributions are
+        quarterly at most, so a figure a day or two old is not stale in any sense
+        that matters, and a refresh that fails costs the yield rather than the
+        morning.
+
+        Only symbols that look like public tickers are asked about, which is the
+        same rule the fund links follow: a 401k fund code and a 529 portfolio
+        number have no quote page, and asking produces a 404 per run forever.
+        :param line: Ignored
+        :return: None
+        """
+
+        del line
+
+        import datetime as dt
+
+        import requests
+
+        from stonksmith.etc.brief import fund_url
+        from stonksmith.etc.dividends import Dividends, Paid, write_cache
+        from stonksmith.etc.paths import dividends_path
+        from stonksmith.etc.portfolio import Portfolio, read_workspace
+        from stonksmith.helpers.quotes import (
+            QuotesUnavailable,
+            dividend_events,
+            trailing_dividend,
+        )
+
+        #: Any https template will do here -- fund_url is being asked whether the
+        #: symbol is a public ticker, not where its page is.
+        probe: str = "https://example.invalid/{symbol}"
+        url: str = (
+            "https://query1.finance.yahoo.com/v8/finance/chart/"
+            "{symbol}?interval=1d&range=1y&events=div"
+        )
+        agent: str = (
+            "Mozilla/5.0 (compatible; stonksmith/0.1.0; "
+            "+https://github.com/Gerrrt/StonkSmith)"
+        )
+
+        portfolio: Portfolio = read_workspace(workspace=self.workspace)
+        today: dt.date = dt.datetime.now(tz=dt.UTC).date()
+        symbols: list[str] = sorted(
+            {
+                row.symbol
+                for row in portfolio.holdings
+                if row.symbol and fund_url(symbol=row.symbol, template=probe)
+            }
+        )
+
+        if not symbols:
+            print("[-] No holding carries a public ticker; nothing to fetch.")
+            return
+
+        paid: dict[str, Paid] = {}
+
+        for symbol in symbols:
+            try:
+                response = requests.get(
+                    url.format(symbol=symbol),
+                    headers={"User-Agent": agent},
+                    timeout=20,
+                )
+                events = dividend_events(payload=response.text)
+
+            except QuotesUnavailable as e:
+                # Recorded as not found rather than skipped. A symbol the feed
+                # has never heard of and a fund that pays nothing both produce
+                # zero, and only one of those is a fact about the money.
+                print(f"[-] No dividend data for {symbol}: {e}")
+                paid[symbol] = Paid(found=False)
+                continue
+
+            except Exception as e:
+                print(f"[-] Could not reach the feed for {symbol}: {e}")
+                paid[symbol] = Paid(found=False)
+                continue
+
+            per_share, covered = trailing_dividend(paid=events, today=today)
+            paid[symbol] = Paid(per_share=per_share, covered_days=covered, found=True)
+            print(f"[*] {symbol}: ${per_share:,.4f} per share over {covered} days")
+
+        write_cache(
+            path=dividends_path,
+            dividends=Dividends(fetched_on=today.isoformat(), paid=paid),
+        )
+
+        found: int = sum(1 for row in paid.values() if row.found)
+        print(f"[+] Cached {found} of {len(symbols)} symbols to {dividends_path}")
+
+        if found < len(symbols):
+            # Not a failure: a symbol with no quote page is an ordinary holding
+            # here, and the brief says which positions its yield covers.
+            print(
+                "[*] The rest have no quote page, so the brief's yield will say "
+                "how many positions it stands on."
+            )
 
     def do_verify(self, line: str) -> None:
         """

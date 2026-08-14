@@ -199,6 +199,7 @@ PATH=/usr/local/bin:/usr/bin:/bin
 40 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith schwab529plan -M schwab529plan -id 1 --no-sheet --quiet
 45 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith ally -M ally --from-prices --no-sheet --quiet
 50 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb sheet
+52 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb dividends
 55 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb stale
 ```
 
@@ -323,6 +324,34 @@ as a good night.
 
 The interactive shell is unchanged; `uv run stonksmithdb` with no arguments still opens
 it.
+
+### The dividends step runs here so the brief does not have to
+
+`stonksmithdb dividends` asks a price feed what each held ticker paid per share over the
+trailing year and writes the answer to `~/.stonksmith/dividends.json`. It is the only
+command in this file that reaches a price feed on purpose, and its placement is the whole
+argument for it existing as a separate command at all.
+
+The morning brief's contract is **no login, no browser, no network**. That is what makes
+it cheap enough to fire at 06:30 every weekday and what stops it failing in any of the
+ways a broker can. A dividend figure the brief had to fetch would trade that away for a
+number. So the fetch happens here, beside the scrapes, and the brief reads a file.
+
+**It runs after the brokers**, so it asks about what is actually held tonight rather than
+about last night's symbol set. A holding with no public ticker is not asked about at all
+— a 401k fund code, a 529 portfolio number and a TSP fund have no quote page, and asking
+would earn a 404 per symbol per night forever. The same rule the brief's fund links
+follow, and there is exactly one implementation of it.
+
+**A failure here costs a number, not the night.** If the feed is unreachable the cache
+keeps yesterday's per-share figures, which are still true — funds distribute quarterly at
+most. If there is no cache at all the brief renders and says it has no dividend figures,
+rather than printing a `$0.00` that reads like one.
+
+What is stored is **dividends per share, never an income**. A per-share amount is a fact
+about the fund and stays true however many units are held; an income figure is that
+multiplied by a unit count, and a stored one would be wrong the moment a share was
+bought.
 
 ### The freshness step is the one that catches silence
 

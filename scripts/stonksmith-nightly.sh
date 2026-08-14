@@ -73,6 +73,12 @@ run uv run stonksmith snaptrade -M snaptrade --no-sheet --quiet
 run uv run stonksmith schwab529plan -M schwab529plan -id 1 --no-sheet --quiet
 run uv run stonksmith ally -M ally --from-prices --no-sheet --quiet
 run uv run stonksmithdb sheet
+# After the brokers, so it asks about what is actually held tonight rather than
+# about last night's symbol set. Here and not in the opening run: a fund
+# distributes quarterly at most, so a second fetch twelve hours later doubles the
+# requests to the price feed and can return nothing new -- and it is the one step
+# whose failure costs a number rather than the morning.
+run uv run stonksmithdb dividends
 run uv run stonksmithdb stale
 
 exit "$status"

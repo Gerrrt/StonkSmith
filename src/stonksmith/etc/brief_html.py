@@ -396,17 +396,28 @@ def _tiles(brief: Brief) -> str:
         else f"across all {money_of.holdings} positions"
     )
 
-    # Three different sentences, because "$0.00" has three different causes here
-    # and only one of them is a fact about the portfolio. No dividend rows at all
-    # means the transaction log has never carried one -- which is what a
-    # workspace of contributions and transfers looks like, and is not a portfolio
-    # that pays nothing.
-    if not money_of.dividends_seen:
-        span = "no dividends in the transaction log"
-    elif money_of.dividend_days < 300:
-        span = f"only {money_of.dividend_days} days of log so far"
-    else:
-        span = "trailing twelve months"
+    # Indicated rather than received, because received is $0 on a workspace
+    # whose brokers do not itemise dividends -- and a tile reading zero every
+    # morning is one nobody looks at. The received figure rides underneath, so
+    # the two are never conflated: one is a forecast of a year at the current
+    # positions, the other is money that arrived.
+    forecast: str = (
+        money(value=money_of.indicated_income, currency=money_of.currency)
+        if money_of.indicated_over
+        else "—"
+    )
+    over: str = (
+        f"a year at today's holdings, across {money_of.indicated_over} of "
+        f"{money_of.holdings} positions"
+        if money_of.indicated_over
+        else "no holding has a published dividend"
+    )
+    received: str = (
+        f"; {money(value=money_of.dividend_income, currency=money_of.currency)} "
+        "received in the log"
+        if money_of.dividends_seen
+        else "; nothing received in the log yet"
+    )
 
     # What the accounts are worth, minus what the positions account for, which
     # is cash -- and now exactly cash rather than approximately it. The SnapTrade
@@ -462,28 +473,28 @@ def _tiles(brief: Brief) -> str:
         }"
         f"{
             _tile(
-                caption='Yearly Dividend Income',
-                figure=money(
-                    value=money_of.dividend_income, currency=money_of.currency
-                ),
-                sub=span,
+                caption='Indicated Income',
+                figure=forecast,
+                sub=over + received,
             )
         }"
         f"{
             _tile(
-                caption='Portfolio Dividend Yield',
+                caption='Indicated Yield',
                 # A dash rather than 0.00% when nothing was found. A yield of
                 # zero is a claim about the holdings; no dividend rows at all is
                 # a claim about the log, and the tile beside this one is already
                 # making the second.
                 figure=(
-                    percent(value=money_of.dividend_yield).lstrip('+') or '—'
-                    if money_of.dividends_seen
+                    percent(value=money_of.indicated_yield).lstrip('+') or '—'
+                    if money_of.indicated_over
                     else '—'
                 ),
                 sub=(
-                    'income over what the positions are worth'
-                    if money_of.dividends_seen
+                    'over '
+                    + money(value=money_of.indicated_value, currency=money_of.currency)
+                    + ' of holdings with a published dividend'
+                    if money_of.indicated_over
                     else 'nothing to compute it from'
                 ),
             )

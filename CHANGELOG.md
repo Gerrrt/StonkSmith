@@ -55,6 +55,32 @@ the two disagree.
   `first_seen`. A log that has never carried a dividend reports "no dividends in
   the transaction log" rather than a 0.00% yield, and a log younger than a year
   says how many days it covers.
+- **`stonksmithdb dividends`**, and Indicated Income / Indicated Yield beside the
+  received figures. The received tiles read `$0.00` on this workspace and always
+  had: these brokers report contributions and transfers and never itemise a
+  distribution, so the money is real and simply never appears as a movement. The
+  indicated figures come from the same chart endpoint the prices do, asked with
+  `&events=div` so one request answers both and the two can never disagree about
+  which symbol they describe.
+- That fetch is a **separate command run beside the scrapes**, not part of the
+  brief. "No login, no browser, no network" is what makes the brief cheap enough
+  to schedule every morning and what stops it failing the way a broker can; a
+  figure it had to fetch would trade that away for a number. The cache lands at
+  `~/.stonksmith/dividends.json`, owner-only — a per-share amount is public, the
+  list of symbols asked about is everything the household holds.
+- What is cached is **dividends per share, never an income**: a per-share amount
+  stays true however many units are held, and a stored income would be wrong by
+  the next trade. An indicated figure never overwrites the received one, because
+  a forecast under a heading meaning *money that arrived* is a lie with nothing
+  to catch it.
+- The indicated yield divides by **the holdings it has figures for**, and states
+  their count and value. Two thirds of a real workspace can sit in a 401k, a TSP
+  fund and a 529, none of which has a public ticker; dividing nine known funds'
+  income by all thirteen positions reports 0.27% where the answer is 1.27%.
+- A symbol the feed has never heard of is recorded as unanswered rather than as
+  a fund paying nothing — both come to `0.0`, and only one is a fact about money.
+  A fund listed part-way through the year reports how many days of payments its
+  figure stands on, measured from its oldest payment rather than the window edge.
 - `BrokerDatabase.get_holdings_history()` and `read_holdings_history()`, which
   stand to the current-positions reads exactly as `get_account_history()` stands
   to `get_current_accounts()` — the same columns with the newest-snapshot

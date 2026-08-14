@@ -91,6 +91,25 @@
 #   will not ask.
 #
 # ---------------------------------------------------------------------------
+# The dividends entry is the only one here that reaches a price feed
+#
+#   `stonksmithdb dividends` asks what each held ticker paid per share over the
+#   trailing year and caches the answer. It runs here, beside the scrapes,
+#   specifically so that `stonksmithdb brief` does not have to: "no login, no
+#   browser, no network" is what makes the morning brief cheap enough to
+#   schedule and what stops it failing the way a broker can.
+#
+#   It runs after the scrapes rather than before them, so it asks about what is
+#   actually held tonight rather than about last night's symbol set. A holding
+#   with no public ticker -- a 401k fund code, a 529 portfolio number -- is not
+#   asked about at all; there is no page to ask, and asking earns a 404 per
+#   symbol per night forever.
+#
+#   A failure here costs a number, not the night. The brief renders without it
+#   and says out loud that it has no dividend figures rather than printing a
+#   zero that reads like one.
+#
+# ---------------------------------------------------------------------------
 # The last entry asks whether anything has quietly stopped updating
 #
 #   `stonksmithdb stale` reads the databases and nothing else -- no login, no
@@ -129,4 +148,5 @@ PATH=/usr/local/bin:/usr/bin:/bin
 40 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith schwab529plan -M schwab529plan -id 1 --no-sheet --quiet
 45 18 * * 1-5  cd ~/StonkSmith && uv run stonksmith ally -M ally --from-prices --no-sheet --quiet
 50 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb sheet
+52 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb dividends
 55 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb stale

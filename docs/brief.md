@@ -26,6 +26,11 @@ one HTML file and one small JSON file. That is what makes it cheap enough to sch
 every morning rather than occasionally, and it is why it cannot fail in any of the ways a
 broker can.
 
+The dividend figures look like an exception and are the argument for the rule. They come
+from a price feed, which is why the fetch is a *different command* — `stonksmithdb
+dividends`, run beside the scrapes — leaving a cache file the brief reads the way it reads
+the baseline. When that cache is missing or old the brief still renders, and says so.
+
 It deliberately does **not** scrape. At 06:30 the market is shut, TSP has not published,
 and the two browser-backed brokers want a human at a sign-in page. The brief reports on
 the previous evening's run — see [`docs/scheduling.md`](scheduling.md) — so a morning
@@ -123,19 +128,75 @@ total $1,036.22 more than the account balances" while the value came from SnapTr
 daily-cached total, and back then that wording was the honest one: two numbers genuinely
 did disagree. They no longer can.
 
-### Dividends come from the transaction log, not from a quote feed
+### Two dividend figures, and they are not the same claim
 
-Trailing twelve months of `DIVIDEND` / `DISTRIBUTION` rows, cut on the source's own
-`processed_on` rather than on `first_seen` — a workspace rebuilt this morning saw every
-movement today, so a window cut on the watermark would admit everything or nothing.
+**Indicated Income** is what the holdings would pay over a year at today's positions:
+each fund's trailing per-share distributions, times the units held. A forecast.
 
-Worth knowing what this is not. A spreadsheet's "Dividend" column is usually an annual
-dividend *per share* from a market data feed; this is money actually received, as recorded.
-A portfolio whose sources report contributions and transfers but never itemise a dividend
-will read `$0.00` — and the tile says **"no dividends in the transaction log"** rather than
-`0.00%`, because a log that has never carried one is not a portfolio that pays nothing.
-Where the log is younger than a year it says how many days it covers, since a low yield and
-a short history look identical in the number alone.
+**Received** is money that actually arrived — trailing twelve months of `DIVIDEND` /
+`DISTRIBUTION` rows, cut on the source's own `processed_on` rather than on `first_seen`,
+because a workspace rebuilt this morning saw every movement today and a window cut on the
+watermark would admit everything or nothing.
+
+The tile shows the forecast and states the received figure underneath it, in that order
+and never merged. The reason for the order is uncomfortable but honest: **received is
+`$0.00` in this workspace and always has been.** These brokers report contributions and
+transfers and do not itemise a distribution, so the money is real and simply never appears
+as a movement. A tile that reads zero every morning is one nobody looks at, and it was not
+even wrong. The reason they are never merged is the same fact from the other side: a
+forecast printed under a heading that means *money that landed in an account* is a lie the
+reader has no way to catch.
+
+So the tile reads:
+
+```
+Indicated Income   $211.73   a year at today's holdings, across 9 of 13 positions;
+                             nothing received in the log yet
+```
+
+**Indicated Yield is divided by the holdings it knows, not by the portfolio.** Two thirds
+of a real workspace can sit in a 401k, a TSP fund and a 529, none of which has a public
+ticker. Dividing nine known funds' income by all thirteen positions' value reports `0.27%`
+where the answer for what is actually known is `1.27%`, and nothing in the number tells
+the reader which they were given. The coverage travels with the figure, on the same rule
+the priced/unpriced gain split follows:
+
+```
+Indicated Yield      1.27%   over $16,732.44 of holdings with a published dividend
+```
+
+Where the feed answered for nothing at all, both tiles show `—` and say **"no holding has
+a published dividend"**. A dash rather than `0.00%`, because a yield of zero is a claim
+about the holdings and an empty cache is a claim about the cache.
+
+#### Where the per-share figures come from
+
+`stonksmithdb dividends` — the only command in the tool that reaches a price feed on
+purpose. It asks the same chart endpoint the prices come from, with `&events=div`, so one
+request answers both and the two can never disagree about which symbol they describe.
+
+It runs **beside the scrapes, not beside the brief**, and that is the whole reason it is a
+separate command. The brief's contract is no login, no browser, no network; a dividend
+figure it had to fetch would trade that away for a number. The cache lands at
+`~/.stonksmith/dividends.json` at `0600` — a per-share amount is public on its own, but
+the *set* of symbols asked about is the list of everything the household holds.
+
+What is stored is **dividends per share, never an income**. A per-share amount stays true
+however many units are held; a stored income would be wrong the moment a share was bought.
+
+Two distinctions the cache keeps that a simpler one would lose:
+
+- **A fund that pays nothing is not a symbol the feed never heard of.** Both come to
+  `0.0`. Only the first is a fact about money — the second is a ticker like `FCASH` that
+  the feed answers with a 404. The record carries `found` separately, and an unanswered
+  symbol produces no figure rather than a zero one.
+- **A partial year says so.** A fund listed four months ago has paid four months of
+  dividends, and reporting that sum as an annual figure understates its yield by two
+  thirds. The coverage is measured from the oldest payment actually inside the window, so
+  a fund that has paid once, last month, covers a month.
+
+If the feed is unreachable the cache keeps the last figures, which are still true — funds
+distribute quarterly at most. A failure here costs a number, not the morning.
 
 ### The holdings table
 
@@ -339,6 +400,18 @@ uv run stonksmithdb brief
 | `brief` | Render, open, and advance the baseline if the axis moved. The morning ritual |
 | `brief peek` | Render and open without advancing. For looking again later in the day |
 | `brief --no-open` | Render only, and print where. What a scripted caller wants |
+
+The dividend figures come from a cache that a separate command fills:
+
+```bash
+uv run stonksmithdb dividends
+```
+
+This is the one that reaches the network. Run it beside the scrapes — the nightly script
+already does — not beside the brief. It asks only about symbols that look like public
+tickers, so a 401k fund code costs nothing, and it exits `0` even when the feed refuses a
+symbol: an unanswered ticker is recorded as unanswered rather than as a fund paying
+nothing.
 
 It exits `1` when a broker's database would not open — the same escalation `sheet` makes,
 and for the same reason: that is not a stale total, it is one missing a broker's money.
