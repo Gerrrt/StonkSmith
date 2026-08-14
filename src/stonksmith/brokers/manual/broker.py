@@ -136,8 +136,27 @@ class Manual(ApiConnection):
             return False
 
         local: str = str(object=getattr(self.args, "prices", "") or "")
+        symbols: list[str] = sorted({held.symbol for held in self.accounts})
 
-        for symbol in sorted({held.symbol for held in self.accounts}):
+        # --prices names one payload and a payload carries one symbol's closes.
+        # With two symbols configured, the loop below would read that same file
+        # for each of them and mark a fund at another fund's price -- a mark
+        # that is wrong by however far the two have diverged, written without a
+        # word of complaint. Refused rather than warned about: the warning would
+        # scroll past and the wrong number would stay in the database.
+        if local and len(symbols) > 1:
+            self.logger.fail(
+                msg=(
+                    f"--prices names one file and {len(symbols)} symbols are "
+                    f"configured ({', '.join(symbols)}). It cannot say which "
+                    "fund the closes belong to, and applying them to all of "
+                    "them would price each at another's price. Drop the flag "
+                    "to fetch each symbol, or configure one account at a time."
+                )
+            )
+            return False
+
+        for symbol in symbols:
             loaded: dict[dt.date, float] | None = (
                 self.read_local(path=local)
                 if local

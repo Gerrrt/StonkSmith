@@ -45,8 +45,9 @@ def broker_args(
             "Read published closes from this file instead of downloading them. "
             "A chart payload as saved from the quote feed. Use this when the "
             "feed is unreachable from wherever StonkSmith runs, or to value an "
-            "account against a payload captured earlier. One file, so it only "
-            "makes sense with a single configured symbol."
+            "account against a payload captured earlier. One file carries one "
+            "symbol's closes, so a run with more than one symbol configured is "
+            "refused rather than pricing every fund at the first one's price."
         ),
     )
 

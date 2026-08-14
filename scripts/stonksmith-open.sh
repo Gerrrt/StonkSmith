@@ -6,8 +6,10 @@
 # shortly after the market opens, so the databases carry an intraday point
 # rather than one reading a day.
 #
-# It fires at 06:35 local, which is five minutes after the 06:30 ET open on
-# Pacific -- and five minutes after the brief, deliberately. The brief reads
+# It fires at 06:35 local, which on Pacific is five minutes after the open --
+# the bell is 09:30 Eastern, so 06:30 local here -- and five minutes after the
+# brief, deliberately. Anybody validating that timing from a different zone
+# should read the hour off the market rather than off this file. The brief reads
 # every database in the workspace and this writes them, so overlapping them
 # would have the brief reporting a workspace caught mid-write. Brief first is
 # also the right order on its own terms: a morning brief reports on last night's

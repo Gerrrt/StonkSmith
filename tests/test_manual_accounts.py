@@ -22,6 +22,8 @@ what a mark is allowed to say when the price is missing.
 
 import datetime as dt
 import unittest
+from argparse import Namespace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from config_isolation import UserConfigMixin
@@ -99,6 +101,93 @@ class ALineThatCannotBeReadIsNamed(UserConfigMixin, unittest.TestCase):
     def test_a_negative_cost_is_refused(self) -> None:
         # It would report a gain larger than the position is worth.
         self.assertIn("Negative Cost | SPYM | 1.5 | 2026-08-10 | -20", self.refused)
+
+
+class OneFileCannotPriceTwoFunds(UserConfigMixin, unittest.TestCase):
+    """--prices names one payload, and a payload carries one symbol's closes."""
+
+    config_body: str = (
+        "[MANUAL]\n"
+        "accounts =\n"
+        "    Ezekiel Trump | SPYM | 1.65 | 2026-08-10\n"
+        "    Something Else | VOO | 2.5 | 2026-08-01\n"
+    )
+
+    def _broker(self, prices: str = "") -> Any:
+        from stonksmith.brokers.manual.broker import Manual
+
+        broker = Manual()
+        broker.args = Namespace(prices=prices)
+        broker.logger = MagicMock()
+        # A readable file, so the only reason this run can fail is the refusal.
+        # Naming a path that does not exist makes create_conn_obj return False
+        # because nothing loaded -- which passes the assertion below with the
+        # refusal deleted, and was how this test first passed for the wrong
+        # reason.
+        broker.read_local = MagicMock(return_value={dt.date(2026, 8, 14): 91.0})
+
+        return broker
+
+    def test_two_symbols_with_one_file_is_refused(self) -> None:
+        # Without this the loop reads the same payload for each symbol and marks
+        # a fund at another fund's price -- wrong by however far the two have
+        # diverged, and written to the database without a word of complaint.
+        broker = self._broker(prices="/tmp/spym.json")
+
+        self.assertFalse(
+            broker.create_conn_obj(),
+            "a single price file was accepted for two symbols, so one fund is "
+            "about to be marked at the other's price",
+        )
+        self.assertEqual(
+            broker.prices, {}, "one file's closes were loaded against a symbol"
+        )
+
+    def test_the_refusal_names_both_symbols(self) -> None:
+        # Refused rather than warned about: a warning scrolls past and the wrong
+        # number stays. Naming them is what makes the message actionable.
+        broker = self._broker(prices="/tmp/spym.json")
+        broker.create_conn_obj()
+
+        said = " ".join(str(call) for call in broker.logger.fail.call_args_list)
+
+        self.assertIn("SPYM", said)
+        self.assertIn("VOO", said)
+
+    def test_without_the_flag_each_symbol_is_fetched(self) -> None:
+        # The ordinary path is unaffected: one request per distinct symbol.
+        broker = self._broker()
+        broker.fetch_quotes = MagicMock(return_value={dt.date(2026, 8, 14): 91.0})
+
+        self.assertTrue(broker.create_conn_obj())
+        self.assertEqual(
+            sorted(
+                call.kwargs["symbol"] for call in broker.fetch_quotes.call_args_list
+            ),
+            ["SPYM", "VOO"],
+        )
+
+
+class OneFileIsFineForOneFund(UserConfigMixin, unittest.TestCase):
+    """The flag's actual use, which the refusal must not have taken away."""
+
+    config_body: str = (
+        "[MANUAL]\naccounts =\n    Ezekiel Trump | SPYM | 1.65 | 2026-08-10\n"
+    )
+
+    def test_a_single_symbol_reads_the_file(self) -> None:
+        # The refusal is conditional rather than a removal: valuing one
+        # configured account against a payload saved earlier is exactly what
+        # --prices is for, and is the offline path when the feed is unreachable.
+        from stonksmith.brokers.manual.broker import Manual
+
+        broker = Manual()
+        broker.args = Namespace(prices="/tmp/spym.json")
+        broker.logger = MagicMock()
+        broker.read_local = MagicMock(return_value={dt.date(2026, 8, 14): 91.0})
+
+        self.assertTrue(broker.create_conn_obj())
+        self.assertEqual(list(broker.prices), ["SPYM"])
 
 
 class TheMarkIsACountTimesAPublishedPrice(unittest.TestCase):
