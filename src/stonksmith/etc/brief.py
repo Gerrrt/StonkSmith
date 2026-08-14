@@ -1289,7 +1289,11 @@ def build_brief(
     ]
 
     classes: dict[str, str] = get_asset_classes()
-    palette, _refused = get_account_colors()
+    # The refused lines are dropped here and reported by the command, on the
+    # rule the aliases follow: this function is the model and has nowhere to say
+    # anything. etc.stonksmithdb.do_brief asks get_account_colors() again --
+    # the config is cached, so that is a dictionary lookup -- and names each one.
+    palette, _ = get_account_colors()
     income, covered = dividends(rows=portfolio.transactions, today=today)
 
     # Computed once rather than inside the Brief() call, because two fields now
@@ -1297,7 +1301,12 @@ def build_brief(
     # second from a second call would be two chances to disagree about how many
     # accounts moved.
     moved: list[Movement] = (
-        account_movements(rows=portfolio.net_worth, since=since.taken_on, until=as_of)
+        account_movements(
+            rows=portfolio.net_worth,
+            since=since.taken_on,
+            until=as_of,
+            palette=palette,
+        )
         if since.taken_on
         else []
     )
@@ -1312,7 +1321,16 @@ def build_brief(
 
     # Split for display only. `held` stays whole and is what performance()
     # totals, so hiding a row cannot move a number.
-    shown: list[Position] = [row for row in held if abs(row.value or 0.0) >= floor]
+    #
+    # A position the source never valued is kept, not hidden. `row.value or 0.0`
+    # reads None as zero and puts it under every floor above zero -- which is the
+    # absent-is-not-zero conflation this project forbids everywhere else, and the
+    # worst place to make it: a holding nobody could price is exactly the one a
+    # reader needs to see, and it would disappear precisely because nothing is
+    # known about it.
+    shown: list[Position] = [
+        row for row in held if row.value is None or abs(row.value) >= floor
+    ]
 
     return Brief(
         state=state,

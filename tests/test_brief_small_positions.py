@@ -159,6 +159,32 @@ class HidingARowMovesNoNumber(UserConfigMixin, unittest.TestCase):
         self.assertAlmostEqual(gap_shown, gap_hidden, places=2)
 
 
+class AnUnpricedPositionIsNotJudgedAtAll(UserConfigMixin, unittest.TestCase):
+    def test_a_holding_the_source_never_valued_stays_visible(self) -> None:
+        # `row.value or 0.0` reads None as zero and puts it under every floor
+        # above zero -- the absent-is-not-zero conflation this project forbids
+        # everywhere else, and the worst place to make it. A holding nobody could
+        # price is exactly the one a reader needs to see, and it would vanish
+        # precisely because nothing is known about it.
+        unpriced = Portfolio(
+            holdings=(
+                HoldingRow(
+                    broker="b",
+                    source="b",
+                    account="Somewhere",
+                    account_key="s",
+                    symbol="UNKNOWN",
+                    units=3.0,
+                    value=None,
+                ),
+            )
+        )
+        brief = build_brief(portfolio=unpriced, baseline=None, today=TODAY, floor=1.0)
+
+        self.assertEqual([row.symbol for row in brief.positions], ["UNKNOWN"])
+        self.assertEqual(brief.positions_hidden, 0)
+
+
 class ANegativePositionIsJudgedOnItsSize(UserConfigMixin, unittest.TestCase):
     def test_a_short_or_owed_position_is_not_hidden_for_being_negative(self) -> None:
         # Compared on magnitude, not on value. A position at -$400 is a debt

@@ -127,5 +127,91 @@ class TheConfigRefusesWhatIsNotAColour(UserConfigMixin, unittest.TestCase):
                 self.assertIn(f".dot.{color}", STYLE)
 
 
+class TheColourReachesBothTables(UserConfigMixin, unittest.TestCase):
+    """Movers as well as holdings, which is where this shipped broken."""
+
+    config_body: str = "[ACCOUNTS]\ncolors =\n    Garrett = green\n    Joint = yellow\n"
+
+    def _brief(self):
+        import datetime as dt
+
+        from stonksmith.etc.brief import Baseline, build_brief
+        from stonksmith.etc.portfolio import (
+            OBSERVED,
+            HoldingRow,
+            NetWorthRow,
+            Portfolio,
+        )
+
+        rows = tuple(
+            NetWorthRow(
+                broker="b",
+                source="b",
+                account="Garrett IRA",
+                account_key="g1",
+                date=date,
+                value=value,
+                basis=OBSERVED,
+                observed_on=date,
+            )
+            for date, value in (("2026-08-13", 1000.0), ("2026-08-14", 1100.0))
+        )
+
+        return build_brief(
+            portfolio=Portfolio(
+                net_worth=rows,
+                holdings=(
+                    HoldingRow(
+                        broker="b",
+                        source="b",
+                        account="Garrett IRA",
+                        account_key="g1",
+                        symbol="SWYNX",
+                        value=1100.0,
+                    ),
+                ),
+            ),
+            baseline=Baseline(taken_on="2026-08-13", totals={"USD": 1000.0}),
+            today=dt.date(2026, 8, 14),
+        )
+
+    def test_a_holding_gets_its_owner_colour(self) -> None:
+        self.assertEqual(self._brief().positions[0].color, "green")
+
+    def test_a_mover_gets_its_owner_colour(self) -> None:
+        # This is the one that shipped empty: build_brief loaded the palette and
+        # did not hand it to account_movements, so every Movement.color stayed
+        # "" and the Accounts table rendered no dots at all -- while Holdings
+        # rendered twelve, which is exactly why it went unnoticed.
+        movers = self._brief().account_movers
+
+        self.assertEqual(len(movers), 1)
+        self.assertEqual(
+            movers[0].color,
+            "green",
+            "the palette did not reach account_movements, so the Accounts table "
+            "has no dots while the Holdings table does",
+        )
+
+    def test_both_tables_carry_dots_on_the_page(self) -> None:
+        import datetime as dt
+        import re
+
+        from stonksmith.etc.brief_html import render
+
+        page = render(
+            brief=self._brief(),
+            now=dt.datetime(2026, 8, 14, 6, 30, tzinfo=dt.UTC),
+        )
+        accounts = re.search(r"<h2>Accounts</h2>(.*?)</section>", page, re.S)
+        holdings = re.search(r"<h2>Holdings</h2>(.*?)</section>", page, re.S)
+
+        assert accounts is not None
+        assert holdings is not None
+
+        self.assertIn('class="dot green"', accounts.group(1))
+        self.assertIn('class="dot green"', holdings.group(1))
+
+
 if __name__ == "__main__":
     unittest.main()

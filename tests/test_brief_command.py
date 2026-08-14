@@ -182,6 +182,24 @@ class TheBriefCommand(UserConfigMixin, MemoryKeyringMixin, unittest.TestCase):
         self.assertIn("could not be read", output)
         self.assertEqual(len(self._reports()), 1)
 
+    def test_a_colour_line_it_could_not_read_is_named(self) -> None:
+        # get_account_colors returns the lines it refused and build_brief has
+        # nowhere to say so, being the model -- so the command reports them, on
+        # the rule the [MANUAL] parser and the alias check already follow. A
+        # colour that was not understood leaves the row with no dot, which looks
+        # exactly like an owner nobody wrote a line for: silence makes a typo
+        # indistinguishable from a decision.
+        self._write(broker="tsp", as_of="2026-08-12", value=1000.0)
+
+        with patch(
+            "stonksmith.etc.config.get_account_colors",
+            return_value=([], ["Ezekiel = chartreuse"]),
+        ):
+            _failed, output = self._run()
+
+        self.assertIn("chartreuse", output)
+        self.assertIn("Unreadable [ACCOUNTS] colors line", output)
+
     def test_an_unknown_argument_is_refused(self) -> None:
         # Refused rather than ignored: a misspelled "peek" that silently advanced
         # the baseline would consume exactly the comparison it was typed to save.

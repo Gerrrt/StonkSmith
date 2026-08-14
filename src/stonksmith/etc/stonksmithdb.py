@@ -359,6 +359,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         from stonksmith.etc.brief_html import render
         from stonksmith.etc.config import (
             get_account_aliases,
+            get_account_colors,
             get_brief_keep_days,
             get_brief_min_position,
             get_brief_movers,
@@ -436,6 +437,13 @@ class StonkSmithDBMenu(cmd.Cmd):
             # outcome the alias was written to prevent. Not a failure: the brief
             # is correct, it is just not saying what was asked.
             print(f"[-] Alias matched no account: {label}")
+
+        for line in get_account_colors()[1]:
+            # Named for the reason the [MANUAL] parser names its own refused
+            # lines: a colour that was not understood leaves the row with no
+            # dot, which looks exactly like an owner nobody wrote a line for.
+            # Silence here would make a typo indistinguishable from a decision.
+            print(f"[-] Unreadable [ACCOUNTS] colors line, skipped: {line!r}")
 
         if peek:
             print("[*] Baseline left where it was: this was a peek.")
