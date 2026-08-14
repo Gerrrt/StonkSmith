@@ -110,6 +110,14 @@ Dividend **yield**, by contrast, divides by the position total: a yield is what 
 holdings pay on the holdings, and including idle cash would report a portfolio yielding
 less the more of it is waiting to be invested.
 
+The difference between the two runs the other way more often than you would expect. When
+the positions total *more* than the balances, that cannot be cash, and the tile says so —
+*"positions total $1,036.22 more than the account balances"* — rather than reporting a
+negative quantity of it. SnapTrade states an account balance and a set of positions, and on
+a real workspace those disagree on every account, by a third on one of them. One of the two
+readings is wrong or they were struck at different moments; either way it is a fact about
+the source and the reader is owed it.
+
 ### Dividends come from the transaction log, not from a quote feed
 
 Trailing twelve months of `DIVIDEND` / `DISTRIBUTION` rows, cut on the source's own
@@ -147,10 +155,41 @@ That is the one thing the old position-movers list said that this table does not
 whose value rose on an unchanged count was repriced by the market, and one whose count rose
 was bought. Only the second is an event.
 
+Every row names the account holding it, always. The same fund is routinely held in several
+accounts — one workspace has SWPPX in four — and a table showing the symbol alone renders
+those as identical rows with different numbers, with no way to tell which is which.
+
 The **Industry** column has no equivalent here. No source StonkSmith reads states a sector,
 so the nearest thing is the `[ALLOCATION] asset_classes` table — declare symbols there and
-they appear under each holding; leave it blank and the row shows which account holds the
-position instead.
+they join the account name under each holding.
+
+## Calling accounts what you call them
+
+Brokers name accounts for their own screens. "MICROSOFT CORPORATION SAVINGS PLUS 401(K)
+PLAN" and "Individual (...0847)" are both correct and neither is what you call the account
+at half past six in the morning.
+
+```ini
+[ACCOUNTS]
+aliases =
+    tsp / TSP L 2060 = Garrett 401(k)
+    ally / Individual (...0847) = Joint Brokerage (Ally)
+```
+
+The left-hand side is the `Source / Account` label the run prints — the same spelling
+`[SNAPTRADE] exclude_accounts` matches on, through the same normalizer, so a label copied
+from one option works in the other and case or spacing need not match.
+
+**Nothing stored changes.** This is applied on the way out of the databases, so the sheet
+and the brief say the same thing, and the identity every join and every baseline keys on
+(`account_key`) is untouched — which is what makes an alias safe to add tonight and remove
+tomorrow without orphaning a row.
+
+A line matching no account is reported by the run. That is how a broker renaming an account
+surfaces: the alias stops landing and the account quietly reverts to the broker's wording,
+which is the outcome the alias was added to prevent. Note that the check has to allow for
+the aliases having *already been applied* by the time it looks — otherwise every working
+alias reports as broken, every morning.
 
 ## Since when
 

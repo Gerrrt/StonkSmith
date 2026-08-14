@@ -29,11 +29,11 @@ worse than any of the above.
 """
 
 import datetime
-import re
 from typing import Any, ClassVar
 
 from stonksmith.etc.connection import Connection
 from stonksmith.etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from stonksmith.etc.portfolio import normalize_label
 from stonksmith.etc.portfolio_sheet import sync
 from stonksmith.etc.records import AccountIdentity, Holding, Transaction
 from stonksmith.helpers.normalize import format_amount, to_amount, to_iso_date
@@ -49,11 +49,6 @@ LIABILITY_CATEGORIES = frozenset({"LOC"})
 #: Account statuses that still represent money you have. ``None`` is accepted
 #: too -- several brokerages never populate it.
 LIVE_STATUSES = frozenset({"open"})
-
-#: The "Brokerage / Account" separator, with whatever spacing it was written
-#: with. Normalized so a hand-typed "Schwab/Beneficiary A 529 Plan" still
-#: matches the "Schwab / Beneficiary A 529 Plan" the sync prints.
-_SEPARATOR = re.compile(pattern=r"\s*/\s*")
 
 
 def holdings_status(account: dict[str, Any]) -> dict[str, Any]:
@@ -113,34 +108,6 @@ def currency_code(currency: Any, default: str = "USD") -> str:
             return str(object=code).upper()
 
     return default
-
-
-def normalize_label(label: str) -> str:
-    """
-    Reduce an account label to something two sources can agree on.
-
-    One side of the comparison is typed into a config file by hand, the other is
-    built from whatever SnapTrade returned. Requiring those to match byte for
-    byte means an exclusion silently does nothing over a capital letter or a
-    doubled space -- and "silently does nothing" here restores the double count
-    the config line was written to stop.
-
-    The separator gets its own rule because it is the one piece of punctuation
-    this format demands and therefore the one a person retypes: "Schwab /
-    Beneficiary A 529 Plan" and "Schwab/Beneficiary A 529 Plan" are plainly the
-    same account, and collapsing whitespace alone leaves them different strings.
-    Every slash is treated the same way, on both sides, so a name that contains
-    one is not a special case.
-
-    Nothing else is touched. "Individual - TOD" and "Individual TOD" are not
-    obviously the same account, and guessing wrong drops a real one -- the
-    opposite failure, and the worse of the two.
-    :param label: A "Brokerage / Account" label, from either side
-    :return: The label, case-folded, whitespace collapsed, separators evened out
-    :rtype: str
-    """
-
-    return _SEPARATOR.sub(repl=" / ", string=" ".join(label.split())).casefold()
 
 
 def brokerage_name(

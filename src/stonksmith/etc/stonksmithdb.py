@@ -358,13 +358,18 @@ class StonkSmithDBMenu(cmd.Cmd):
         )
         from stonksmith.etc.brief_html import render
         from stonksmith.etc.config import (
+            get_account_aliases,
             get_brief_keep_days,
             get_brief_movers,
             get_brief_open_browser,
         )
         from stonksmith.etc.paths import baseline_path, reports_path
         from stonksmith.etc.permissions import restrict
-        from stonksmith.etc.portfolio import Portfolio, read_workspace
+        from stonksmith.etc.portfolio import (
+            Portfolio,
+            read_workspace,
+            unmatched_aliases,
+        )
 
         asked: set[str] = set(line.split())
         peek: bool = "peek" in asked
@@ -418,6 +423,17 @@ class StonkSmithDBMenu(cmd.Cmd):
             # is not a stale total, it is one that is missing a broker's money.
             print(f"[-] Not in the brief: {name} could not be read ({reason}).")
             self.failed = True
+
+        for label in unmatched_aliases(
+            portfolio=portfolio, aliases=get_account_aliases()
+        ):
+            # Reported rather than ignored, on the rule the asset class table
+            # follows. A line that matches nothing is either a typo or a broker
+            # that has renamed an account -- and in the second case the account
+            # has quietly reverted to the broker's own wording, which is the
+            # outcome the alias was written to prevent. Not a failure: the brief
+            # is correct, it is just not saying what was asked.
+            print(f"[-] Alias matched no account: {label}")
 
         if peek:
             print("[*] Baseline left where it was: this was a peek.")

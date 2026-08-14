@@ -195,12 +195,27 @@ HISTORY_FILTERS: dict[str, str] = {
 #: computed from mismatched inputs, stays in every chart drawn from the table
 #: until it is removed by hand.
 #:
-#: Accounts are deliberately absent. Deleting one cascades away every snapshot
-#: under it, which is the opposite of the narrow correction this is for, and the
-#: next run would recreate the account anyway.
+#: Accounts were deliberately absent here, and the reason they no longer are is
+#: worth keeping rather than deleting. The argument was: removing an account
+#: cascades away every snapshot under it, which is the opposite of the narrow
+#: correction this is for, *and the next run would recreate the account anyway*.
+#:
+#: The second half is what has changed, and only for an account whose source has
+#: been made to stop reporting it. An aggregator that keeps returning a 529 a
+#: dedicated scraper already covers writes it back every night, so deleting it is
+#: futile -- but with `[SNAPTRADE] exclude_accounts` set the silence is arranged
+#: and the deletion stands. So `delete account` exists, and do_delete says out
+#: loud that it does not stick on its own, because the failure mode is a row that
+#: looks removed and is back by morning.
+#:
+#: The first half still stands and is the point: this cascades. That is why it
+#: reports the name and snapshot count of what it removed rather than a bare
+#: "done" -- with no undo, reading the name back is the operator's only check on
+#: having typed the right id.
 DELETERS: dict[str, tuple[str, str]] = {
     "creds": ("delete_credential", "cred_id"),
     "snapshot": ("delete_snapshot", "snapshot_id"),
+    "account": ("delete_account", "account_id"),
 }
 
 
@@ -362,8 +377,20 @@ class BrokerNavigator(cmd.Cmd):
 
     def do_delete(self, line: str) -> None:
         """
-        Delete a credential, or a single snapshot and its holdings.
-        Usage: delete creds <id> | delete snapshot <id>
+        Delete a credential, a single snapshot, or a whole account.
+
+        Usage: delete creds <id> | delete snapshot <id> | delete account <id>
+
+        `delete account` is the broad one and cascades: every snapshot, every
+        holding under those snapshots, and every transaction recorded against
+        the account go with it. There is no undo, so it reports what it removed
+        by name -- reading that back is the only check on having typed the id
+        from the right row of `show accounts`.
+
+        It also does not stick on its own. The next sync recreates any account
+        its broker still returns, so this is the second half of a two-part
+        operation whose first half is making the source stop reporting it, and
+        the reminder below is printed every time rather than documented once.
         :param line:
         """
 
@@ -398,10 +425,30 @@ class BrokerNavigator(cmd.Cmd):
             )
             return
 
-        if remove(**{parameter: row_id}):
-            stonksmith_logger.success(msg=f"Deleted {target} {row_id}")
-        else:
+        removed = remove(**{parameter: row_id})
+
+        if not removed:
             stonksmith_logger.fail(msg=f"No {target} with id {row_id}")
+            return
+
+        if target != "account":
+            stonksmith_logger.success(msg=f"Deleted {target} {row_id}")
+            return
+
+        # Named rather than numbered, and the count said out loud. delete_account
+        # returns (name, snapshots) precisely so this line can exist: an operator
+        # who deleted the wrong id finds out here or not at all.
+        name, marks = removed
+        stonksmith_logger.success(
+            msg=f"Deleted account {row_id} ({name}) and {marks} snapshot(s)"
+        )
+        stonksmith_logger.highlight(
+            msg=(
+                "    This does not stop the account coming back. The next sync "
+                "recreates whatever its broker still reports -- for SnapTrade, "
+                "add it to [SNAPTRADE] exclude_accounts first."
+            )
+        )
 
     def history_rows(
         self, category: str, argument: str = "", limit: int | None = None

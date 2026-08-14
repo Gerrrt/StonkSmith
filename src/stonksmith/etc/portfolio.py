@@ -65,14 +65,14 @@ an account.
 import datetime as dt
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Engine
 
 from stonksmith.etc.broker_db import BrokerDatabase
-from stonksmith.etc.config import get_workspace
+from stonksmith.etc.config import get_account_aliases, get_workspace
 from stonksmith.etc.context import PortfolioDbProtocol
 from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.etc.paths import workspace_dir
@@ -252,6 +252,46 @@ _ISO_DATE: re.Pattern[str] = re.compile(pattern=ISO_DATE_PATTERN)
 #: renders the rule as a Sheets QUERY and the check evaluates it in Python; a
 #: number defined twice is a panel saying one thing while the alarm says another.
 STALE_DAYS: int = 7
+
+
+#: Runs of whitespace around the "/" in an account label, so a hand-typed
+#: separator matches a generated one.
+_SEPARATOR: re.Pattern[str] = re.compile(pattern=r"\s*/\s*")
+
+
+def normalize_label(label: str) -> str:
+    """
+    Reduce an account label to something two sources can agree on.
+
+    One side of the comparison is typed into a config file by hand, the other is
+    built from whatever a source returned. Requiring those to match byte for
+    byte means a config line silently does nothing over a capital letter or a
+    doubled space -- and "silently does nothing" restores whatever the line was
+    written to stop.
+
+    The separator gets its own rule because it is the one piece of punctuation
+    this format demands and therefore the one a person retypes: "Schwab /
+    Beneficiary A 529 Plan" and "Schwab/Beneficiary A 529 Plan" are plainly the
+    same account, and collapsing whitespace alone leaves them different strings.
+    Every slash is treated the same way, on both sides, so a name that contains
+    one is not a special case.
+
+    Nothing else is touched. "Individual - TOD" and "Individual TOD" are not
+    obviously the same account, and guessing wrong drops a real one -- the
+    opposite failure, and the worse of the two.
+
+    Here rather than in modules.snaptrade_module, where it was written, because
+    two settings now identify an account by the same label: ``exclude_accounts``
+    decides whether to write one and ``[ACCOUNTS] aliases`` decides what to call
+    it. A label that matches one and not the other would be the worst kind of
+    surprise -- an operator copying a working line from one option into the
+    other and watching it do nothing -- so there is one rule and both import it.
+    :param label: A "Source / Account" label, from either side
+    :return: The label, case-folded, whitespace collapsed, separators evened out
+    :rtype: str
+    """
+
+    return _SEPARATOR.sub(repl=" / ", string=" ".join(label.split())).casefold()
 
 
 def as_date(as_of: str | None) -> dt.date | None:
@@ -1279,6 +1319,114 @@ def workspace_path(workspace: str | None = None, root: Path | None = None) -> Pa
     return Path(root or workspace_dir) / (workspace or get_workspace())
 
 
+def account_label(row: AccountRow | HoldingRow | TransactionRow | NetWorthRow) -> str:
+    """
+    The "Source / Account" label a config line names an account by.
+
+    The same spelling the SnapTrade sync prints and ``exclude_accounts`` matches
+    on, so a label copied out of a run works in either setting.
+    :param row: Any row carrying the identity prefix
+    :return: The label
+    :rtype: str
+    """
+
+    return f"{row.source} / {row.account}"
+
+
+def apply_aliases(portfolio: Portfolio, aliases: dict[str, str]) -> Portfolio:
+    """
+    Rewrite the display name of every row whose account the operator renamed.
+
+    Applied once here, on the way out of the databases, rather than at each
+    consumer. The sheet and the brief are two views of one read, and an account
+    that is "Mekenna 401(k)" on one and "MICROSOFT CORPORATION SAVINGS PLUS
+    401(K) PLAN" on the other is two accounts to anybody comparing them.
+
+    Every row shape carries the name, not just the account view -- holdings and
+    movements repeat it, and a holdings table still saying the broker's wording
+    under a renamed account is the same inconsistency one table further down.
+
+    Nothing stored changes. This is a display name, and the identity every join
+    and every baseline uses is ``account_key``, which is untouched. That is what
+    makes renaming safe to do and to undo: an alias added, changed or removed
+    tonight does not orphan a single stored row.
+    :param portfolio: What the workspace holds
+    :param aliases: Label to display name, from the config
+    :return: The same portfolio under the operator's own names
+    :rtype: Portfolio
+    """
+
+    if not aliases:
+        return portfolio
+
+    named: dict[str, str] = {
+        normalize_label(label=label): name for label, name in aliases.items()
+    }
+
+    def rename[RowT: AccountRow | HoldingRow | TransactionRow | NetWorthRow](
+        rows: tuple[RowT, ...],
+    ) -> tuple[RowT, ...]:
+        return tuple(
+            replace(row, account=named[normalize_label(label=account_label(row=row))])
+            if normalize_label(label=account_label(row=row)) in named
+            else row
+            for row in rows
+        )
+
+    return replace(
+        portfolio,
+        accounts=rename(portfolio.accounts),
+        holdings=rename(portfolio.holdings),
+        transactions=rename(portfolio.transactions),
+        net_worth=rename(portfolio.net_worth),
+        holdings_history=rename(portfolio.holdings_history),
+    )
+
+
+def unmatched_aliases(portfolio: Portfolio, aliases: dict[str, str]) -> list[str]:
+    """
+    Alias lines that name no account in the workspace.
+
+    Reported rather than ignored, on the rule the asset class table already
+    follows: a line that quietly matches nothing is a typo that looks like a
+    working setting. It is also how a broker renaming an account surfaces --
+    the alias stops landing, and the account silently reverting to the broker's
+    own wording is exactly the outcome the alias was added to prevent.
+    :param portfolio: What the workspace holds
+    :param aliases: Label to display name, from the config
+    :return: The labels that matched nothing, in the order given
+    :rtype: list[str]
+    """
+
+    present: set[str] = {
+        normalize_label(label=account_label(row=row)) for row in portfolio.accounts
+    }
+    missing: list[str] = []
+
+    for label, name in aliases.items():
+        if normalize_label(label=label) in present:
+            continue
+
+        # **The portfolio has usually already been renamed by the time anything
+        # asks.** read_databases applies the aliases on the way out, so the
+        # accounts carry the new names and not one original label matches -- and
+        # a check that stopped at the line above would report every *working*
+        # alias as broken, every morning. An alarm that is wrong whenever the
+        # feature is working is worse than no alarm.
+        #
+        # So a label also counts as matched when the account it names is present
+        # under the name this alias gives it: the source half of the original,
+        # with the new name on the end.
+        source: str = label.rpartition("/")[0].strip()
+
+        if normalize_label(label=f"{source} / {name}") in present:
+            continue
+
+        missing.append(label)
+
+    return missing
+
+
 def read_databases(paths: Iterable[Path], with_history: bool = False) -> Portfolio:
     """
     Read the given broker databases into one set of canonical rows.
@@ -1354,19 +1502,24 @@ def read_databases(paths: Iterable[Path], with_history: bool = False) -> Portfol
         positions.extend(broker_positions)
         read.append(broker)
 
-    return Portfolio(
-        accounts=tuple(accounts),
-        holdings=tuple(holdings),
-        transactions=tuple(transactions),
-        brokers_read=tuple(read),
-        unreadable=tuple(unreadable),
-        # Built here rather than inside the loop, and that is the whole design.
-        # The dates one broker's accounts must be carried onto are the dates the
-        # *other* brokers ran on, so the series cannot be assembled a database at
-        # a time -- a per-broker series would each be right on its own and sum to
-        # a portfolio that collapses every day only one of them scraped.
-        net_worth=tuple(net_worth_history(observations=observations)),
-        holdings_history=tuple(positions),
+    return apply_aliases(
+        portfolio=Portfolio(
+            accounts=tuple(accounts),
+            holdings=tuple(holdings),
+            transactions=tuple(transactions),
+            brokers_read=tuple(read),
+            unreadable=tuple(unreadable),
+            # Built here rather than inside the loop, and that is the whole design.
+            # The dates one broker's accounts must be carried onto are the dates the
+            # *other* brokers ran on, so the series cannot be assembled a database at
+            # a time -- a per-broker series would each be right on its own and sum to
+            # a portfolio that collapses every day only one of them scraped.
+            net_worth=tuple(net_worth_history(observations=observations)),
+            holdings_history=tuple(positions),
+        ),
+        # Read here rather than passed in, so every consumer of the canonical
+        # read gets the operator's names without having to know they exist.
+        aliases=get_account_aliases(),
     )
 
 

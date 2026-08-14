@@ -495,6 +495,45 @@ def get_asset_classes() -> dict[str, str]:
     return classes
 
 
+def get_account_aliases() -> dict[str, str]:
+    """
+    What the operator calls each account, where that differs from the broker.
+
+    Keyed on the "Source / Account" label rather than on the account key, which
+    is the one debatable choice here. The key is the stable identity and the
+    display name is explicitly not -- so keying on the name means a broker
+    renaming an account drops its alias.
+
+    The label wins anyway, for two reasons. It is the spelling
+    ``exclude_accounts`` already uses, so a label copied out of a run works in
+    either option and an operator does not have to learn that two adjacent
+    settings identify the same account differently. And an account key is an
+    opaque SnapTrade identifier that appears nowhere a person reads; asking
+    somebody to find one in order to rename an account is asking them not to
+    bother. The dropped-alias case is handled by reporting a line that matched
+    nothing, which is a better outcome than a silent revert either way.
+
+    Split on the last "=" rather than the first, unlike the asset class table:
+    an account name may contain one and a class name is far less likely to. A
+    line without a separator is dropped rather than guessed at.
+    :return: Label to display name, later duplicates winning
+    :rtype: dict[str, str]
+    """
+
+    raw: str = get_config().get(section="ACCOUNTS", option="aliases", fallback="")
+    aliases: dict[str, str] = {}
+
+    for line in raw.splitlines():
+        label, sep, name = line.rpartition("=")
+
+        if not sep or not label.strip() or not name.strip():
+            continue
+
+        aliases[label.strip()] = name.strip()
+
+    return aliases
+
+
 def get_brief_open_browser() -> bool:
     """
     Whether the morning brief opens itself once it is written.

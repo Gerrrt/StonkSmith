@@ -421,6 +421,10 @@ growth and the win/loss flag are absent on those rows rather than zero. Where a
 total *is* summed over the positions that have a cost, the tile says which — *"across
 9 of 12 positions; 3 report no cost basis"*.
 
+Accounts appear under the names you give them, not the ones brokers print, via
+`[ACCOUNTS] aliases` — a display name applied on the way out of the databases, so
+the sheet and the brief agree and nothing stored is renamed.
+
 Both files it writes are owner-only; old reports are pruned to `[BRIEF] keep_days`.
 The whole design, the rule that keeps a skipped morning from erasing a day's
 movement, and how to install the agent are [`docs/brief.md`](docs/brief.md).

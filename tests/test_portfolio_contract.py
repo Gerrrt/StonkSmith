@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from config_isolation import UserConfigMixin
 from keyring_isolation import MemoryKeyringMixin
 from stonksmith.etc.broker_db import BrokerDatabase
 from stonksmith.etc.context import PortfolioDbProtocol
@@ -859,7 +860,7 @@ class ReadTransactionsTests(unittest.TestCase):
         )
 
 
-class WorkspaceReadTests(MemoryKeyringMixin, unittest.TestCase):
+class WorkspaceReadTests(UserConfigMixin, MemoryKeyringMixin, unittest.TestCase):
     """Reading real databases, several of them, out of one workspace."""
 
     def setUp(self) -> None:

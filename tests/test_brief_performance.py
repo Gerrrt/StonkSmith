@@ -470,6 +470,46 @@ class TheValueTileMatchesTheHeadline(UserConfigMixin, unittest.TestCase):
 
         self.assertIn("$369.50 not in any position", page)
 
+    def test_positions_exceeding_the_balances_is_not_called_cash(self) -> None:
+        # The other direction, which "plus $X not in any position" renders as a
+        # negative quantity of cash. It is not cash: it is the same source's own
+        # balance and positions disagreeing, which on this workspace happens on
+        # every SnapTrade account and by a third on one of them. A reader owed
+        # that fact should not be handed arithmetic instead.
+        portfolio = Portfolio(
+            accounts=(
+                AccountRow(
+                    broker="snaptrade",
+                    source="snaptrade",
+                    account="Brokerage",
+                    account_key="a1",
+                    value=2222.73,
+                    as_of="2026-08-13",
+                ),
+            ),
+            holdings=(_held(symbol="SWPPX", units=148.499, value=2986.31),),
+            net_worth=(
+                NetWorthRow(
+                    broker="snaptrade",
+                    source="snaptrade",
+                    account="Brokerage",
+                    account_key="a1",
+                    date="2026-08-13",
+                    value=2222.73,
+                    basis=OBSERVED,
+                    observed_on="2026-08-13",
+                ),
+            ),
+        )
+        page: str = render(
+            brief=build_brief(portfolio=portfolio, baseline=None, today=TODAY),
+            now=NOW,
+        )
+
+        self.assertIn("positions total $763.58 more than the account balances", page)
+        self.assertNotIn("not in any position", page)
+        self.assertNotIn("$-", page)
+
 
 if __name__ == "__main__":
     unittest.main()

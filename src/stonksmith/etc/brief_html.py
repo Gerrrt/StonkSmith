@@ -382,13 +382,32 @@ def _tiles(brief: Brief) -> str:
     else:
         span = "trailing twelve months"
 
+    # What the accounts say, minus what the positions account for. Three cases,
+    # and the third is the one that had to be learned.
+    #
+    # Positive is uninvested cash sitting in a balance and in no holding, which
+    # is ordinary and worth naming. Nothing is the tidy case.
+    #
+    # **Negative cannot be cash**, and rendering it as "plus $-1,036.22 not in
+    # any position" was the first thing this did. It means the two numbers the
+    # same source reported disagree -- SnapTrade states an account balance and a
+    # set of positions, and on this workspace the positions total more, by a
+    # third on one account. One of the two is wrong or they were marked at
+    # different moments, and either way a reader should be told that rather than
+    # handed a negative quantity of cash.
     cash: float = money_of.value - money_of.invested
     holds: str = f"{money_of.holdings} holdings"
 
-    if round(cash, 2):
+    if round(cash, 2) > 0:
         holds = (
             f"{holds}, plus "
             f"{money(value=cash, currency=money_of.currency)} not in any position"
+        )
+    elif round(cash, 2) < 0:
+        holds = (
+            f"{holds}; positions total "
+            f"{money(value=abs(cash), currency=money_of.currency)} more than the "
+            f"account balances"
         )
 
     return (
@@ -738,22 +757,29 @@ def _bought(row: Position) -> str:
 
 def _under(row: Position) -> str:
     """
-    The line under a symbol: its asset class, or which account holds it.
+    The line under a symbol: which account holds it, and its class where declared.
 
-    The class when one was declared, because that is the sheet's Industry column
-    and the more useful of the two. The account otherwise -- rather than
-    "(unclassified)" repeated down the whole table, which on a workspace with no
-    [ALLOCATION] block is every row saying the same non-fact while the genuinely
-    useful "which account is this in" goes unshown.
+    The account **always**, which is the half that was learned rather than
+    designed. The same fund is routinely held in four accounts -- SWPPX appears
+    under a joint brokerage, two individual ones and a child's -- and a table
+    that shows the symbol alone renders those as four identical rows with
+    different numbers. The reader cannot tell which is which, and the column that
+    would say is the one the source is most reliable about.
+
+    The asset class joins it when one is declared, rather than replacing it.
+    "(unclassified)" repeated down the whole table is every row stating the same
+    non-fact, so that case falls back to the account on its own.
     :param row: The position
     :return: The subtitle
     :rtype: str
     """
 
-    if row.asset_class != UNCLASSIFIED:
-        return row.asset_class
+    account: str = row.account or row.broker
 
-    return row.account or row.broker
+    if row.asset_class == UNCLASSIFIED:
+        return account
+
+    return f"{account} · {row.asset_class}"
 
 
 def _tone(value: float | None) -> str:

@@ -1038,6 +1038,68 @@ class BrokerDatabase:
 
         return bool(result.rowcount)
 
+    def delete_account(self, account_id: int) -> tuple[str, int] | None:
+        """
+        Remove an account and everything recorded under it.
+
+        The broad deletion delete_snapshot deliberately refuses to be, and it
+        exists for a case that one cannot reach: an account that should never
+        have been in the workspace at all. The worked example is an aggregator
+        reporting a 529 that a dedicated scraper already covers -- two accounts
+        to this database, because ``account_key`` is unique inside one broker
+        and means nothing outside it, and therefore one balance counted twice in
+        every total drawn from the workspace. Deleting snapshots one at a time
+        does not fix that; the account is the thing that should not exist.
+
+        **This only sticks if the source stops reporting it.** The next sync
+        recreates any account its broker still returns, which is why removing
+        one was refused here for so long. The caller is responsible for
+        arranging the silence first -- for SnapTrade that is
+        ``[SNAPTRADE] exclude_accounts`` -- and broker_nav says so out loud
+        rather than letting a deletion look permanent and reappear overnight.
+
+        Returns what was removed rather than a bare bool, because there is no
+        undo and the operator's only check on having typed the right id is
+        reading back the name. Snapshots, their holdings and the account's
+        transactions all go through ON DELETE CASCADE, which SQLite enforces
+        only because create_db_engine() turns foreign keys on.
+        :param account_id: The accounts.id to remove
+        :return: (display name, snapshots removed), or None if there was no
+            such id
+        :rtype: tuple[str, int] | None
+        """
+
+        accounts = self.accounts_table.c
+        snapshots = self.snapshots_table.c
+
+        with self.db_engine.connect() as conn:
+            found = (
+                conn.execute(
+                    self.accounts_table.select().where(accounts.id == account_id)
+                )
+                .mappings()
+                .first()
+            )
+
+            if found is None:
+                return None
+
+            # Counted before the delete, not after: the rows are gone by then
+            # and the number is the only evidence of how much history this took
+            # with it.
+            marks: int = len(
+                conn.execute(
+                    self.snapshots_table.select().where(
+                        snapshots.account_id == account_id
+                    )
+                ).all()
+            )
+
+            conn.execute(self.accounts_table.delete().where(accounts.id == account_id))
+            conn.commit()
+
+        return str(found["display_name"]), marks
+
     def get_latest_snapshots(self) -> list[tuple[Any, ...]]:
         """
         The newest value for each account, one row apiece.

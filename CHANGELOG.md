@@ -60,6 +60,30 @@ the two disagree.
   to `get_current_accounts()` — the same columns with the newest-snapshot
   restriction lifted. Behind `read_workspace(with_history=True)`, off by default:
   it is one row per position per snapshot and only the brief's trend wants it.
+- **`[ACCOUNTS] aliases`** — call an account what you call it. Applied on the way
+  out of the databases so the sheet and the brief agree, keyed on the same
+  `Source / Account` label `exclude_accounts` matches and through the same
+  normalizer, so a label copied between the two settings works. Nothing stored
+  changes: `account_key` is untouched, which is what makes an alias safe to add
+  and remove without orphaning history. A line matching no account is reported,
+  since a broker renaming an account otherwise reverts it silently.
+- `normalize_label()` moved from `modules.snaptrade_module` to `etc.portfolio`.
+  Two settings now identify an account by the same label and a rule evaluated in
+  two places is two chances for them to disagree about the same row.
+- **`delete account <id>`** in the broker shell, with `delete_account()` behind
+  it. Accounts were deliberately not deletable, on the argument that the next run
+  would recreate them anyway — true until `exclude_accounts` arranges the
+  silence, and the command prints that caveat every time rather than letting a
+  deletion look permanent. It reports the name and snapshot count of what it
+  removed, because it cascades and there is no undo.
+- The holdings table names the account on every row. The same fund is routinely
+  held in several accounts, and the symbol alone renders those as identical rows
+  with different numbers.
+- When positions total *more* than the account balances, the Portfolio Value
+  tile says so instead of reporting a negative quantity of uninvested cash.
+  SnapTrade states a balance and a set of positions and they disagree on every
+  account of a real workspace; that is a fact about the source, not arithmetic
+  to hide.
 - **A second scrape every weekday.** `scripts/com.stonksmith.open.plist` and
   `scripts/stonksmith-open.sh` run at 06:35 local, five minutes after the 06:30
   Pacific open and five minutes after the brief — the brief reads every database
