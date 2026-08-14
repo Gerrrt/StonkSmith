@@ -734,6 +734,43 @@ def get_brief_keep_days() -> int:
     return max(0, configured)
 
 
+#: Where a symbol's quote page lives. Yahoo rather than each fund company's own
+#: site, and deliberately: the project already reads prices from
+#: query1.finance.yahoo.com for Ally's --from-prices and the manual broker, so
+#: this is the human-facing page of a source already trusted for the numbers.
+#: Linking Schwab funds to schwab.com and Fidelity funds to fidelity.com would
+#: mean a table of per-brokerage URL shapes, each restyled on somebody else's
+#: schedule, to reach pages carrying the same figures.
+DEFAULT_FUND_LINK = "https://finance.yahoo.com/quote/{symbol}"
+
+
+def get_brief_fund_link() -> str:
+    """
+    The URL template a holding's symbol links to.
+
+    **Refused unless it is https**, because the value is written into an href and
+    a config file is not a place to put "javascript:". A template that is not a
+    URL is reported by the caller and the links are simply absent, which is the
+    same outcome as not configuring one.
+
+    Blank counts as unset rather than as "no links", so an install that
+    backfilled an empty line picks the default up -- the rule the TSP price_url
+    already follows.
+    :return: A template containing {symbol}, or "" when it was refused
+    :rtype: str
+    """
+
+    configured: str = (
+        get_config().get(section="BRIEF", option="fund_link", fallback="").strip()
+    )
+    template: str = configured or DEFAULT_FUND_LINK
+
+    if not template.lower().startswith("https://") or "{symbol}" not in template:
+        return ""
+
+    return template
+
+
 def get_brief_min_position() -> float:
     """
     The smallest position worth a row in the holdings table.

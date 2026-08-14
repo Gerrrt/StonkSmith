@@ -360,6 +360,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         from stonksmith.etc.config import (
             get_account_aliases,
             get_account_colors,
+            get_brief_fund_link,
             get_brief_keep_days,
             get_brief_min_position,
             get_brief_movers,
@@ -437,6 +438,16 @@ class StonkSmithDBMenu(cmd.Cmd):
             # outcome the alias was written to prevent. Not a failure: the brief
             # is correct, it is just not saying what was asked.
             print(f"[-] Alias matched no account: {label}")
+
+        if not get_brief_fund_link():
+            # Refused rather than silently unlinked, on the rule the colour
+            # lines follow: a template that is not https leaves every symbol as
+            # plain text, which looks exactly like a workspace of unlinkable
+            # fund codes.
+            print(
+                "[-] [BRIEF] fund_link is not an https URL containing "
+                "{symbol}; symbols are not linked."
+            )
 
         for line in get_account_colors()[1]:
             # Named for the reason the [MANUAL] parser names its own refused

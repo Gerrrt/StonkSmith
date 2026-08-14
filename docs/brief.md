@@ -174,6 +174,18 @@ figure and the cash line all still count it, and the number hidden is stated und
 table. A row removed from a page is a presentation choice; a dollar removed from a total
 is a lie.
 
+A symbol links to its quote page, where it has one. Only something that looks like a
+public ticker — one to five ASCII letters — is linked, which keeps a link off `O7M8`
+(a 401k fund code), `14002` (a 529 portfolio number) and `L 2060` (a TSP fund). Those are
+real holdings with nothing public to point at, and **a link that 404s is worse than no
+link**: the reader has to click it to find that out, once a morning, until they stop
+trusting any of them.
+
+ASCII specifically, because `str.isalpha()` is true of Cyrillic and full-width characters
+and a symbol arrives off a scraped page. Between that and `[BRIEF] fund_link` refusing any
+template that is not `https://`, there is nothing left to put in an `href` that was not
+five letters to begin with.
+
 Every row names the account holding it, always. The same fund is routinely held in several
 accounts — one workspace has SWPPX in four — and a table showing the symbol alone renders
 those as identical rows with different numbers, with no way to tell which is which.
