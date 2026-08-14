@@ -634,11 +634,33 @@ class StonkSmithDBMenu(cmd.Cmd):
                     # the headline's basis split exists to prevent, and it would
                     # blind the staleness warning that is supposed to catch a
                     # refresh which has stopped running.
+                    #
+                    # Dated from the file when the figure itself carries no
+                    # date, which is what every entry written before as_of
+                    # existed looks like. Carrying one of those unchanged left
+                    # nothing in the file dated at all, so age() fell back to
+                    # fetched_on -- which this run is about to set to today --
+                    # and a six-week-old figure reported as fetched this
+                    # morning. Once, on the first blocked night after an
+                    # upgrade, which is precisely when the warning is owed. The
+                    # file's own date is the honest answer there: before as_of
+                    # existed a run rewrote every symbol, so fetched_on *was*
+                    # the day this figure came from.
+                    stamped: Paid = (
+                        held
+                        if held.as_of
+                        else Paid(
+                            per_share=held.per_share,
+                            covered_days=held.covered_days,
+                            found=True,
+                            as_of=previous.fetched_on,
+                        )
+                    )
                     print(
                         f"[-] Could not refresh {symbol} ({e}); "
-                        f"keeping the figure from {held.as_of or 'an earlier run'}"
+                        f"keeping the figure from {stamped.as_of or 'an earlier run'}"
                     )
-                    paid[symbol] = held
+                    paid[symbol] = stamped
                     carried.append(symbol)
                     continue
 

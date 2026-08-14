@@ -27,6 +27,7 @@ would freeze the figure forever, which is the opposite failure and just as quiet
 """
 
 import datetime as dt
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -35,7 +36,13 @@ from unittest.mock import patch
 from config_isolation import UserConfigMixin
 from keyring_isolation import MemoryKeyringMixin
 from stonksmith.etc.broker_db import BrokerDatabase
-from stonksmith.etc.dividends import Dividends, Paid, read_cache, write_cache
+from stonksmith.etc.dividends import (
+    CACHE_VERSION,
+    Dividends,
+    Paid,
+    read_cache,
+    write_cache,
+)
 from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.etc.records import AccountIdentity, Holding
 from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
@@ -190,6 +197,45 @@ class TheRefreshKeepsWhatItCannotCheck(
 
         self.assertFalse(cached["SWPPX"].found)
         self.assertEqual(cached["SWPPX"].per_share, 0.0)
+
+    def test_a_figure_from_before_as_of_existed_is_dated_from_the_file(self) -> None:
+        # The upgrade path, and the one night it matters. A cache written before
+        # `as_of` existed carries no per-symbol date, so carrying its entries
+        # unchanged left nothing in the file dated at all -- age() fell back to
+        # `fetched_on`, which this very run sets to today, and a six-week-old
+        # figure reported as fetched this morning. Once, on the first blocked
+        # night after the upgrade, which is exactly when the warning is owed.
+        #
+        # Before as_of existed a run rewrote every symbol, so the file's own
+        # date is genuinely the day this figure came from.
+        self.cache.write_text(
+            json.dumps(
+                {
+                    "version": CACHE_VERSION,
+                    "fetched_on": "2026-07-01",
+                    "window_days": 365,
+                    "paid": {
+                        "SWPPX": {
+                            "per_share": 0.195,
+                            "covered_days": 245,
+                            "found": True,
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        self._run(body=BLOCKED)
+
+        cached = read_cache(path=self.cache)
+
+        self.assertEqual(cached.paid["SWPPX"].as_of, "2026-07-01")
+        self.assertEqual(
+            cached.age(today=dt.date(2026, 8, 14)),
+            44,
+            "a carried figure with no date of its own reads as fetched today",
+        )
 
     def test_a_good_fetch_still_overwrites_the_carried_figure(self) -> None:
         # The opposite failure, and just as quiet: a carry that outlived a real
