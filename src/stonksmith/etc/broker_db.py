@@ -43,6 +43,7 @@ from sqlalchemy import (
     Table,
     UniqueConstraint,
     func,
+    select,
     text,
 )
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -1038,6 +1039,73 @@ class BrokerDatabase:
 
         return bool(result.rowcount)
 
+    def delete_account(self, account_id: int) -> tuple[str, int] | None:
+        """
+        Remove an account and everything recorded under it.
+
+        The broad deletion delete_snapshot deliberately refuses to be, and it
+        exists for a case that one cannot reach: an account that should never
+        have been in the workspace at all. The worked example is an aggregator
+        reporting a 529 that a dedicated scraper already covers -- two accounts
+        to this database, because ``account_key`` is unique inside one broker
+        and means nothing outside it, and therefore one balance counted twice in
+        every total drawn from the workspace. Deleting snapshots one at a time
+        does not fix that; the account is the thing that should not exist.
+
+        **This only sticks if the source stops reporting it.** The next sync
+        recreates any account its broker still returns, which is why removing
+        one was refused here for so long. The caller is responsible for
+        arranging the silence first -- for SnapTrade that is
+        ``[SNAPTRADE] exclude_accounts`` -- and broker_nav says so out loud
+        rather than letting a deletion look permanent and reappear overnight.
+
+        Returns what was removed rather than a bare bool, because there is no
+        undo and the operator's only check on having typed the right id is
+        reading back the name. Snapshots, their holdings and the account's
+        transactions all go through ON DELETE CASCADE, which SQLite enforces
+        only because create_db_engine() turns foreign keys on.
+        :param account_id: The accounts.id to remove
+        :return: (display name, snapshots removed), or None if there was no
+            such id
+        :rtype: tuple[str, int] | None
+        """
+
+        accounts = self.accounts_table.c
+        snapshots = self.snapshots_table.c
+
+        with self.db_engine.connect() as conn:
+            found = (
+                conn.execute(
+                    self.accounts_table.select().where(accounts.id == account_id)
+                )
+                .mappings()
+                .first()
+            )
+
+            if found is None:
+                return None
+
+            # Counted before the delete, not after: the rows are gone by then
+            # and the number is the only evidence of how much history this took
+            # with it.
+            #
+            # COUNT(*) rather than len() over the selected rows. An account with
+            # a year of twice-daily marks has five hundred of them, and loading
+            # every column of every one to discard all but the length is work
+            # the database will do for free.
+            marks: int = int(
+                conn.execute(
+                    select(func.count())
+                    .select_from(self.snapshots_table)
+                    .where(snapshots.account_id == account_id)
+                ).scalar_one()
+            )
+
+            conn.execute(self.accounts_table.delete().where(accounts.id == account_id))
+            conn.commit()
+
+        return str(found["display_name"]), marks
+
     def get_latest_snapshots(self) -> list[tuple[Any, ...]]:
         """
         The newest value for each account, one row apiece.
@@ -1189,6 +1257,43 @@ class BrokerDatabase:
             "  SELECT id FROM account_snapshots "
             "  WHERE account_id = a.id ORDER BY scraped_at DESC, id DESC LIMIT 1"
             ") ORDER BY a.source, a.display_name, h.position"
+        )
+
+    def get_holdings_history(self) -> list[tuple[Any, ...]]:
+        """
+        Every position every snapshot ever held, carrying its account identity.
+
+        get_current_holdings above answers "what does each account hold now" by
+        restricting to one snapshot per account. This answers "what has each
+        account held", which is the same question with that restriction taken
+        off -- so it returns the *same fifteen columns in the same order*,
+        deliberately, and one projection loop in etc.portfolio serves both. The
+        same relationship get_account_history has to get_current_accounts, and
+        the same reason: two mappings would be two chances for a position to
+        appear under one name in a table and another in the chart beside it.
+
+        **Deliberately unlimited**, for get_account_history's reason. A trend
+        drawn from the newest five hundred rows is a trend over however much
+        history five hundred rows happens to cover, which changes as positions
+        are added and is not a fact about the portfolio.
+
+        Ordered oldest-first within each position rather than newest-first like
+        the log reads. What comes back here is a series, and a series is read in
+        the direction it was lived -- the same argument net_worth_history makes
+        about its own ordering.
+        :return: Rows of (account_key, position, symbol, fund_code, name, units,
+            price, value, principal, earnings, cost_basis, currency, as_of,
+            scraped_at, units_as_of), oldest snapshot first
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        return self._select(
+            "SELECT a.account_key, h.position, h.symbol, h.fund_code, h.name, "
+            "h.units, h.price, h.value, h.principal, h.earnings, h.cost_basis, "
+            "h.currency, s.as_of, s.scraped_at, h.units_as_of FROM holdings h "
+            "JOIN account_snapshots s ON s.id = h.snapshot_id "
+            "JOIN accounts a ON a.id = s.account_id "
+            "ORDER BY a.source, a.display_name, s.scraped_at, s.id, h.position"
         )
 
     def get_current_transactions(self) -> list[tuple[Any, ...]]:

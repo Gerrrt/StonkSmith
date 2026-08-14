@@ -382,6 +382,53 @@ What each tab promises, why the dashboard has to be constructed rather than
 read, and what `verify` checks that a successful sync cannot show are
 [`docs/sheet.md`](docs/sheet.md).
 
+### The morning brief
+
+**One page that says what changed while you weren't looking, and turns up on its
+own.** The sheet shows what is true now and `stale` reports what has stopped
+moving; neither answers the question you actually open a dashboard with, and
+neither arrives without being asked for.
+
+```bash
+uv run stonksmithdb brief
+```
+
+It reads the databases — no login, no browser, no network — renders one
+self-contained HTML file to `~/.stonksmith/reports/`, and opens it. A LaunchAgent
+at 06:30 on weekdays is what makes it a reminder rather than a file.
+
+It carries a net-worth headline with the overnight change, a six-tile portfolio
+summary, every holding with its cost, gain and trend, movements recorded since
+you last looked, asset-class drift, and anything that has gone stale.
+
+Three things about it are worth knowing before you read one.
+
+**The headline is built on the Net Worth series, so a broker that did not run is
+not a fall** — and the page says how much of the number was actually read this
+morning rather than carried forward from the last time that account was seen. A
+night when only TSP ran produces a real movement for one account and a carried
+value for the rest, and the brief will tell you so directly under the total.
+
+**"Since when" is the last brief you were shown, not the last scrape.** Monday's
+brief covers the weekend, and a morning you skip is still covered by the next
+one — because a brief with nothing new to report deliberately does not advance
+its own baseline. Use `brief peek` to look a second time in one day without
+consuming that comparison.
+
+**A figure nobody reported stays a dash.** Cost basis is the fault line: SnapTrade
+states one and a 401k, TSP and a scraped 529 do not, so purchase price, gain,
+growth and the win/loss flag are absent on those rows rather than zero. Where a
+total *is* summed over the positions that have a cost, the tile says which — *"across
+9 of 12 positions; 3 report no cost basis"*.
+
+Accounts appear under the names you give them, not the ones brokers print, via
+`[ACCOUNTS] aliases` — a display name applied on the way out of the databases, so
+the sheet and the brief agree and nothing stored is renamed.
+
+Both files it writes are owner-only; old reports are pruned to `[BRIEF] keep_days`.
+The whole design, the rule that keeps a skipped morning from erasing a day's
+movement, and how to install the agent are [`docs/brief.md`](docs/brief.md).
+
 ### Scheduling
 
 **The five brokers do not schedule alike, and two of them do not schedule at
@@ -396,6 +443,7 @@ after that the portfolio has stopped updating with nothing to say so.
 | `schwab529plan` | Yes. A form post with a stored credential |
 | `ally` | `--from-prices` only, which reprices a stale unit count rather than scraping |
 | `fidelity` | No. Link it through SnapTrade instead |
+| `manual` | Yes. Nothing to log in to — a configured unit count at a published price |
 
 Weekdays after the close, one process per broker — `broker` is a positional
 subcommand, so there is no `--all` — staggered, because two runs inside the same

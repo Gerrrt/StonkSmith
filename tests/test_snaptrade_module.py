@@ -16,6 +16,7 @@ from argparse import Namespace
 from typing import Any, ClassVar
 from unittest.mock import patch
 
+from stonksmith.etc.portfolio import normalize_label
 from stonksmith.helpers.sheets import SheetsUnavailable
 from stonksmith.modules.snaptrade_module import (
     SnapTradeModule,
@@ -23,7 +24,6 @@ from stonksmith.modules.snaptrade_module import (
     brokerage_name,
     currency_code,
     money,
-    normalize_label,
     position_holding,
     select_accounts,
     silent_connections,

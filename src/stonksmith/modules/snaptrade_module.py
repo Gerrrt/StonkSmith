@@ -29,11 +29,11 @@ worse than any of the above.
 """
 
 import datetime
-import re
 from typing import Any, ClassVar
 
 from stonksmith.etc.connection import Connection
 from stonksmith.etc.context import BrokerDbProtocol, Context, SnapshotDbProtocol
+from stonksmith.etc.portfolio import normalize_label
 from stonksmith.etc.portfolio_sheet import sync
 from stonksmith.etc.records import AccountIdentity, Holding, Transaction
 from stonksmith.helpers.normalize import format_amount, to_amount, to_iso_date
@@ -49,11 +49,6 @@ LIABILITY_CATEGORIES = frozenset({"LOC"})
 #: Account statuses that still represent money you have. ``None`` is accepted
 #: too -- several brokerages never populate it.
 LIVE_STATUSES = frozenset({"open"})
-
-#: The "Brokerage / Account" separator, with whatever spacing it was written
-#: with. Normalized so a hand-typed "Schwab/Beneficiary A 529 Plan" still
-#: matches the "Schwab / Beneficiary A 529 Plan" the sync prints.
-_SEPARATOR = re.compile(pattern=r"\s*/\s*")
 
 
 def holdings_status(account: dict[str, Any]) -> dict[str, Any]:
@@ -113,34 +108,6 @@ def currency_code(currency: Any, default: str = "USD") -> str:
             return str(object=code).upper()
 
     return default
-
-
-def normalize_label(label: str) -> str:
-    """
-    Reduce an account label to something two sources can agree on.
-
-    One side of the comparison is typed into a config file by hand, the other is
-    built from whatever SnapTrade returned. Requiring those to match byte for
-    byte means an exclusion silently does nothing over a capital letter or a
-    doubled space -- and "silently does nothing" here restores the double count
-    the config line was written to stop.
-
-    The separator gets its own rule because it is the one piece of punctuation
-    this format demands and therefore the one a person retypes: "Schwab /
-    Beneficiary A 529 Plan" and "Schwab/Beneficiary A 529 Plan" are plainly the
-    same account, and collapsing whitespace alone leaves them different strings.
-    Every slash is treated the same way, on both sides, so a name that contains
-    one is not a special case.
-
-    Nothing else is touched. "Individual - TOD" and "Individual TOD" are not
-    obviously the same account, and guessing wrong drops a real one -- the
-    opposite failure, and the worse of the two.
-    :param label: A "Brokerage / Account" label, from either side
-    :return: The label, case-folded, whitespace collapsed, separators evened out
-    :rtype: str
-    """
-
-    return _SEPARATOR.sub(repl=" / ", string=" ".join(label.split())).casefold()
 
 
 def brokerage_name(
@@ -661,7 +628,7 @@ class SnapTradeModule:
 
     def positions(
         self, connection: Connection, row: dict[str, str], context: Context
-    ) -> list[Holding]:
+    ) -> tuple[list[Holding], bool]:
         """
         Fetch one account's positions, reporting rather than raising on failure.
 
@@ -670,20 +637,26 @@ class SnapTradeModule:
         at all, and that is a fact worth storing as it stands. A call that
         *fails*, though, is different from one that returns nothing, so it says
         so and the balance is still recorded.
+
+        **Which is why this returns whether it read, as well as what it read.**
+        Both cases produce an empty list, and account_value() below computes the
+        balance from the positions -- so a failed fetch that looked like an empty
+        account would price a real account at its cash alone. On a brokerage
+        account that is most of its value, silently.
         :param connection: The SnapTrade broker instance
         :param row: A selected account row
         :param context: The module context
-        :return: The account's holdings, possibly none
-        :rtype: list[Holding]
+        :return: (the account's holdings, whether they were actually read)
+        :rtype: tuple[list[Holding], bool]
         """
 
         if getattr(context.args, "no_positions", False):
-            return []
+            return [], False
 
         fetch = getattr(connection, "fetch_positions", None)
 
         if not callable(fetch) or not row["Id"]:
-            return []
+            return [], False
 
         try:
             positions: list[dict[str, Any]] = fetch(account_id=row["Id"])
@@ -697,9 +670,132 @@ class SnapTradeModule:
                     f"{row['Account']}: {e}. Its balance is still recorded."
                 ),
             )
-            return []
+            return [], False
 
-        return [position_holding(position=position) for position in positions]
+        return [position_holding(position=position) for position in positions], True
+
+    def cash(
+        self, connection: Connection, row: dict[str, str], context: Context
+    ) -> float | None:
+        """
+        One account's cash, in the account's own currency.
+
+        The half of an account no position expresses, and routinely negative: an
+        overdraft transfer out or a margin loan is a debt the securities do not
+        mention. An account holding $2,986.31 of a fund against -$744.28 of cash
+        is worth $2,242.03, and summing its positions says $2,986.31.
+
+        None rather than 0.0 when it could not be read, and the difference
+        matters: zero cash is a real answer that makes the account worth its
+        positions, while "not read" must leave the cached total in place rather
+        than quietly writing off a margin loan.
+        :param connection: The SnapTrade broker instance
+        :param row: A selected account row
+        :param context: The module context
+        :return: The cash balance, or None when it could not be read
+        :rtype: float | None
+        """
+
+        fetch = getattr(connection, "fetch_balance", None)
+
+        if not callable(fetch) or not row["Id"]:
+            return None
+
+        try:
+            balances: list[dict[str, Any]] = fetch(account_id=row["Id"])
+
+        except Exception as e:
+            context.log.fail(
+                msg=(
+                    f"Could not read cash for {row['Brokerage']} / "
+                    f"{row['Account']}: {e}. Its cached balance is used instead."
+                ),
+            )
+            return None
+
+        for balance in balances:
+            # Matched on the account's own currency rather than summed across
+            # them: a brokerage may hold several in one account, and adding a
+            # dollar to a euro produces a number that is not wrong so much as
+            # meaningless.
+            code: str = str(
+                object=dict(balance.get("currency") or {}).get("code") or ""
+            )
+
+            if code == row["Currency"]:
+                return to_amount(balance.get("cash"))
+
+        return None
+
+    def account_value(
+        self,
+        row: dict[str, str],
+        holdings: list[Holding],
+        positions_read: bool,
+        cash: float | None,
+        context: Context,
+    ) -> float | None:
+        """
+        What the account is worth: its positions plus its cash, where both are known.
+
+        **The cached total is a fallback here rather than the source**, and that
+        is the whole point of this method. SnapTrade serves ``list_user_accounts``
+        from a daily cache by design -- its own documentation says so -- and the
+        number it carries is measurably the *previous* sync's position value:
+        two accounts in this workspace matched yesterday's positions to the cent
+        on the following day. Every balance in the workspace was a day stale, and
+        the net worth series with it.
+
+        Positions plus cash is live on both halves and reconciles exactly with
+        what SnapTrade's own total eventually says, which is what makes it safe
+        to prefer.
+
+        Three ways back to the cached figure, and each of them is a case where
+        the computed one would be wrong rather than merely unavailable:
+
+        - **Positions were not read.** A failed fetch and an empty account look
+          identical afterwards, so computing from an unread list prices the
+          account at its cash alone.
+        - **The account reports no positions at all.** A pre-aggregated 529
+          gives a balance and nothing to sum; positions plus cash would be zero.
+        - **Cash could not be read.** The securities alone omit a margin loan,
+          which overstates the account by the size of the debt.
+        :param row: A selected account row, carrying the cached balance
+        :param holdings: What the account holds
+        :param positions_read: Whether the positions fetch actually succeeded
+        :param cash: The account's cash, or None when it could not be read
+        :param context: The module context
+        :return: The account's value
+        :rtype: float | None
+        """
+
+        cached: float | None = to_amount(row["Amount"])
+
+        if not positions_read or not holdings or cash is None:
+            return cached
+
+        priced: float = sum(holding.value or 0.0 for holding in holdings)
+        value: float = round(number=priced + cash, ndigits=2)
+
+        if round(number=cash, ndigits=2):
+            # Said out loud, because a total that is not the sum of the visible
+            # positions is the thing a reader would otherwise reconcile by hand.
+            # Negative cash especially: a brokerage account worth less than the
+            # fund inside it is a margin loan, and it should be named rather
+            # than left as a gap.
+            currency: str = row["Currency"]
+
+            context.log.display(
+                msg=(
+                    f"{row['Account']}: positions "
+                    f"{format_amount(amount=priced, currency=currency)} "
+                    f"{'less' if cash < 0 else 'plus'} cash "
+                    f"{format_amount(amount=abs(cash), currency=currency)} = "
+                    f"{format_amount(amount=value, currency=currency)}"
+                )
+            )
+
+        return value
 
     def activities(
         self, connection: Connection, row: dict[str, str], context: Context
@@ -817,16 +913,31 @@ class SnapTradeModule:
 
         if isinstance(db, SnapshotDbProtocol):
             for row in rows:
+                # Fetched before the write rather than inline in it, because the
+                # value is now computed *from* the positions rather than taken
+                # from the cached total beside them.
+                holdings, positions_read = self.positions(
+                    connection=connection, row=row, context=context
+                )
+
                 db.save_snapshot(
                     account=self.identity(row=row),
                     scraped_at=timestamp,
-                    value=to_amount(row["Amount"]),
+                    value=self.account_value(
+                        row=row,
+                        holdings=holdings,
+                        positions_read=positions_read,
+                        cash=self.cash(connection=connection, row=row, context=context),
+                        context=context,
+                    ),
                     currency=row["Currency"],
                     as_of=to_iso_date(row["SyncedAt"]),
+                    # Still the cached figure as the source printed it. raw_value
+                    # is the record of what the source said, and what it said is
+                    # not what is now stored beside it -- keeping the two apart
+                    # is the point of having both.
                     raw_value=row["Balance"],
-                    holdings=self.positions(
-                        connection=connection, row=row, context=context
-                    ),
+                    holdings=holdings,
                     transactions=self.activities(
                         connection=connection, row=row, context=context
                     ),

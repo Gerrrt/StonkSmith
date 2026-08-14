@@ -21,7 +21,7 @@ from stonksmith.etc.broker_nav import BrokerNavigator
 from stonksmith.loaders.brokerloader import BrokerLoader
 
 EXPECTED_KEYS = {"path", "dbpath", "nvpath", "argspath"}
-SHIPPED = ("ally", "fidelity", "schwab529plan", "snaptrade", "tsp")
+SHIPPED = ("ally", "fidelity", "manual", "schwab529plan", "snaptrade", "tsp")
 
 
 def _fresh_loader(user_root: Path | None = None) -> BrokerLoader:
@@ -225,6 +225,7 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
         # path-loaded class is a distinct object from the imported one.
         from stonksmith.brokers.ally import Ally
         from stonksmith.brokers.fidelity import Fidelity
+        from stonksmith.brokers.manual import Manual
         from stonksmith.brokers.schwab529plan import Schwab529plan
         from stonksmith.brokers.snaptrade import SnapTradeBroker
         from stonksmith.brokers.tsp import Tsp
@@ -234,6 +235,7 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
         for name, exported in (
             ("ally", Ally),
             ("fidelity", Fidelity),
+            ("manual", Manual),
             ("schwab529plan", Schwab529plan),
             ("snaptrade", SnapTradeBroker),
             ("tsp", Tsp),

@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from config_isolation import UserConfigMixin
 from keyring_isolation import MemoryKeyringMixin
 from stonksmith.etc.broker_db import BrokerDatabase
 from stonksmith.etc.context import PortfolioDbProtocol
@@ -75,11 +76,13 @@ class _FakeDb:
         holdings: list[tuple[Any, ...]] | None = None,
         transactions: list[tuple[Any, ...]] | None = None,
         history: list[tuple[Any, ...]] | None = None,
+        holdings_history: list[tuple[Any, ...]] | None = None,
     ) -> None:
         self._accounts = accounts or []
         self._holdings = holdings or []
         self._transactions = transactions or []
         self._history = history or []
+        self._holdings_history = holdings_history or []
 
     def get_current_accounts(self) -> list[tuple[Any, ...]]:
         return self._accounts
@@ -92,6 +95,9 @@ class _FakeDb:
 
     def get_account_history(self) -> list[tuple[Any, ...]]:
         return self._history
+
+    def get_holdings_history(self) -> list[tuple[Any, ...]]:
+        return self._holdings_history
 
 
 def account_tuple(**overrides: Any) -> tuple[Any, ...]:
@@ -854,7 +860,7 @@ class ReadTransactionsTests(unittest.TestCase):
         )
 
 
-class WorkspaceReadTests(MemoryKeyringMixin, unittest.TestCase):
+class WorkspaceReadTests(UserConfigMixin, MemoryKeyringMixin, unittest.TestCase):
     """Reading real databases, several of them, out of one workspace."""
 
     def setUp(self) -> None:

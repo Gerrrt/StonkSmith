@@ -40,6 +40,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    sheet             rewrite the Google Sheet from these databases\n"
         "    verify [tabs|guard]  check what a successful sheet write cannot show\n"
         "    stale [days]      report accounts nothing has refreshed lately\n"
+        "    brief [peek|--no-open]  what changed since the last brief\n"
         "    help              commands at this level\n"
         "    exit              quit\n"
     )
@@ -315,6 +316,181 @@ class StonkSmithDBMenu(cmd.Cmd):
             f"[{'-' if stale else '+'}] {len(stale)} of "
             f"{len(portfolio.accounts)} accounts are stale."
         )
+
+    def do_brief(self, line: str) -> None:
+        """
+        Render what has changed since the last brief, and open it.
+
+        The third command at this level that reads databases and nothing else,
+        beside `sheet` and `stale`: no login, no broker, no network. That is what
+        makes it cheap enough to schedule every morning, and why the LaunchAgent
+        in scripts/ runs this rather than a scrape -- at half past six the market
+        is shut, TSP has not published, and the browser-backed brokers want a
+        human.
+
+        ``peek`` renders without advancing the baseline, for looking again later
+        in the day. ``--no-open`` renders without opening, which is what the
+        tests and any scripted caller want.
+
+        An unreadable broker fails the command, as it does for `sheet`, and the
+        brief is still written and still opened. A page saying the total is short
+        by a broker is worth more than no page, and it is the only place that
+        sentence will be seen by somebody who is not reading a log.
+        :param line: "peek", "--no-open", or empty
+        :return: None
+        """
+
+        # Imported here rather than at module scope, for do_sheet's reason:
+        # tests/test_no_import_side_effects.py imports this module in a
+        # subprocess and asserts nothing appears in $HOME, and reaching a config
+        # getter at import time is one of the ways that used to happen.
+        import datetime as dt
+        import webbrowser
+
+        from stonksmith.etc.brief import (
+            Baseline,
+            Brief,
+            build_brief,
+            read_baseline,
+            should_advance,
+            take_baseline,
+            write_baseline,
+        )
+        from stonksmith.etc.brief_html import render
+        from stonksmith.etc.config import (
+            get_account_aliases,
+            get_brief_keep_days,
+            get_brief_movers,
+            get_brief_open_browser,
+        )
+        from stonksmith.etc.paths import baseline_path, reports_path
+        from stonksmith.etc.permissions import restrict
+        from stonksmith.etc.portfolio import (
+            Portfolio,
+            read_workspace,
+            unmatched_aliases,
+        )
+
+        asked: set[str] = set(line.split())
+        peek: bool = "peek" in asked
+        opening: bool = "--no-open" not in asked and get_brief_open_browser()
+
+        unknown: set[str] = asked - {"peek", "--no-open"}
+
+        if unknown:
+            # Refused rather than ignored. A misspelled "--no-open" that silently
+            # opened a browser would be a nuisance; a misspelled "peek" that
+            # silently advanced the baseline would consume the comparison the
+            # caller was trying to preserve.
+            print(f"[-] Not something brief understands: {' '.join(sorted(unknown))}.")
+            self.failed = True
+            return
+
+        now: dt.datetime = dt.datetime.now(tz=dt.UTC)
+        # with_history, unlike every other reader: the per-position trend needs
+        # every snapshot's positions rather than the newest one's, and this is
+        # the only consumer that wants them. The sheet sync deliberately does
+        # not ask.
+        portfolio: Portfolio = read_workspace(
+            workspace=self.workspace, with_history=True
+        )
+        baseline: Baseline | None = read_baseline(path=baseline_path)
+
+        brief: Brief = build_brief(
+            portfolio=portfolio,
+            baseline=baseline,
+            today=now.date(),
+            limit=get_brief_movers(),
+        )
+
+        reports_path.mkdir(mode=OWNER_ONLY_DIR, parents=True, exist_ok=True)
+        restrict_dir(path=reports_path)
+
+        report: Path = reports_path / f"{now.date().isoformat()}.html"
+        report.write_text(data=render(brief=brief, now=now), encoding="utf-8")
+        # Every account's value and the portfolio total, in a file the databases
+        # are already restricted for holding.
+        restrict(path=report)
+
+        print(
+            f"[*] {brief.state}: {len(brief.account_movers)} accounts and "
+            f"{len(brief.holding_movers)} positions moved, "
+            f"{len(brief.new_transactions)} new movements. {report}"
+        )
+
+        for name, reason in brief.unreadable:
+            # The same escalation do_sheet makes, and for the same reason: this
+            # is not a stale total, it is one that is missing a broker's money.
+            print(f"[-] Not in the brief: {name} could not be read ({reason}).")
+            self.failed = True
+
+        for label in unmatched_aliases(
+            portfolio=portfolio, aliases=get_account_aliases()
+        ):
+            # Reported rather than ignored, on the rule the asset class table
+            # follows. A line that matches nothing is either a typo or a broker
+            # that has renamed an account -- and in the second case the account
+            # has quietly reverted to the broker's own wording, which is the
+            # outcome the alias was written to prevent. Not a failure: the brief
+            # is correct, it is just not saying what was asked.
+            print(f"[-] Alias matched no account: {label}")
+
+        if peek:
+            print("[*] Baseline left where it was: this was a peek.")
+
+        elif should_advance(baseline=baseline, as_of=brief.as_of):
+            write_baseline(
+                path=baseline_path,
+                baseline=take_baseline(portfolio=portfolio, as_of=brief.as_of, now=now),
+            )
+
+        else:
+            # Said out loud rather than done quietly. This is the rule that keeps
+            # a day's movement from being erased by the act of looking at a
+            # screen that reported there wasn't any, and a reader who does not
+            # know it happened cannot tell this morning from a real quiet one.
+            print(
+                "[*] Baseline held: nothing has been scraped since it was taken, "
+                "so the next brief still reports the movement this one could not."
+            )
+
+        self._prune_reports(keep=get_brief_keep_days())
+
+        if opening:
+            webbrowser.open(url=report.as_uri())
+
+    def _prune_reports(self, keep: int) -> None:
+        """
+        Delete rendered briefs older than the configured window.
+
+        By count of files rather than by their dates. The brief only runs on the
+        days somebody schedules it, so "the last 90 files" and "the last 90 days"
+        are different windows -- and a weekday-only agent that kept 90 *days*
+        would hold about 64 briefs while claiming a quarter. Counting what is
+        there answers the question the setting is actually asked: how far back
+        can I look.
+        :param keep: How many to keep, or 0 to keep everything
+        :return: None
+        """
+
+        from stonksmith.etc.paths import reports_path
+
+        if keep <= 0:
+            return
+
+        # Sorted by name, which is the date: the files are written as
+        # YYYY-MM-DD.html precisely so this ordering is chronological without
+        # trusting a mtime that a copy or a restore would have rewritten.
+        written: list[Path] = sorted(reports_path.glob(pattern="*.html"))
+
+        for stale_report in written[: max(0, len(written) - keep)]:
+            # Best-effort, on permissions.py's reasoning. A brief that cannot be
+            # tidied is not a reason to fail the morning's report.
+            try:
+                stale_report.unlink()
+
+            except OSError as e:
+                print(f"[-] Could not remove {stale_report}: {e}")
 
     def do_verify(self, line: str) -> None:
         """

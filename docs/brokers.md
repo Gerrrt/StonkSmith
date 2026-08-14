@@ -256,6 +256,46 @@ SnapTrade is an aggregator: link a brokerage once through its Connection Portal
 and StonkSmith reads every linked account through a single key, with no browser
 and no stored password. One `snaptrade` broker covers all of them.
 
+### An account is its positions plus its cash
+
+**Not the balance SnapTrade reports for it**, and that is a correction rather
+than a preference. Two facts drove it, both measured against the live API on
+2026-08-14.
+
+**The reported total is a day stale.** Balances arrive with the account listing,
+from `list_user_accounts` — which SnapTrade's own documentation describes as
+serving *"Daily data regardless of the customer's plan… cached and refreshed once
+a day"*, and points elsewhere for real-time. The consequence turned out to be
+exact rather than approximate: the live balance for one IRA read `6710.00` and
+for another `674.38`, and those were precisely the position values StonkSmith had
+recorded for them the day before, to the cent. Every balance in the workspace was
+one sync behind. The *delta* survived that untouched, since both ends shifted
+together, but the level did not — and the Net Worth series is built on levels.
+
+**Positions are not the whole account either.** `get_all_account_positions`
+returns securities and never mentions cash, which is routinely negative. One
+brokerage account here holds $2,986.31 of a single fund against cash of
+**-$744.28**, left by an overdraft transfer out to a checking account. SnapTrade's
+own total says $2,242.03; summing its positions says $2,986.31. Both endpoints are
+correct and neither is the account.
+
+So the sync fetches `get_user_account_balance` per account and stores positions
+plus cash. That reconciles exactly with what SnapTrade's total eventually says,
+and it is live on both halves.
+
+Three cases fall back to the reported total, and each is one where computing the
+value would be *wrong* rather than merely unavailable:
+
+- **The positions fetch failed.** A failure and an empty account look identical
+  afterwards, which is why the fetch reports whether it read as well as what —
+  computing from an unread list prices a brokerage account at its cash alone.
+- **The account reports no positions at all.** A brokerage that pre-aggregates,
+  such as a Schwab-held 529, gives a balance and nothing to sum.
+- **Cash could not be read.** The securities alone omit a margin loan, which
+  overstates the account by the size of the debt.
+
+`tests/test_snaptrade_account_value.py` pins all six cases.
+
 Setup is once, and interactive. Get a free Personal API key from
 [SnapTrade](https://snaptrade.com), then:
 

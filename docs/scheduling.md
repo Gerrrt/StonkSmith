@@ -54,10 +54,19 @@ What no amount of that settles is which brokers can run with nobody watching.
 | `schwab529plan` | Yes | Posts a form with a stored credential. No browser, no bot detection, no session to keep |
 | `ally` | `--from-prices` only, and it is not a scrape | Ally honours no restored session, so a scrape needs a human every time |
 | `fidelity` | No — replace it with SnapTrade | Browser-backed behind bot detection and 2FA |
+| `manual` | Yes | Nothing to log in to. A configured unit count times a published close |
 
 The first three are the uninteresting rows, and they are uninteresting on purpose: put
-them in a crontab and they work. The last two are the reason this file is longer than the
-table.
+them in a crontab and they work. `manual` joins them for TSP's reason rather than its
+own — no credential in the path, so nothing can expire — and the two after it are why
+this file is longer than the table.
+
+`manual` is the row for an account no program can reach at all: a plan portal with no API,
+no scrapeable page and no export, whose only way out is a transfer. Leaving one out makes
+every total short by its value while looking complete. It stores a **unit count, never a
+balance**, on the rule the `[TSP]` config comment states in a line — a balance is true for
+one day and would silently rot, while units move only when money does. See
+[`docs/brief.md`](brief.md#accounts-you-can-see-but-cannot-scrape).
 
 ### SnapTrade expires, and that is not a failure
 
@@ -368,6 +377,87 @@ Three things it counts as stale, and the third is the one worth knowing about:
 the console rather than through the logger, so a run that worked can still put a line of
 bar into cron's output. Redirect stdout per entry if that matters; the exit status is the
 part that carries the meaning.
+
+---
+
+## The opening-bell run, and why the close does not move
+
+Everything above is the evening run. `scripts/com.stonksmith.open.plist` adds a second
+scrape at **06:35 local**, driving `scripts/stonksmith-open.sh` — ten scrapes a week rather
+than five.
+
+**Only SnapTrade carries new information at the open**, and that is worth stating plainly
+because three of the four entries look identical to their evening counterparts and are not.
+SnapTrade is a live API call returning current positions. TSP, the 529 and Ally all rest on
+a published close that does not exist yet at 06:35, so their morning marks repeat
+yesterday's numbers under a new timestamp. They report their own `as_of` honestly and
+nothing is wrong with them — but reading a morning price into a 06:35 TSP row is the
+mistake available here. All four run anyway: a schedule that quietly scrapes a subset is
+one somebody later reads as complete.
+
+**The close run stays at 18:30 rather than moving to the 13:00 bell.** On Pacific the
+market closes at 13:00 local, so "closing bell" is the obvious slot and it is the wrong
+one. TSP publishes the day's share prices in the evening — the whole reason 18:30 was
+chosen, recorded at `scripts/stonksmith.cron:120` — so a 13:00 run would write yesterday's
+TSP price as today's, every day, with nothing saying so. That is precisely the quiet
+wrongness this file exists to prevent, and `tests/test_open_agent.py` refuses a close run
+earlier than 17:00.
+
+**No `stonksmithdb stale` in the opening run.** The evening run made that check twelve
+hours earlier and nothing can have gone stale since. An alarm that fires more often than it
+has news is the one that gets muted, which is the failure this file opens by naming.
+
+---
+
+## The third agent, in the morning
+
+`stonksmithdb brief` runs at 06:30 the next weekday, from its own LaunchAgent —
+`scripts/com.stonksmith.morning.plist`, driving `scripts/stonksmith-morning.sh`, installed
+exactly like the nightly pair.
+
+It runs **five minutes before** the opening scrape, and the gap is load-bearing rather than
+tidy. The brief reads every database in the workspace and the opening run writes them, so
+firing them together would have the brief reporting on a workspace caught mid-write — some
+brokers updated, some not, and a headline delta assembled across the seam. It would not
+error and it would not look wrong. Brief first is also correct on its own terms: a morning
+brief reports on last night's close, which is exactly what the databases hold until the
+opening run touches them.
+
+The whole weekday, on Pacific:
+
+| Local | Agent | Databases |
+| --- | --- | --- |
+| 06:30 | `com.stonksmith.morning` | reads |
+| 06:35 | `com.stonksmith.open` | writes |
+| 18:30 | `com.stonksmith.nightly` | writes |
+
+**Two agents rather than one entry appended to the nightly script**, because they answer
+to different clocks. A scrape has to happen after the market closes and after TSP
+publishes. A reminder has to happen when somebody is there to read it. Folding the brief
+into the 18:30 run would render it twelve hours before anyone opens a laptop, at which
+point it is a file rather than a reminder — which is the entire thing it was built to be.
+
+It does not scrape, and that is deliberate rather than a limitation. At half past six the
+market is shut, TSP has not published, and the two browser-backed brokers want a human at
+a sign-in page. `brief` reads the databases and nothing else, so it takes about a second
+and cannot fail in any of the ways the entries above can.
+
+**`gui/$(id -u)` matters twice over for this one.** The nightly agent needs it to read the
+login keychain, as the section above sets out at length. This one needs that too and
+additionally has to open a browser, which an agent outside the GUI session has no display
+to do. Bootstrapped into a system domain it would write a brief every morning and show it
+to nobody — a failure with no error, which is the shape this whole file is about.
+
+It exits `1` when a broker's database would not open, the same escalation `sheet` makes.
+It does not exit non-zero for a stale account: `stale` already made that call the previous
+evening with an exit status a scheduler can act on, and the brief's job is to put the same
+finding in front of a person rather than to page twice about it.
+
+A morning where the brief says *no new scrape since Tuesday* is reporting a failure of the
+**nightly** agent, not of itself — read `/tmp/stonksmith-nightly.log`, not
+`/tmp/stonksmith-morning.log`. And it is worth knowing that such a morning deliberately
+does not advance the brief's baseline, so the movement it could not report is still waiting
+in the next one rather than lost. [`docs/brief.md`](brief.md) is the record for all of it.
 
 ---
 
