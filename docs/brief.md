@@ -160,6 +160,20 @@ That is the one thing the old position-movers list said that this table does not
 whose value rose on an unchanged count was repriced by the market, and one whose count rose
 was bought. Only the second is an event.
 
+Every row carries a dot in its owner's colour, from `[ACCOUNTS] colors` — one line
+per person covers every account they hold, matched as a substring of the display name
+with the first line winning. **The colour is redundant with the name beside it by
+design:** the name already says whose account it is, so the page reads correctly in
+monochrome and to a colourblind reader. Colour names come from a closed set, because the
+value lands in an HTML class attribute and a config file is not a stylesheet.
+
+A position worth less than `[BRIEF] min_position` loses its row — a settlement account
+leaves a few cents of a sweep fund beside a real holding, and it renders as a full row
+with a dash in every derived column. **Display only:** the portfolio value, the invested
+figure and the cash line all still count it, and the number hidden is stated under the
+table. A row removed from a page is a presentation choice; a dollar removed from a total
+is a lie.
+
 Every row names the account holding it, always. The same fund is routinely held in several
 accounts — one workspace has SWPPX in four — and a table showing the symbol alone renders
 those as identical rows with different numbers, with no way to tell which is which.
