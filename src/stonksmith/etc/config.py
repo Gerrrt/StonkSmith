@@ -626,6 +626,61 @@ def get_account_aliases() -> dict[str, str]:
     return aliases
 
 
+#: The colours an account may be tagged with.
+#:
+#: A closed set, and that is a safety property rather than a style guide: the
+#: value is written into an HTML class attribute, and a config file is not a
+#: stylesheet. Anything outside this is reported and dropped, so a typo produces
+#: an uncoloured row and a line of output rather than markup nobody wrote.
+ACCOUNT_COLORS: frozenset[str] = frozenset(
+    {"green", "pink", "blue", "yellow", "orange", "purple", "grey"}
+)
+
+
+def get_account_colors() -> tuple[list[tuple[str, str]], list[str]]:
+    """
+    Whose account is whose, for the brief to colour by.
+
+    A list of pairs rather than a dict, because the order is part of the rule:
+    the match is a substring of the display name and the first line that matches
+    wins, so "Joint = yellow" written above "Garrett = green" would colour a
+    joint account Garrett holds. A dict would keep the order in practice and say
+    nothing about depending on it.
+
+    Substring rather than exact, so one line covers every account a person
+    holds -- "Garrett" catches the IRA, the brokerage and the 401(k) without
+    naming each. Matched against the display name *after* aliases are applied,
+    which is the name a reader sees and therefore the one they would write here.
+    :return: (the (match, colour) pairs in order, the lines that were refused)
+    :rtype: tuple[list[tuple[str, str]], list[str]]
+    """
+
+    raw: str = get_config().get(section="ACCOUNTS", option="colors", fallback="")
+    pairs: list[tuple[str, str]] = []
+    refused: list[str] = []
+
+    for line in raw.splitlines():
+        match, sep, color = line.rpartition("=")
+
+        if not sep or not match.strip() or not color.strip():
+            if line.strip():
+                refused.append(line.strip())
+            continue
+
+        chosen: str = color.strip().casefold()
+
+        if chosen not in ACCOUNT_COLORS:
+            # Named rather than silently dropped: an unrecognised colour leaves
+            # a row uncoloured, which looks exactly like an account nobody wrote
+            # a line for.
+            refused.append(line.strip())
+            continue
+
+        pairs.append((match.strip(), chosen))
+
+    return pairs, refused
+
+
 def get_brief_open_browser() -> bool:
     """
     Whether the morning brief opens itself once it is written.
@@ -677,6 +732,38 @@ def get_brief_keep_days() -> int:
         return 90
 
     return max(0, configured)
+
+
+def get_brief_min_position() -> float:
+    """
+    The smallest position worth a row in the holdings table.
+
+    A settlement account leaves eight cents of a sweep fund sitting beside a
+    real holding, and it renders as a full row with a dash in every derived
+    column. It is not wrong -- the money is there -- it is just not a holding
+    anybody is tracking, and a table where one row in twelve is noise is a table
+    that gets skimmed.
+
+    Display only. Whatever falls below this is still counted in every total, so
+    the portfolio value, the invested figure and the cash line are unchanged by
+    it -- and the count of what was hidden is stated under the table, on the same
+    rule the movers cap follows. A row removed from a page is a presentation
+    choice; a dollar removed from a total is a lie.
+
+    Zero shows everything, which is a real answer rather than a disabled feature.
+    :return: A non-negative floor in the account's currency
+    :rtype: float
+    """
+
+    try:
+        configured: float = get_config().getfloat(
+            section="BRIEF", option="min_position", fallback=1.0
+        )
+
+    except ValueError:
+        return 1.0
+
+    return max(0.0, configured)
 
 
 def get_brief_movers() -> int:

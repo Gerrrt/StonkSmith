@@ -35,7 +35,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from stonksmith.etc.config import get_asset_classes
+from stonksmith.etc.config import get_account_colors, get_asset_classes
 from stonksmith.etc.permissions import restrict
 from stonksmith.etc.portfolio import (
     OBSERVED,
@@ -175,6 +175,10 @@ class Movement:
     #: for a position whose units did not change.
     units_delta: float | None = None
 
+    #: Whose account this is, as a colour name from [ACCOUNTS] colors. Empty
+    #: when nothing matched, which renders no dot rather than a default one.
+    color: str = ""
+
 
 @dataclass(frozen=True, slots=True)
 class Allocation:
@@ -257,6 +261,9 @@ class Position:
 
     #: The value series behind this position, oldest first, for the trend.
     trend: tuple[float, ...] = ()
+
+    #: Whose account holds this, as a colour name from [ACCOUNTS] colors.
+    color: str = ""
 
     #: How the quantity moved since the last brief, where it moved at all.
     #:
@@ -402,8 +409,18 @@ class Brief:
     #: The trailing series the sparkline is drawn from: (date, total, observed).
     series: tuple[tuple[str, float, bool], ...] = ()
 
-    #: Every position held, largest first. Not a movers list -- the whole book.
+    #: Every position held, largest first. Not a movers list -- the whole book,
+    #: less anything under [BRIEF] min_position.
     positions: tuple[Position, ...] = ()
+
+    #: How many positions were held but too small to earn a row.
+    #:
+    #: Display only, and every total still counts them: the portfolio value, the
+    #: invested figure and the cash line are unaffected. A row removed from a
+    #: page is a presentation choice; a dollar removed from a total is a lie, and
+    #: this project's rule about silent truncation is why the count is carried
+    #: rather than the rows simply vanishing.
+    positions_hidden: int = 0
 
     #: What the book is worth, cost and earns.
     performance: Performance = field(default_factory=Performance)
@@ -484,7 +501,10 @@ def _account_marks(
 
 
 def account_movements(
-    rows: Iterable[NetWorthRow], since: str, until: str
+    rows: Iterable[NetWorthRow],
+    since: str,
+    until: str,
+    palette: Iterable[tuple[str, str]] = (),
 ) -> list[Movement]:
     """
     What each account did between two dates on the series axis.
@@ -524,6 +544,7 @@ def account_movements(
                 delta=delta,
                 pct=_pct(before=prior, delta=delta),
                 basis=row.basis,
+                color=owner_color(name=row.account, palette=palette),
             )
         )
 
@@ -995,6 +1016,34 @@ def significant(moves: Iterable[Movement], limit: int) -> tuple[Movement, ...]:
     return tuple(moves)[:limit]
 
 
+def owner_color(name: str, palette: Iterable[tuple[str, str]]) -> str:
+    """
+    Whose account this is, as a colour name, or empty when nothing claims it.
+
+    First match wins, which is why the palette arrives as ordered pairs rather
+    than a mapping: the match is a substring of the display name, so "Joint"
+    and "Garrett" can both be true of one account and the order in the config
+    is what decides. A dict would preserve that order in practice and document
+    nothing about depending on it.
+
+    Empty rather than a default colour for an account nothing matched. A default
+    would put a dot on a row that has no owner declared, which reads as an owner
+    the reader has forgotten rather than a line they have not written.
+    :param name: The account's display name, after aliases
+    :param palette: (match, colour) pairs, in the order configured
+    :return: The colour name, or ""
+    :rtype: str
+    """
+
+    folded: str = name.casefold()
+
+    for match, color in palette:
+        if match.casefold() in folded:
+            return color
+
+    return ""
+
+
 def _ratio(top: float | None, bottom: float | None) -> float | None:
     """
     One number over another, where that means anything.
@@ -1016,6 +1065,7 @@ def positions(
     income: dict[str, float],
     history: dict[tuple[str, str, str], list[float]],
     baseline: dict[tuple[str, str, str], Mark] | None = None,
+    palette: Iterable[tuple[str, str]] = (),
 ) -> list[Position]:
     """
     Every holding, with what follows from what the source reported.
@@ -1076,6 +1126,7 @@ def positions(
                 account=first.account,
                 name=first.name,
                 asset_class=classes.get(key[2], UNCLASSIFIED),
+                color=owner_color(name=first.account, palette=palette),
                 units=units,
                 # The price the source stated, not value/units. They agree when
                 # both are given, and where they disagree the source's own
@@ -1194,6 +1245,7 @@ def build_brief(
     currency: str = "USD",
     limit: int = 8,
     keep: int = 90,
+    floor: float = 0.0,
 ) -> Brief:
     """
     Everything one morning has to say, decided once.
@@ -1207,6 +1259,8 @@ def build_brief(
     :param currency: The currency to report in
     :param limit: How many movers of each kind to render
     :param keep: How many trailing points the sparkline covers
+    :param floor: The smallest position that earns a row. Display only -- every
+        total still counts what falls below it
     :return: The assembled brief
     :rtype: Brief
     """
@@ -1235,6 +1289,7 @@ def build_brief(
     ]
 
     classes: dict[str, str] = get_asset_classes()
+    palette, _refused = get_account_colors()
     income, covered = dividends(rows=portfolio.transactions, today=today)
 
     # Computed once rather than inside the Brief() call, because two fields now
@@ -1252,7 +1307,12 @@ def build_brief(
         income=income,
         history=trends(rows=portfolio.holdings_history),
         baseline=since.holdings if since.taken_on else None,
+        palette=palette,
     )
+
+    # Split for display only. `held` stays whole and is what performance()
+    # totals, so hiding a row cannot move a number.
+    shown: list[Position] = [row for row in held if abs(row.value or 0.0) >= floor]
 
     return Brief(
         state=state,
@@ -1297,7 +1357,8 @@ def build_brief(
         stale=_stale_pairs(portfolio=portfolio, today=today),
         unreadable=portfolio.unreadable,
         series=_series(totals=totals, rows=portfolio.net_worth, keep=keep),
-        positions=tuple(held),
+        positions=tuple(shown),
+        positions_hidden=len(held) - len(shown),
         performance=performance(
             held=held,
             income=income,

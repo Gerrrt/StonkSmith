@@ -360,6 +360,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         from stonksmith.etc.config import (
             get_account_aliases,
             get_brief_keep_days,
+            get_brief_min_position,
             get_brief_movers,
             get_brief_open_browser,
         )
@@ -401,6 +402,7 @@ class StonkSmithDBMenu(cmd.Cmd):
             baseline=baseline,
             today=now.date(),
             limit=get_brief_movers(),
+            floor=get_brief_min_position(),
         )
 
         reports_path.mkdir(mode=OWNER_ONLY_DIR, parents=True, exist_ok=True)

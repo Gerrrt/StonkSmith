@@ -144,6 +144,27 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .scroll table { min-width: 46rem; }
 .spark { display: block; }
 .wl { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; }
+/* Whose account a row belongs to. Redundant with the name beside it by design:
+   colour is a scanning aid here, never the only thing carrying the fact, so the
+   page still reads correctly in monochrome or to a colourblind reader. */
+.dot { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 50%;
+       margin-right: 0.45rem; vertical-align: 0.05rem; flex: none; }
+.dot.green  { background: #16a34a; }
+.dot.pink   { background: #db2777; }
+.dot.blue   { background: #2563eb; }
+.dot.yellow { background: #ca8a04; }
+.dot.orange { background: #ea580c; }
+.dot.purple { background: #7c3aed; }
+.dot.grey   { background: #6b7280; }
+@media (prefers-color-scheme: dark) {
+  .dot.green  { background: #4ade80; }
+  .dot.pink   { background: #f472b6; }
+  .dot.blue   { background: #60a5fa; }
+  .dot.yellow { background: #facc15; }
+  .dot.orange { background: #fb923c; }
+  .dot.purple { background: #a78bfa; }
+  .dot.grey   { background: #9ca3af; }
+}
 footer { color: var(--dim); font-size: 0.78rem; text-align: center;
          margin-top: 1.5rem; }
 """
@@ -625,7 +646,7 @@ def _movers(
 
     body: str = "".join(
         f"<tr><td>"
-        f'<span class="who">{escape(s=move.label)}</span>'
+        f'{_owner_dot(color=move.color)}<span class="who">{escape(s=move.label)}</span>'
         f"{_basis(move=move)}"
         f'<div class="broker">{escape(s=move.broker)}'
         f"{_units(move=move)}</div></td>"
@@ -643,6 +664,28 @@ def _movers(
         f'<th class="num">Change</th><th class="num">%</th></tr>'
         f"{body}</table>{_dropped(count=dropped)}</section>"
     )
+
+
+def _owner_dot(color: str) -> str:
+    """
+    The dot that says whose account a row is.
+
+    Empty for a row nothing claimed, rather than a default colour: a dot on an
+    account with no owner declared reads as an owner the reader has forgotten,
+    not as a config line they have not written.
+
+    The colour is validated in etc.config against a closed set before it reaches
+    here, which is what makes interpolating it into a class attribute safe -- a
+    config file is not a stylesheet, and this value comes from one.
+    :param color: A colour name, or ""
+    :return: The dot, or ""
+    :rtype: str
+    """
+
+    if not color:
+        return ""
+
+    return f'<span class="dot {escape(s=color)}"></span>'
 
 
 def _basis(move: Movement) -> str:
@@ -681,6 +724,25 @@ def _units(move: Movement) -> str:
     return f" · {move.units_delta:+,.4f} units"
 
 
+def _hidden(count: int) -> str:
+    """
+    The line saying how many positions were too small to show.
+    :param count: How many were hidden
+    :return: The line, or ""
+    :rtype: str
+    """
+
+    if count <= 0:
+        return ""
+
+    held: str = "position" if count == 1 else "positions"
+
+    return (
+        f'<p class="note">{count} smaller {held} not shown, '
+        f"and still counted in every total above.</p>"
+    )
+
+
 def _units_of(value: float | None) -> str:
     """
     A share count, at the precision a fractional-share world needs.
@@ -692,7 +754,7 @@ def _units_of(value: float | None) -> str:
     return "—" if value is None else f"{value:,.3f}"
 
 
-def _holdings(rows: Iterable[Position]) -> str:
+def _holdings(rows: Iterable[Position], hidden: int = 0) -> str:
     """
     Every position held, laid out the way the operator's own sheet lays them out.
 
@@ -708,6 +770,9 @@ def _holdings(rows: Iterable[Position]) -> str:
     rows would read as a portfolio that has made exactly nothing rather than one
     whose cost nobody recorded.
     :param rows: Every position, largest first
+    :param hidden: How many were held but too small to earn a row, stated under
+        the table -- they are still in every total, so this is the only place a
+        reader would learn the table is not the whole book
     :return: The section
     :rtype: str
     """
@@ -722,7 +787,7 @@ def _holdings(rows: Iterable[Position]) -> str:
 
     body: str = "".join(
         f"<tr><td>"
-        f'<span class="who">{escape(s=row.symbol)}</span>'
+        f'{_owner_dot(color=row.color)}<span class="who">{escape(s=row.symbol)}</span>'
         f'<div class="broker">{escape(s=_under(row=row))}'
         f"{_bought(row=row)}</div></td>"
         f'<td class="num">{escape(s=_units_of(value=row.units))}</td>'
@@ -761,7 +826,7 @@ def _holdings(rows: Iterable[Position]) -> str:
         f'<th class="num">Day</th><th class="num">Gain</th>'
         f'<th class="num">Growth</th><th class="num">Trend</th>'
         f'<th class="num">W/L</th></tr>'
-        f"{body}</table></div></section>"
+        f"{body}</table></div>{_hidden(count=hidden)}</section>"
     )
 
 
@@ -1009,7 +1074,7 @@ def render(brief: Brief, now: dt.datetime) -> str:
         # mover list answered "what changed" and the headline above already does
         # that for the portfolio; a reader who wants to know what they own was
         # being shown a filtered subset of it.
-        _holdings(rows=brief.positions),
+        _holdings(rows=brief.positions, hidden=brief.positions_hidden),
         _transactions(rows=brief.new_transactions),
         _allocation(rows=brief.allocation),
         _stale(rows=brief.stale),
