@@ -193,6 +193,51 @@ class TheSectionsAppearOnlyWhenEarned(UserConfigMixin, unittest.TestCase):
         self.assertIn("Not fresh", page)
         self.assertIn("as of 2026-07-01, 44 days old", page)
 
+    def test_a_capped_mover_list_says_what_it_left_out(self) -> None:
+        # The cost of ranking rather than thresholding. A list that ends at
+        # eight without comment reports the eighth as the smallest thing that
+        # moved, and the reader cannot tell a quiet day from a truncated one --
+        # the quiet truncation this project already names about
+        # get_transactions, whose row limit is why that read cannot back a sheet.
+        page: str = render(
+            brief=_brief(
+                account_movers=(
+                    Movement(label="TSP", broker="tsp", delta=100.0, before=900.0),
+                ),
+                account_movers_dropped=4,
+            ),
+            now=NOW,
+        )
+
+        self.assertIn("4 more accounts moved by less", page)
+
+    def test_one_left_out_is_singular(self) -> None:
+        page: str = render(
+            brief=_brief(
+                account_movers=(
+                    Movement(label="TSP", broker="tsp", delta=100.0, before=900.0),
+                ),
+                account_movers_dropped=1,
+            ),
+            now=NOW,
+        )
+
+        self.assertIn("1 more account moved by less", page)
+
+    def test_an_uncapped_list_says_nothing(self) -> None:
+        # Zero on any ordinary morning, and a line that appeared every day would
+        # be one nobody reads on the morning it means something.
+        page: str = render(
+            brief=_brief(
+                account_movers=(
+                    Movement(label="TSP", broker="tsp", delta=100.0, before=900.0),
+                )
+            ),
+            now=NOW,
+        )
+
+        self.assertNotIn("moved by less", page)
+
     def test_a_carried_mover_is_marked_on_its_own_row(self) -> None:
         # On the row rather than in a legend. A reader scanning four movers
         # should not have to hold "the third one is carried" in their head.
