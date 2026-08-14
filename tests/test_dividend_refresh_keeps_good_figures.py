@@ -10,7 +10,7 @@ its own. A wiped cache is indistinguishable from a portfolio holding nothing tha
 pays -- precisely the reading ``found`` was introduced to prevent one level down
 -- and the next clean night repairs it, so nobody ever sees the morning it broke.
 
-So a fetch that fails keeps what was already there. Three things have to be true
+So a fetch that fails keeps what was already there. Four things have to be true
 of that, and each is a way the fix could be wrong rather than merely absent:
 
 **A carried figure keeps its own date.** Restamping it with today's would make
@@ -24,6 +24,13 @@ being dropped, or the brief cannot say how many of its positions it covered.
 
 **A successful fetch still overwrites.** A carry that outlived a good answer
 would freeze the figure forever, which is the opposite failure and just as quiet.
+
+**Only the feed's failures are caught.** The carry is what makes this matter, and
+it is why the handler was narrowed after the fact: caught by a bare ``except
+Exception``, a TypeError from a regression in the parsing would be reported as
+"kept the earlier figure" and cached as a success -- so the brief would render
+perfectly every morning off code that had stopped working. A broad catch sitting
+in front of a fallback hides strictly more than one sitting in front of a zero.
 """
 
 import datetime as dt
@@ -32,6 +39,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+import requests
 
 from config_isolation import UserConfigMixin
 from keyring_isolation import MemoryKeyringMixin
@@ -95,10 +104,12 @@ class TheRefreshKeepsWhatItCannotCheck(
         )
         db.shutdown_db()
 
-    def _run(self, body: str) -> str:
+    def _run(self, body: str, raises: BaseException | None = None) -> str:
         """
         Run `dividends` with every request answering the same body.
         :param body: What the feed returns for every symbol
+        :param raises: Thrown by the request instead of answering, for the cases
+            that ask what the handler does and does not catch
         :return: What the command printed
         :rtype: str
         """
@@ -124,7 +135,11 @@ class TheRefreshKeepsWhatItCannotCheck(
                 side_effect=lambda *a: printed.append(" ".join(map(str, a))),
             ),
         ):
-            fetch.return_value.text = body % stamp if "%d" in body else body
+            if raises is not None:
+                fetch.side_effect = raises
+            else:
+                fetch.return_value.text = body % stamp if "%d" in body else body
+
             shell.do_dividends("")
 
         return "\n".join(printed)
@@ -236,6 +251,27 @@ class TheRefreshKeepsWhatItCannotCheck(
             44,
             "a carried figure with no date of its own reads as fetched today",
         )
+
+    def test_a_dropped_connection_is_caught_and_carried(self) -> None:
+        # The other half of the pair, and the one that is not QuotesUnavailable.
+        # A network that never answered says nothing about the symbol, so it
+        # must not cost the figure either.
+        self._seed()
+        self._run(body="", raises=requests.ConnectionError("no route to host"))
+
+        self.assertTrue(read_cache(path=self.cache).paid["SWPPX"].found)
+
+    def test_a_bug_in_this_code_ends_the_run_instead_of_being_cached(self) -> None:
+        # What narrowing the handler buys, and the carry above is what makes it
+        # matter. Caught, a TypeError from a regression in the parsing would be
+        # reported as "kept the earlier figure" and cached as a success -- so the
+        # brief would render perfectly every morning off code that had stopped
+        # working, and nothing would ever say so. Uncaught, the run ends non-zero
+        # and the nightly script's `status=1` reports the night.
+        self._seed()
+
+        with self.assertRaises(TypeError):
+            self._run(body="", raises=TypeError("dividend_events got a dict"))
 
     def test_a_good_fetch_still_overwrites_the_carried_figure(self) -> None:
         # The opposite failure, and just as quiet: a carry that outlived a real
