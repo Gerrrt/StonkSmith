@@ -568,7 +568,34 @@ def _headline(brief: Brief) -> str:
     )
 
 
-def _movers(title: str, moves: Iterable[Movement], currency: str, empty: str) -> str:
+def _dropped(count: int) -> str:
+    """
+    The line saying how many movers the cap left out.
+
+    Absent when it left out none, which is every ordinary morning. Present when
+    it did, because a ranking that ends at eight without comment reports the
+    eighth as the smallest thing that moved -- and the reader has no way to tell
+    a quiet day from a truncated one.
+    :param count: How many moved but did not fit
+    :return: The line, or ""
+    :rtype: str
+    """
+
+    if count <= 0:
+        return ""
+
+    moved: str = "account" if count == 1 else "accounts"
+
+    return f'<p class="note">{count} more {moved} moved by less, and did not fit.</p>'
+
+
+def _movers(
+    title: str,
+    moves: Iterable[Movement],
+    currency: str,
+    empty: str,
+    dropped: int = 0,
+) -> str:
     """
     One mover table, or a sentence saying why there is none.
 
@@ -609,7 +636,7 @@ def _movers(title: str, moves: Iterable[Movement], currency: str, empty: str) ->
         f"<section><h2>{escape(s=title)}</h2><table>"
         f'<tr><th>Name</th><th class="num">Value</th>'
         f'<th class="num">Change</th><th class="num">%</th></tr>'
-        f"{body}</table></section>"
+        f"{body}</table>{_dropped(count=dropped)}</section>"
     )
 
 
@@ -971,6 +998,7 @@ def render(brief: Brief, now: dt.datetime) -> str:
             moves=brief.account_movers,
             currency=brief.currency,
             empty=compared,
+            dropped=brief.account_movers_dropped,
         ),
         # The full book rather than the position movers this used to carry. The
         # mover list answered "what changed" and the headline above already does

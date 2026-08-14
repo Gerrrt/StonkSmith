@@ -347,9 +347,25 @@ keep_days = 90
 movers = 8
 ```
 
-`movers` is a cutoff on a ranking rather than a threshold: accounts and positions are
-ordered by the size of the move in dollars, and this is how many rows the page has room
-for.
+`movers` is a cutoff on a **ranking** rather than a threshold — the largest moves by
+dollar, capped at that many rows — and the choice is worth recording because two
+alternatives both looked reasonable.
+
+A **dollar floor** (`abs(delta) > 50`) keeps a rounding wiggle on the largest account off
+the page, and hides a four percent day on the smallest one. Where a single 401k is two
+thirds of the money, one floor cannot be right for both ends of the book. A **percentage
+floor** (`abs(pct) > 0.005`) inverts that and makes a cash account holding twelve dollars
+the loudest row every morning; it also has nothing to say about an account that arrived
+since the baseline, whose percentage is undefined because there is no denominator.
+
+A ranking has no threshold to be wrong about, shows the same number of rows every day —
+which is what makes it readable at half past six — and stays right as the portfolio grows.
+
+What it costs is that it can drop a real mover, so the page says how many: *"4 more
+accounts moved by less, and did not fit."* A list that ends at eight without comment
+reports the eighth as the smallest thing that moved, and the reader cannot tell a quiet
+morning from a truncated one — the same quiet truncation `get_transactions` is documented
+as unable to back a sheet with.
 
 The allocation block is drawn only when `[ALLOCATION] asset_classes` declares something,
 on the same rule the sheet's block follows — a breakdown that is one 100% `(unclassified)`

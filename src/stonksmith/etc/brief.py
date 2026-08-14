@@ -380,6 +380,15 @@ class Brief:
 
     account_movers: tuple[Movement, ...] = ()
     holding_movers: tuple[Movement, ...] = ()
+
+    #: How many accounts moved but did not fit in ``account_movers``.
+    #:
+    #: Carried so the page can say so. A ranking capped at eight ends without
+    #: comment on the ninth, which reports the eighth as the smallest thing that
+    #: moved -- the quiet truncation this project names about get_transactions,
+    #: whose five-hundred-row limit is precisely why that read cannot back a
+    #: sheet. Zero on any ordinary morning, and the line is absent then.
+    account_movers_dropped: int = 0
     new_transactions: tuple[TransactionRow, ...] = ()
     allocation: tuple[Allocation, ...] = ()
 
@@ -939,30 +948,42 @@ def significant(moves: Iterable[Movement], limit: int) -> tuple[Movement, ...]:
     """
     Which of the movers are worth putting in front of a reader.
 
-    Called for accounts and for positions both, and deliberately the one decision
-    in this module that is a matter of taste rather than of correctness. Every
-    other function here has a right answer that the data settles; this one is
-    about what its reader cares to see at half past six in the morning, and the
-    portfolio it is reporting on decides that.
+    **The largest by dollar, capped at ``[BRIEF] movers``.** A ranking rather
+    than a threshold, and that is the settled choice among three that were all
+    defensible:
 
-    The movers arrive sorted by absolute dollar move, largest first.
+    - A **dollar floor** -- ``abs(delta) > 50`` -- keeps a rounding wiggle on the
+      largest account off the page, and also hides a four percent day on the
+      smallest one. On a book where one 401k is two thirds of the money, that
+      floor is simultaneously too low for the big account and too high for
+      every other.
+    - A **percentage floor** -- ``abs(pct) > 0.005`` -- does the reverse, and
+      makes a cash account holding twelve dollars the loudest row on the page
+      every single morning. It also has nothing to say about an account that
+      arrived since the baseline: ``pct`` is None for those, because there is no
+      denominator, so a percentage rule has to decide whether an arrival is
+      always worth a row or never one, and neither answer is right.
+    - A **ranking** has no threshold to be wrong about. It shows the same number
+      of rows every day, which is what makes it readable at half past six, and
+      it is invariant to the size of the portfolio -- the one property a floor of
+      either kind loses the moment the book grows.
+
+    The cost is that it can drop a real mover, so the count of what was dropped
+    travels with the result and the page states it. A list that silently ends at
+    eight reports the eighth as the smallest thing that moved, which is the
+    quiet-truncation failure this project already names about `get_transactions`
+    -- its five-hundred-row limit is why that read cannot back a sheet.
+
+    Dollars rather than percent for the ranking itself, because the reader's
+    question at that hour is what moved the portfolio, and a portfolio is moved
+    by dollars. The percentage is on the row beside it for the ones that make
+    the cut.
     :param moves: Every movement that was non-zero, largest absolute move first
     :param limit: How many rows the brief has room for
     :return: The ones to render, in the order given
     :rtype: tuple[Movement, ...]
     """
 
-    # TODO(Garrett): decide what earns a row here.
-    #
-    # A dollar floor (abs(delta) > 50) keeps a rounding wiggle on the largest
-    # account out, and also hides a 4% day on the smallest one. A percentage
-    # floor (abs(pct) > 0.005) does the reverse, and makes a cash account holding
-    # twelve dollars the loudest row on the page every single morning. A bare
-    # top-N is stable and readable and silently drops a real sixth mover.
-    #
-    # Whichever it is, note that `pct` is None for an account that arrived since
-    # the baseline -- those have no denominator, and a percentage rule has to
-    # decide whether an arrival is always worth a row or never one.
     return tuple(moves)[:limit]
 
 
@@ -1207,6 +1228,16 @@ def build_brief(
 
     classes: dict[str, str] = get_asset_classes()
     income, covered = dividends(rows=portfolio.transactions, today=today)
+
+    # Computed once rather than inside the Brief() call, because two fields now
+    # depend on it: the rows that fit and the count that did not. Deriving the
+    # second from a second call would be two chances to disagree about how many
+    # accounts moved.
+    moved: list[Movement] = (
+        account_movements(rows=portfolio.net_worth, since=since.taken_on, until=as_of)
+        if since.taken_on
+        else []
+    )
     held: list[Position] = positions(
         portfolio=portfolio,
         classes=classes,
@@ -1225,16 +1256,10 @@ def build_brief(
         pct=_pct(before=prior, delta=delta) if since.taken_on else None,
         observed=sum(1 for row in on_date if row.basis == OBSERVED),
         carried=sum(1 for row in on_date if row.basis != OBSERVED),
-        account_movers=(
-            ()
-            if not since.taken_on
-            else significant(
-                moves=account_movements(
-                    rows=portfolio.net_worth, since=since.taken_on, until=as_of
-                ),
-                limit=limit,
-            )
-        ),
+        account_movers=significant(moves=moved, limit=limit),
+        # What the cap left out, so the page can say so rather than ending on
+        # the eighth row as though it were the last thing that moved.
+        account_movers_dropped=max(0, len(moved) - limit),
         holding_movers=(
             ()
             if not since.taken_on
