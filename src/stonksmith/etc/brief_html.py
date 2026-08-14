@@ -34,10 +34,13 @@ from collections.abc import Iterable
 from html import escape
 
 from stonksmith.etc.brief import (
+    UNCLASSIFIED,
     Allocation,
     Brief,
     BriefState,
     Movement,
+    Performance,
+    Position,
 )
 from stonksmith.etc.portfolio import OBSERVED, TransactionRow
 
@@ -109,8 +112,15 @@ section { background: var(--card); border: 1px solid var(--line);
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th { text-align: left; font-size: 0.72rem; letter-spacing: 0.07em;
      text-transform: uppercase; color: var(--dim); font-weight: 600;
-     padding: 0 0 0.5rem; border-bottom: 1px solid var(--line); }
-td { padding: 0.55rem 0; border-bottom: 1px solid var(--line); }
+     padding: 0 0.55rem 0.5rem; border-bottom: 1px solid var(--line); }
+td { padding: 0.55rem; border-bottom: 1px solid var(--line); }
+/* Horizontal padding on the cells, not only vertical. Without it the numeric
+   columns butt against each other and render as one string -- "$26.00$5,845.93"
+   reads as a single figure, which on a money table is worse than ugly. The
+   first and last cells lose their outer padding so the table still lines up
+   with the section's own edges. */
+tr > *:first-child { padding-left: 0; }
+tr > *:last-child { padding-right: 0; }
 tr:last-child td { border-bottom: 0; }
 td.num, th.num { text-align: right; white-space: nowrap; }
 .who { font-weight: 550; }
@@ -120,6 +130,20 @@ td.num, th.num { text-align: right; white-space: nowrap; }
            padding: 0.05rem 0.45rem; margin-left: 0.4rem; white-space: nowrap; }
 .bar { height: 6px; border-radius: 999px; background: var(--accent); }
 .empty { color: var(--dim); margin: 0; }
+.tiles { display: grid; gap: 0.9rem;
+         grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.tile { border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem 1rem; }
+.tile .cap { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase;
+             color: var(--dim); font-weight: 600; }
+.tile .fig { font-size: 1.55rem; font-weight: 640; letter-spacing: -0.01em;
+             font-variant-numeric: tabular-nums; margin-top: 0.2rem; }
+.tile .sub { font-size: 0.72rem; color: var(--dim); margin-top: 0.15rem; }
+/* The holdings table is wider than a phone and must scroll inside its own box
+   rather than making the page scroll sideways. */
+.scroll { overflow-x: auto; }
+.scroll table { min-width: 46rem; }
+.spark { display: block; }
+.wl { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; }
 footer { color: var(--dim); font-size: 0.78rem; text-align: center;
          margin-top: 1.5rem; }
 """
@@ -248,6 +272,190 @@ def sparkline(points: Iterable[tuple[str, float, bool]]) -> str:
         f'<polyline points="{line}" fill="none" stroke="var(--accent)" '
         f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round" '
         f'vector-effect="non-scaling-stroke"/>{dots}</svg>'
+    )
+
+
+def mini(values: Iterable[float], width: int = 96, height: int = 24) -> str:
+    """
+    A position's value series, small enough to sit in a table cell.
+
+    Separate from sparkline() rather than a parameter on it. That one draws the
+    portfolio and carries an area fill, observed/carried dots and an accessible
+    label; this is a row-height glyph where all three would be noise, and at
+    twenty-four pixels the dots would touch. Same refusal to draw from one
+    point, for the same reason: a single dot on a flat axis reads as a position
+    that has not moved rather than one nobody has measured twice.
+    :param values: The value series, oldest first
+    :param width: The drawing width
+    :param height: The drawing height
+    :return: The SVG, or "" when there is nothing to draw
+    :rtype: str
+    """
+
+    series: list[float] = list(values)
+
+    if len(series) < 2:
+        return ""
+
+    low: float = min(series)
+    span: float = (max(series) - low) or 1.0
+    step: float = width / (len(series) - 1)
+    inset: int = 3
+
+    points: str = " ".join(
+        f"{index * step:.1f},"
+        f"{height - inset - ((value - low) / span) * (height - inset * 2):.1f}"
+        for index, value in enumerate(series)
+    )
+
+    # Coloured by where it ended relative to where it started, which is the one
+    # thing a glyph this size can honestly say.
+    tone: str = "var(--up)" if series[-1] >= series[0] else "var(--down)"
+
+    return (
+        f'<svg class="spark" viewBox="0 0 {width} {height}" width="{width}" '
+        f'height="{height}" aria-hidden="true">'
+        f'<polyline points="{points}" fill="none" stroke="{tone}" '
+        f'stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>'
+    )
+
+
+def _tile(caption: str, figure: str, sub: str = "", tone: str = "") -> str:
+    """
+    One statistic, captioned.
+    :param caption: What it is
+    :param figure: The number
+    :param sub: A qualifier under it, where one is owed
+    :param tone: An optional "up"/"down" class for the figure
+    :return: The tile
+    :rtype: str
+    """
+
+    note: str = f'<div class="sub">{escape(s=sub)}</div>' if sub else ""
+
+    return (
+        f'<div class="tile"><div class="cap">{escape(s=caption)}</div>'
+        f'<div class="fig {tone}">{escape(s=figure)}</div>{note}</div>'
+    )
+
+
+def _tiles(brief: Brief) -> str:
+    """
+    The six-tile summary, and the qualifiers that keep it from overclaiming.
+
+    Two of these tiles are routinely built from part of the portfolio, and both
+    say so underneath rather than in a footnote:
+
+    Gain is summed over the positions whose source stated a cost basis. On a
+    workspace where SnapTrade reports one and TSP and the 529 do not, that is a
+    real gain on a real subset presented beside a total that covers everything --
+    so the tile states how many positions it stands on.
+
+    Dividend income is a trailing year of the transaction log, and a log younger
+    than a year yields a number that is not a year's income. The tile names the
+    span it actually covers, which is the only way to tell a low yield from a
+    short history.
+    :param brief: What this morning has to say
+    :return: The section
+    :rtype: str
+    """
+
+    money_of: Performance = brief.performance
+    tone: str = "" if money_of.gain is None else direction(value=money_of.gain)
+
+    partial: str = (
+        f"across {money_of.priced} of {money_of.holdings} positions; "
+        f"{money_of.unpriced} report no cost basis"
+        if money_of.unpriced
+        else f"across all {money_of.holdings} positions"
+    )
+
+    # Three different sentences, because "$0.00" has three different causes here
+    # and only one of them is a fact about the portfolio. No dividend rows at all
+    # means the transaction log has never carried one -- which is what a
+    # workspace of contributions and transfers looks like, and is not a portfolio
+    # that pays nothing.
+    if not money_of.dividends_seen:
+        span = "no dividends in the transaction log"
+    elif money_of.dividend_days < 300:
+        span = f"only {money_of.dividend_days} days of log so far"
+    else:
+        span = "trailing twelve months"
+
+    cash: float = money_of.value - money_of.invested
+    holds: str = f"{money_of.holdings} holdings"
+
+    if round(cash, 2):
+        holds = (
+            f"{holds}, plus "
+            f"{money(value=cash, currency=money_of.currency)} not in any position"
+        )
+
+    return (
+        f'<section><h2>Portfolio</h2><div class="tiles">'
+        f"{
+            _tile(
+                caption='Portfolio Value',
+                figure=money(value=money_of.value, currency=money_of.currency),
+                sub=holds,
+            )
+        }"
+        f"{
+            _tile(
+                caption='Portfolio Gain $',
+                figure='—'
+                if money_of.gain is None
+                else signed(value=money_of.gain, currency=money_of.currency),
+                sub=partial,
+                tone=tone,
+            )
+        }"
+        f"{
+            _tile(
+                caption='Portfolio Gain %',
+                figure=percent(value=money_of.growth) or '—',
+                sub='' if money_of.growth is None else 'since purchase',
+                tone=tone,
+            )
+        }"
+        f"{
+            _tile(
+                caption='Yearly Dividend Income',
+                figure=money(
+                    value=money_of.dividend_income, currency=money_of.currency
+                ),
+                sub=span,
+            )
+        }"
+        f"{
+            _tile(
+                caption='Portfolio Dividend Yield',
+                # A dash rather than 0.00% when nothing was found. A yield of
+                # zero is a claim about the holdings; no dividend rows at all is
+                # a claim about the log, and the tile beside this one is already
+                # making the second.
+                figure=(
+                    percent(value=money_of.dividend_yield).lstrip('+') or '—'
+                    if money_of.dividends_seen
+                    else '—'
+                ),
+                sub=(
+                    'income over what the positions are worth'
+                    if money_of.dividends_seen
+                    else 'nothing to compute it from'
+                ),
+            )
+        }"
+        f"{
+            _tile(
+                caption='Win / Loss',
+                figure=money(value=money_of.total_win, currency=money_of.currency),
+                sub=f'against {
+                    money(value=abs(money_of.total_loss), currency=money_of.currency)
+                } of losses',
+            )
+        }"
+        f"</div></section>"
     )
 
 
@@ -425,6 +633,172 @@ def _units(move: Movement) -> str:
     return f" · {move.units_delta:+,.4f} units"
 
 
+def _units_of(value: float | None) -> str:
+    """
+    A share count, at the precision a fractional-share world needs.
+    :param value: The count
+    :return: The rendered count, or a dash
+    :rtype: str
+    """
+
+    return "—" if value is None else f"{value:,.3f}"
+
+
+def _holdings(rows: Iterable[Position]) -> str:
+    """
+    Every position held, laid out the way the operator's own sheet lays them out.
+
+    The whole book rather than the top movers, which is the difference between
+    this and the mover tables above it. Those answer "what changed"; this answers
+    "what do I own", and the second question is not a longer version of the
+    first -- a position that has not moved is absent from one and belongs in the
+    other.
+
+    A dash wherever the source gave nothing, never a zero. That is most of the
+    table for TSP and the scraped 529: no cost basis means no purchase price, no
+    gain, no growth and no yield on cost, and six columns of 0.00 across those
+    rows would read as a portfolio that has made exactly nothing rather than one
+    whose cost nobody recorded.
+    :param rows: Every position, largest first
+    :return: The section
+    :rtype: str
+    """
+
+    held: list[Position] = list(rows)
+
+    if not held:
+        return (
+            '<section><h2>Holdings</h2><p class="empty">'
+            "no positions recorded yet</p></section>"
+        )
+
+    body: str = "".join(
+        f"<tr><td>"
+        f'<span class="who">{escape(s=row.symbol)}</span>'
+        f'<div class="broker">{escape(s=_under(row=row))}'
+        f"{_bought(row=row)}</div></td>"
+        f'<td class="num">{escape(s=_units_of(value=row.units))}</td>'
+        f'<td class="num">{
+            escape(s=money(value=row.purchase_price, currency=row.currency))
+        }</td>'
+        f'<td class="num">{
+            escape(s=money(value=row.price, currency=row.currency))
+        }</td>'
+        f'<td class="num">{
+            escape(s=money(value=row.cost_basis, currency=row.currency))
+        }</td>'
+        f'<td class="num">{
+            escape(s=money(value=row.value, currency=row.currency))
+        }</td>'
+        f'<td class="num {_tone(value=row.day_change)}">'
+        f"{escape(s=percent(value=row.day_change)) or '—'}</td>"
+        f'<td class="num {_tone(value=row.gain)}">'
+        f"{
+            '—'
+            if row.gain is None
+            else escape(s=signed(value=row.gain, currency=row.currency))
+        }</td>"
+        f'<td class="num {_tone(value=row.growth)}">'
+        f"{escape(s=percent(value=row.growth)) or '—'}</td>"
+        f'<td class="num">{mini(values=row.trend)}</td>'
+        f'<td class="num wl {_win_class(row=row)}">{_win_label(row=row)}</td></tr>'
+        for row in held
+    )
+
+    return (
+        f'<section><h2>Holdings</h2><div class="scroll"><table>'
+        f'<tr><th>Symbol</th><th class="num">Shares</th>'
+        f'<th class="num">Purchase</th><th class="num">Price</th>'
+        f'<th class="num">Cost</th><th class="num">Market Value</th>'
+        f'<th class="num">Day</th><th class="num">Gain</th>'
+        f'<th class="num">Growth</th><th class="num">Trend</th>'
+        f'<th class="num">W/L</th></tr>'
+        f"{body}</table></div></section>"
+    )
+
+
+def _bought(row: Position) -> str:
+    """
+    The note that says a position's quantity moved since the last brief.
+
+    The one thing the position movers list said that this table does not. A row
+    whose value rose on an unchanged count was repriced by the market; one whose
+    count rose was bought, and only the second is an event. Rendered only when
+    it happened, so an ordinary morning carries no note.
+    :param row: The position
+    :return: The note, or ""
+    :rtype: str
+    """
+
+    if row.units_delta is None:
+        return ""
+
+    return f" · {row.units_delta:+,.4f} units"
+
+
+def _under(row: Position) -> str:
+    """
+    The line under a symbol: its asset class, or which account holds it.
+
+    The class when one was declared, because that is the sheet's Industry column
+    and the more useful of the two. The account otherwise -- rather than
+    "(unclassified)" repeated down the whole table, which on a workspace with no
+    [ALLOCATION] block is every row saying the same non-fact while the genuinely
+    useful "which account is this in" goes unshown.
+    :param row: The position
+    :return: The subtitle
+    :rtype: str
+    """
+
+    if row.asset_class != UNCLASSIFIED:
+        return row.asset_class
+
+    return row.account or row.broker
+
+
+def _tone(value: float | None) -> str:
+    """
+    Which class a possibly-absent number should wear.
+
+    "flat" rather than "up" for an absent one. direction() reads None as falsy
+    and would colour it green, which is the wrong half of a red-green pair to
+    default to when the answer is that nobody knows.
+    :param value: The number
+    :return: "up", "down" or "flat"
+    :rtype: str
+    """
+
+    return "flat" if value is None else direction(value=value)
+
+
+def _win_label(row: Position) -> str:
+    """
+    The sheet's W/L flag, with a third answer it does not have.
+    :param row: The position
+    :return: "W", "L" or a dash
+    :rtype: str
+    """
+
+    if row.winning is None:
+        return "—"
+
+    return "W" if row.winning else "L"
+
+
+def _win_class(row: Position) -> str:
+    """
+    How to colour that flag.
+    :param row: The position
+    :return: "up", "down" or "flat"
+    :rtype: str
+    """
+
+    if row.winning is None:
+        return "flat"
+
+    return "up" if row.winning else "down"
+
+
 def _transactions(rows: Iterable[TransactionRow]) -> str:
     """
     Everything recorded since the last brief.
@@ -568,18 +942,18 @@ def render(brief: Brief, now: dt.datetime) -> str:
     body: list[str] = [
         _banner(brief=brief),
         _headline(brief=brief),
+        _tiles(brief=brief),
         _movers(
             title="Accounts",
             moves=brief.account_movers,
             currency=brief.currency,
             empty=compared,
         ),
-        _movers(
-            title="Positions",
-            moves=brief.holding_movers,
-            currency=brief.currency,
-            empty=compared,
-        ),
+        # The full book rather than the position movers this used to carry. The
+        # mover list answered "what changed" and the headline above already does
+        # that for the portfolio; a reader who wants to know what they own was
+        # being shown a filtered subset of it.
+        _holdings(rows=brief.positions),
         _transactions(rows=brief.new_transactions),
         _allocation(rows=brief.allocation),
         _stale(rows=brief.stale),

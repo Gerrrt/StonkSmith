@@ -72,6 +72,86 @@ was actually read on get a dot. A stretch of carried dates is a straight line dr
 between two readings, and marking the readings is what stops the line claiming to be a
 measurement along its whole length.
 
+## What it is worth, and what it cost
+
+The headline answers *what moved since I last looked*. The tiles under it answer a
+different question — *what have I made since I bought it* — and that one depends on a
+field most sources here do not report.
+
+**Cost basis is the fault line.** SnapTrade states one. A Microsoft 401k, TSP and a
+scraped 529 do not, and every figure that divides by it is therefore absent for those
+positions: purchase price, gain, growth, yield on cost, the win/loss flag. They render as
+a dash.
+
+The tempting bug is to let an absent cost become `0.0`. It does not raise, it does not
+look wrong, and it reports a holding that has made exactly nothing as though somebody had
+checked — next to what is often the largest number on the page. So absent stays absent all
+the way to the screen, and where a total *is* summed over the subset that has a cost, the
+tile says so:
+
+> Portfolio Gain $ — ▲ $2,089.89
+> across 9 of 12 positions; 3 report no cost basis
+
+Same reasoning as the observed/carried split one section up. A real number about part of a
+portfolio, presented as the portfolio's number, is the failure this project keeps finding.
+
+### Portfolio Value is the account total, not the sum of the positions
+
+Those are different numbers and both are correct. Accounts include whatever is sitting
+uninvested in a settlement balance and in no holding; positions do not. `Portfolio` has
+carried `total()` and `invested()` apart for exactly this reason.
+
+The tile reports the account total, so it agrees with the headline directly above it, and
+names the remainder rather than hiding it — *"12 holdings, plus $369.50 not in any
+position"*. A page carrying two figures a few inches apart, both fairly called "portfolio
+value", is one the reader has to reconcile by hand.
+
+Dividend **yield**, by contrast, divides by the position total: a yield is what the
+holdings pay on the holdings, and including idle cash would report a portfolio yielding
+less the more of it is waiting to be invested.
+
+### Dividends come from the transaction log, not from a quote feed
+
+Trailing twelve months of `DIVIDEND` / `DISTRIBUTION` rows, cut on the source's own
+`processed_on` rather than on `first_seen` — a workspace rebuilt this morning saw every
+movement today, so a window cut on the watermark would admit everything or nothing.
+
+Worth knowing what this is not. A spreadsheet's "Dividend" column is usually an annual
+dividend *per share* from a market data feed; this is money actually received, as recorded.
+A portfolio whose sources report contributions and transfers but never itemise a dividend
+will read `$0.00` — and the tile says **"no dividends in the transaction log"** rather than
+`0.00%`, because a log that has never carried one is not a portfolio that pays nothing.
+Where the log is younger than a year it says how many days it covers, since a low yield and
+a short history look identical in the number alone.
+
+### The holdings table
+
+Every position, not the top movers — the difference between *what changed* and *what do I
+own*. A position that has not moved is absent from one and belongs in the other.
+
+Columns follow the operator's own sheet: Symbol, Shares, Purchase, Price, Cost, Market
+Value, Day, Gain, Growth, Trend, W/L. Two notes on the ends of it:
+
+- **Day** is the move between this position's last two readings, from the holdings history
+  rather than the account series. With the opening-bell agent running there are two
+  readings most weekdays, so it is an intraday move as often as an overnight one.
+- **Trend** is a per-position sparkline over that same history. It needs
+  `read_workspace(with_history=True)`, which is off by default and which only the brief
+  asks for: it is one row per position per snapshot, an order of magnitude more than the
+  current positions, and the sheet sync would otherwise pay for it on every broker run.
+- **W/L** is three-valued. A position with no cost basis is neither a win nor a loss, and
+  defaulting it to "L" would flag every 401k, TSP and 529 holding as losing money.
+
+A position whose *unit count* moved since the last brief carries a note under its symbol.
+That is the one thing the old position-movers list said that this table does not: a row
+whose value rose on an unchanged count was repriced by the market, and one whose count rose
+was bought. Only the second is an event.
+
+The **Industry** column has no equivalent here. No source StonkSmith reads states a sector,
+so the nearest thing is the `[ALLOCATION] asset_classes` table — declare symbols there and
+they appear under each holding; leave it blank and the row shows which account holds the
+position instead.
+
 ## Since when
 
 **The baseline is the last brief you were shown, not the last scrape.**
@@ -178,8 +258,29 @@ slice tells a reader nothing, and an empty card takes up the space a reader scan
 
 ## Scheduling it
 
-`scripts/com.stonksmith.morning.plist` and `scripts/stonksmith-morning.sh`, installed the
-same way as the nightly pair:
+Three agents now share a weekday, and on Pacific time they land like this:
+
+| Local | Agent | What it does |
+| --- | --- | --- |
+| 06:30 | `com.stonksmith.morning` | renders the brief on last night's close |
+| 06:35 | `com.stonksmith.open` | scrapes, five minutes after the 06:30 ET open |
+| 18:30 | `com.stonksmith.nightly` | scrapes, after TSP has published |
+
+**The five minutes between the first two are load-bearing.** The brief reads every database
+in the workspace and the opening run writes them; fired together, the brief reports on a
+workspace caught mid-write — some brokers updated, some not, and a headline delta assembled
+across the seam. It would not error and it would not look wrong. Brief first is also
+correct on its own terms, since a morning brief reports on last night's close, which is
+exactly what the databases hold until the opening scrape touches them.
+`tests/test_open_agent.py` pins the ordering.
+
+**The close run stays at 18:30 rather than moving to the 13:00 bell**, and that is not
+laziness about the schedule. TSP publishes the day's share prices in the evening, so a
+13:00 Pacific run would record yesterday's price as today's — every day, with nothing
+saying so. `scripts/stonksmith.cron:120` is the record for the 18:30 choice, and the same
+test refuses a close run earlier than 17:00.
+
+Installed the same way as the nightly pair:
 
 ```bash
 mkdir -p ~/Library/LaunchAgents

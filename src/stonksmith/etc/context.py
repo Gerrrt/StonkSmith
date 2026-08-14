@@ -171,6 +171,12 @@ class PortfolioDbProtocol(Protocol):
     shape. get_account_history is what get_current_accounts would be with its
     newest-snapshot restriction taken off, and a reader that could not ask for
     it would render a net worth tab with today on it and nothing behind.
+
+    And once more for get_holdings_history, which stands to get_current_holdings
+    exactly as get_account_history stands to get_current_accounts: the same
+    columns with the newest-snapshot restriction lifted. The brief's per-position
+    trend needs it, and a reader that could not ask would be left inferring a
+    position's history from the account totals that contain it.
     """
 
     def get_current_accounts(self) -> list[tuple[Any, ...]]: ...
@@ -180,6 +186,8 @@ class PortfolioDbProtocol(Protocol):
     def get_current_transactions(self) -> list[tuple[Any, ...]]: ...
 
     def get_account_history(self) -> list[tuple[Any, ...]]: ...
+
+    def get_holdings_history(self) -> list[tuple[Any, ...]]: ...
 
 
 class Context:

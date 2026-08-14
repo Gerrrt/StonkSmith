@@ -45,6 +45,7 @@ from stonksmith.etc.portfolio import (
     NetWorthRow,
     Portfolio,
     TransactionRow,
+    as_date,
     stale_accounts,
     stale_cutoff,
     stale_reason,
@@ -190,6 +191,163 @@ class Allocation:
     was: float | None = None
 
 
+#: How far back the dividend figures reach. A trailing year rather than a
+#: calendar one, so the number means the same thing every morning instead of
+#: collapsing to nothing each January and climbing back over twelve months.
+DIVIDEND_DAYS: int = 365
+
+#: What a transaction type has to contain to count as a dividend. Matched
+#: case-insensitively on a substring because the sources disagree and always
+#: will -- SnapTrade says "DIVIDEND", a 529 statement says "Dividend Reinvest",
+#: and a reinvested dividend is still income received.
+DIVIDEND_MARKERS: tuple[str, ...] = ("DIVIDEND", "DIV ", "DISTRIBUTION")
+
+
+@dataclass(frozen=True, slots=True)
+class Position:
+    """
+    One holding, with everything a performance table wants to say about it.
+
+    Wider than HoldingRow on purpose, and a different kind of thing. That one is
+    what a source reported; this is what follows from it -- gain, growth, yield,
+    the day's move. Keeping them apart is what stops a derived number from being
+    mistaken for a reported one, which matters most for the fields that are
+    routinely absent: a position whose source never gave a cost basis has no
+    gain, and no amount of arithmetic will produce one.
+    """
+
+    symbol: str
+    broker: str
+    account: str
+    name: str | None = None
+
+    #: From the operator's [ALLOCATION] table, or UNCLASSIFIED. The closest
+    #: thing to the sheet's "Industry" column that any source here can support:
+    #: no broker reports a sector, so this is what was declared rather than what
+    #: was looked up.
+    asset_class: str = UNCLASSIFIED
+
+    units: float | None = None
+    price: float | None = None
+    value: float | None = None
+    currency: str = "USD"
+
+    #: What was paid, where the source says. SnapTrade does; TSP and the scraped
+    #: 529 do not, and every field below that divides by it is None for them.
+    cost_basis: float | None = None
+
+    #: cost_basis / units -- the sheet's "Purchase" column. Derived rather than
+    #: reported: no source states an average purchase price, and inverting the
+    #: two numbers that are stated is exact.
+    purchase_price: float | None = None
+
+    gain: float | None = None
+    growth: float | None = None
+
+    #: The move since the previous snapshot of this same position, as a
+    #: fraction. None when there is no earlier snapshot to compare against --
+    #: which is every position on the first run, and is not a zero-percent day.
+    day_change: float | None = None
+
+    #: Trailing-twelve-month income attributed to this position, from the
+    #: transaction log rather than from a quoted yield.
+    div_income: float | None = None
+    current_yield: float | None = None
+    yield_on_cost: float | None = None
+
+    #: The value series behind this position, oldest first, for the trend.
+    trend: tuple[float, ...] = ()
+
+    #: How the quantity moved since the last brief, where it moved at all.
+    #:
+    #: On the position rather than in a movers list, which is where it used to
+    #: live. The list was replaced by the full holdings table, and this is the
+    #: one thing it said that the table does not: a row whose value rose on an
+    #: unchanged count was repriced by the market, and one whose count rose was
+    #: bought. Those are different events and the second is the one worth a
+    #: reader's morning. None when nothing moved, so an ordinary repricing
+    #: carries no note -- a "0 units" line on every row would bury the handful
+    #: that are trades.
+    units_delta: float | None = None
+
+    @property
+    def winning(self) -> bool | None:
+        """
+        Whether this position is ahead of what was paid for it.
+
+        Three-valued rather than two. A position with no cost basis is neither a
+        win nor a loss, and the sheet's W/L column has no spelling for that --
+        so None is rendered as a dash rather than defaulting to "L", which would
+        report every TSP and 529 holding as losing money.
+        :return: True, False, or None where nothing was paid that anyone recorded
+        :rtype: bool | None
+        """
+
+        return None if self.gain is None else self.gain >= 0
+
+
+@dataclass(frozen=True, slots=True)
+class Performance:
+    """
+    The portfolio as a whole: what it is worth, what it cost, what it earns.
+
+    The six-tile summary, and three fields that exist to keep it honest. ``cost``
+    is the sum over positions that *have* a cost basis, which on this workspace
+    is not all of them -- so ``priced`` and ``unpriced`` travel with it, and the
+    render states them. A gain computed over nine of twelve positions is a real
+    number about part of a portfolio, and presenting it as the portfolio's gain
+    is the same error the observed/carried split exists to prevent one screen up.
+    """
+
+    #: What the *accounts* say the money is -- the same number the headline
+    #: reports, deliberately. Summing the positions instead gives a different
+    #: figure, and a page carrying two numbers both fairly called "portfolio
+    #: value" is one a reader has to reconcile by hand.
+    value: float = 0.0
+    currency: str = "USD"
+
+    #: What the positions account for. Lower than ``value`` by whatever is
+    #: sitting uninvested in a balance and in no holding, which is a real fact
+    #: about the portfolio rather than a discrepancy -- so both are carried and
+    #: the render states the difference instead of hiding it.
+    invested: float = 0.0
+
+    cost: float | None = None
+    gain: float | None = None
+    growth: float | None = None
+
+    #: How many positions carried a cost basis, and how many did not.
+    priced: int = 0
+    unpriced: int = 0
+
+    holdings: int = 0
+
+    dividend_income: float = 0.0
+    dividend_yield: float | None = None
+
+    #: How many days of transaction log the dividend figure actually stands on,
+    #: capped at DIVIDEND_DAYS. A "yearly" income built from four months of log
+    #: is a quarter of a year's dividends called a year's, and the only way to
+    #: tell is to say so.
+    dividend_days: int = 0
+
+    #: Whether any dividend was found at all.
+    #:
+    #: Distinct from ``dividend_income == 0`` because the two mean different
+    #: things and the render says different words for them. Zero income across a
+    #: year of log is a portfolio that pays nothing. No dividend rows *at all* is
+    #: a transaction log that has never carried one -- which is this workspace,
+    #: where the sources report contributions and transfers and the income
+    #: arrives as a reinvestment nobody itemised. The second is not a fact about
+    #: the money and must not be rendered as one.
+    dividends_seen: bool = False
+
+    #: The sheet's Total Win / Total Loss pair: gains and losses summed
+    #: separately rather than netted, because the net hides both.
+    total_win: float = 0.0
+    total_loss: float = 0.0
+
+
 @dataclass(frozen=True, slots=True)
 class Brief:
     """
@@ -234,6 +392,12 @@ class Brief:
 
     #: The trailing series the sparkline is drawn from: (date, total, observed).
     series: tuple[tuple[str, float, bool], ...] = ()
+
+    #: Every position held, largest first. Not a movers list -- the whole book.
+    positions: tuple[Position, ...] = ()
+
+    #: What the book is worth, cost and earns.
+    performance: Performance = field(default_factory=Performance)
 
 
 def totals_by_date(
@@ -578,6 +742,122 @@ def watermark(rows: Iterable[TransactionRow]) -> str:
     return max((row.first_seen for row in rows if row.first_seen), default="")
 
 
+def _is_dividend(tx_type: str | None) -> bool:
+    """
+    Whether a movement is income received rather than a trade or a transfer.
+    :param tx_type: What the source called it
+    :return: True when it looks like a dividend or distribution
+    :rtype: bool
+    """
+
+    if not tx_type:
+        return False
+
+    upper: str = tx_type.upper()
+
+    return any(marker in upper for marker in DIVIDEND_MARKERS)
+
+
+def dividends(
+    rows: Iterable[TransactionRow], today: dt.date, days: int = DIVIDEND_DAYS
+) -> tuple[dict[str, float], int]:
+    """
+    Trailing income per symbol, and how much log that figure actually stands on.
+
+    Two returns rather than one, and the second is the point. A workspace whose
+    transaction log begins four months ago produces a perfectly good sum that is
+    four months of dividends -- and calling it "yearly income" makes it look like
+    a portfolio yielding a third of what it does. Nothing in the number itself
+    reveals that, so the span comes back beside it and the render says so.
+
+    Attributed by symbol, so a movement the source recorded without one is
+    counted in the portfolio total and against no position. That is the honest
+    place for it: the money was received, and which holding paid it is a fact
+    nobody wrote down.
+    :param rows: Every movement the workspace holds
+    :param today: The day the window is measured back from
+    :param days: How far back to reach
+    :return: (symbol to income, days of log the figure covers)
+    :rtype: tuple[dict[str, float], int]
+    """
+
+    since: dt.date = today - dt.timedelta(days=days)
+    income: dict[str, float] = {}
+    earliest: dt.date | None = None
+
+    for row in rows:
+        # processed_on rather than first_seen. The watermark question is "has
+        # this reader seen it", which first_seen answers; this one is "when was
+        # the money paid", and only the source's own date knows that. A window
+        # cut on first_seen would drop every dividend on the morning after a
+        # workspace was rebuilt, because they were all first seen today.
+        paid: dt.date | None = as_date(as_of=row.processed_on or row.traded_on)
+
+        if (
+            paid is None
+            or paid < since
+            or paid > today
+            or not _is_dividend(tx_type=row.tx_type)
+        ):
+            continue
+
+        if earliest is None or paid < earliest:
+            earliest = paid
+
+        income[row.symbol or ""] = income.get(row.symbol or "", 0.0) + (
+            row.value or 0.0
+        )
+
+    # Measured from the oldest dividend actually seen, not from the oldest row
+    # in the log. A log that reaches back two years but whose first dividend
+    # landed last month covers a month of income, and the span that matters is
+    # the one the number was built from.
+    covered: int = 0 if earliest is None else min(days, (today - earliest).days)
+
+    return income, covered
+
+
+def trends(rows: Iterable[HoldingRow]) -> dict[tuple[str, str, str], list[float]]:
+    """
+    Each position's value series, oldest first.
+
+    Built from the holdings history rather than from the account series, because
+    a position is not an account: two holdings inside one account move
+    differently and summing them would draw the account's line under both.
+
+    Snapshots are keyed on ``scraped_at`` rather than on the date, so two runs
+    on one day are two points here -- which is the opposite of what the net worth
+    axis does, and deliberate. That axis exists so every date sums the same
+    accounts, which requires one point per date. This is one position's own
+    history, where nothing has to line up with anything, so an intraday mark is
+    simply another reading.
+    :param rows: Every position from every snapshot, oldest first
+    :return: Identity to its value series
+    :rtype: dict[tuple[str, str, str], list[float]]
+    """
+
+    series: dict[tuple[str, str, str], dict[str, float]] = {}
+
+    for row in rows:
+        if row.value is None:
+            continue
+
+        when: str = row.scraped_at or row.as_of or ""
+
+        if not when:
+            continue
+
+        # Summed within a reading, for mark_holdings' reason: two rows of the
+        # same fund in one snapshot are two rows to the database and one holding
+        # to a reader.
+        marks: dict[str, float] = series.setdefault(holding_key(row=row), {})
+        marks[when] = marks.get(when, 0.0) + row.value
+
+    return {
+        key: [marks[when] for when in sorted(marks)] for key, marks in series.items()
+    }
+
+
 def _series(
     totals: dict[str, float], rows: Iterable[NetWorthRow], keep: int
 ) -> tuple[tuple[str, float, bool], ...]:
@@ -686,6 +966,198 @@ def significant(moves: Iterable[Movement], limit: int) -> tuple[Movement, ...]:
     return tuple(moves)[:limit]
 
 
+def _ratio(top: float | None, bottom: float | None) -> float | None:
+    """
+    One number over another, where that means anything.
+    :param top: The numerator
+    :param bottom: The denominator
+    :return: The ratio, or None when there is nothing to divide by
+    :rtype: float | None
+    """
+
+    if top is None or not bottom:
+        return None
+
+    return top / bottom
+
+
+def positions(
+    portfolio: Portfolio,
+    classes: dict[str, str],
+    income: dict[str, float],
+    history: dict[tuple[str, str, str], list[float]],
+    baseline: dict[tuple[str, str, str], Mark] | None = None,
+) -> list[Position]:
+    """
+    Every holding, with what follows from what the source reported.
+
+    Positions sharing an identity are folded together first, on mark_holdings'
+    reasoning -- two rows of the same fund in one account are one holding to a
+    reader, and a table listing them twice invites the sum to be done by eye and
+    got wrong.
+
+    Everything derived here divides by something that may be absent, and every
+    one of those answers None rather than zero. A position whose source never
+    stated a cost basis has no gain, no growth, no purchase price and no yield
+    on cost; rendering those as 0.00 would report a holding that has made
+    exactly nothing, which is a claim, rather than a holding nobody knows the
+    cost of, which is the truth.
+    :param portfolio: What the workspace holds
+    :param classes: Symbol to asset class, from the config
+    :param income: Symbol to trailing dividend income
+    :param history: Identity to value series, for the trend
+    :param baseline: What each position held when the last brief ran, for the
+        units note. None on a first brief, where nothing can be compared
+    :return: One entry per holding, largest value first
+    :rtype: list[Position]
+    """
+
+    marks: dict[tuple[str, str, str], Mark] = baseline or {}
+    folded: dict[tuple[str, str, str], list[HoldingRow]] = {}
+
+    for row in portfolio.holdings:
+        folded.setdefault(holding_key(row=row), []).append(row)
+
+    built: list[Position] = []
+
+    for key, rows in folded.items():
+        first: HoldingRow = rows[0]
+        units: float | None = _sum(values=[row.units for row in rows])
+        value: float | None = _sum(values=[row.value for row in rows])
+        cost: float | None = _sum(values=[row.cost_basis for row in rows])
+        gain: float | None = None if cost is None or value is None else value - cost
+        trend: list[float] = history.get(key, [])
+        paid: float | None = income.get(key[2])
+
+        # None rather than the whole count when there is no baseline. A first
+        # brief has nothing to compare against, and reporting every holding as
+        # newly bought is the invented-change failure the state machine exists
+        # to prevent one level up.
+        was: Mark | None = marks.get(key)
+        moved: float | None = (
+            None
+            if was is None or was.units is None or units is None
+            else (units - was.units) or None
+        )
+
+        built.append(
+            Position(
+                symbol=key[2] or "(no symbol)",
+                broker=first.broker,
+                account=first.account,
+                name=first.name,
+                asset_class=classes.get(key[2], UNCLASSIFIED),
+                units=units,
+                # The price the source stated, not value/units. They agree when
+                # both are given, and where they disagree the source's own
+                # number is the one it stands behind.
+                price=first.price,
+                value=value,
+                currency=first.currency,
+                cost_basis=cost,
+                purchase_price=_ratio(top=cost, bottom=units),
+                gain=gain,
+                growth=_ratio(top=gain, bottom=cost),
+                # From this position's own last two readings. None on a single
+                # reading, which is not a flat day -- it is a position nobody has
+                # measured twice.
+                day_change=(
+                    _ratio(top=trend[-1] - trend[-2], bottom=trend[-2])
+                    if len(trend) >= 2
+                    else None
+                ),
+                div_income=paid,
+                current_yield=_ratio(top=paid, bottom=value),
+                yield_on_cost=_ratio(top=paid, bottom=cost),
+                trend=tuple(trend),
+                units_delta=moved,
+            )
+        )
+
+    return sorted(built, key=lambda held: held.value or 0.0, reverse=True)
+
+
+def _sum(values: Iterable[float | None]) -> float | None:
+    """
+    Add what was given, keeping "nobody said" distinct from "zero".
+
+    None when *nothing* in the group carried a number, and the sum of whichever
+    did otherwise. The asymmetry is deliberate: a fund reported in two lots where
+    only one states a cost basis has a partly-known cost, and reporting the half
+    that is known is better than discarding it -- but a fund where neither lot
+    states one has no cost at all, and a 0.0 there would become a gain equal to
+    the whole position.
+    :param values: The numbers, any of which may be absent
+    :return: Their sum, or None when every one was absent
+    :rtype: float | None
+    """
+
+    given: list[float] = [value for value in values if value is not None]
+
+    return sum(given) if given else None
+
+
+def performance(
+    held: Iterable[Position],
+    income: dict[str, float],
+    covered: int,
+    currency: str,
+    total: float,
+) -> Performance:
+    """
+    The six-tile summary, and the fields that keep it honest.
+    :param held: Every position
+    :param income: Symbol to trailing dividend income
+    :param covered: How many days of log the income figure stands on
+    :param currency: The currency to report in
+    :param total: What the accounts say the money is, which is not what the
+        positions sum to -- the difference is uninvested cash
+    :return: The summary
+    :rtype: Performance
+    """
+
+    rows: list[Position] = [row for row in held if row.currency == currency]
+    invested: float = sum(row.value or 0.0 for row in rows)
+
+    priced: list[Position] = [row for row in rows if row.cost_basis is not None]
+    cost: float | None = (
+        sum(row.cost_basis or 0.0 for row in priced) if priced else None
+    )
+    gain: float | None = (
+        None if cost is None else sum(row.gain or 0.0 for row in priced)
+    )
+
+    # Every dividend in the window, including any the source recorded without a
+    # symbol -- that money was received whether or not anyone wrote down which
+    # holding paid it, and a portfolio total that dropped it would be short.
+    earned: float = sum(income.values())
+
+    return Performance(
+        value=total,
+        invested=invested,
+        currency=currency,
+        cost=cost,
+        gain=gain,
+        growth=_ratio(top=gain, bottom=cost),
+        priced=len(priced),
+        unpriced=len(rows) - len(priced),
+        holdings=len(rows),
+        dividend_income=earned,
+        # Over what the positions are worth rather than over the account total.
+        # A yield is what the holdings pay on the holdings; dividing by a figure
+        # that includes uninvested cash would report a portfolio yielding less
+        # the more of it is sitting in a settlement balance.
+        dividend_yield=_ratio(top=earned, bottom=invested),
+        dividend_days=covered,
+        dividends_seen=bool(income),
+        # Summed separately rather than netted. A book that is $4,331 ahead on
+        # eight positions and $507 behind on one is a different book from one
+        # quietly $3,824 ahead overall, and the net is the number that hides it.
+        total_win=sum(row.gain or 0.0 for row in priced if (row.gain or 0.0) > 0),
+        total_loss=sum(row.gain or 0.0 for row in priced if (row.gain or 0.0) < 0),
+    )
+
+
 def build_brief(
     portfolio: Portfolio,
     baseline: Baseline | None,
@@ -733,6 +1205,16 @@ def build_brief(
         if row.date == as_of and row.currency == currency
     ]
 
+    classes: dict[str, str] = get_asset_classes()
+    income, covered = dividends(rows=portfolio.transactions, today=today)
+    held: list[Position] = positions(
+        portfolio=portfolio,
+        classes=classes,
+        income=income,
+        history=trends(rows=portfolio.holdings_history),
+        baseline=since.holdings if since.taken_on else None,
+    )
+
     return Brief(
         state=state,
         as_of=as_of,
@@ -775,13 +1257,21 @@ def build_brief(
         allocation=tuple(
             allocation_breakdown(
                 rows=portfolio.holdings,
-                classes=get_asset_classes(),
+                classes=classes,
                 baseline=since.holdings,
             )
         ),
         stale=_stale_pairs(portfolio=portfolio, today=today),
         unreadable=portfolio.unreadable,
         series=_series(totals=totals, rows=portfolio.net_worth, keep=keep),
+        positions=tuple(held),
+        performance=performance(
+            held=held,
+            income=income,
+            covered=covered,
+            currency=currency,
+            total=total,
+        ),
     )
 
 

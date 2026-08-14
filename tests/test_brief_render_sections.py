@@ -18,7 +18,7 @@ import datetime as dt
 import unittest
 
 from config_isolation import UserConfigMixin
-from stonksmith.etc.brief import Allocation, Brief, BriefState, Movement
+from stonksmith.etc.brief import Allocation, Brief, BriefState, Movement, Position
 from stonksmith.etc.brief_html import money, percent, render, signed, sparkline
 from stonksmith.etc.portfolio import CARRIED, OBSERVED
 
@@ -238,15 +238,19 @@ class TheSectionsAppearOnlyWhenEarned(UserConfigMixin, unittest.TestCase):
         # The line between a position the market repriced and one that was
         # bought. A "0 units" note on every repriced row would bury the handful
         # that are events.
+        #
+        # On the holdings row rather than in a movers list, which is where this
+        # lived until the full table replaced that section. The note is the one
+        # thing the list said that the table does not, so it moved rather than
+        # going away -- and this test moved with it rather than being deleted.
         bought: str = render(
             brief=_brief(
-                holding_movers=(
-                    Movement(
-                        label="VTI",
+                positions=(
+                    Position(
+                        symbol="VTI",
                         broker="ally",
-                        before=900.0,
-                        after=1000.0,
-                        delta=100.0,
+                        account="Ally Invest",
+                        value=1000.0,
                         units_delta=2.0,
                     ),
                 )
@@ -255,13 +259,12 @@ class TheSectionsAppearOnlyWhenEarned(UserConfigMixin, unittest.TestCase):
         )
         repriced: str = render(
             brief=_brief(
-                holding_movers=(
-                    Movement(
-                        label="VTI",
+                positions=(
+                    Position(
+                        symbol="VTI",
                         broker="ally",
-                        before=900.0,
-                        after=1000.0,
-                        delta=100.0,
+                        account="Ally Invest",
+                        value=1000.0,
                         units_delta=None,
                     ),
                 )
@@ -270,6 +273,9 @@ class TheSectionsAppearOnlyWhenEarned(UserConfigMixin, unittest.TestCase):
         )
 
         self.assertIn("+2.0000 units", bought)
+
+        # "Shares" is a column header on this table, so the assertion names the
+        # note's own wording rather than the word "units" anywhere on the page.
         self.assertNotIn("units", repriced)
 
 

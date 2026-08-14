@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    A LaunchAgent for the opening-bell run. macOS only; see docs/scheduling.md.
+
+    The third of three, and the last piece of a weekday that looks like this on
+    Pacific time:
+
+        06:30  com.stonksmith.morning   renders the brief on last night's close
+        06:35  com.stonksmith.open      scrapes, five minutes after the open
+        18:30  com.stonksmith.nightly   scrapes, after TSP has published
+
+    Ten scrapes a week rather than five. The five minute gap after the brief is
+    load-bearing: the brief reads every database in the workspace and this one
+    writes them, so firing them together would have the brief reporting on a
+    workspace caught mid-write.
+
+    The close run stays at 18:30 rather than moving to the 13:00 bell, and that
+    is deliberate. TSP publishes the day's share prices in the evening, so a
+    13:00 run would record yesterday's price as today's, every day, with nothing
+    saying so. 18:30 local is 21:30 Eastern here, comfortably past it.
+
+    Two values below have to be edited, the same two every agent in this
+    directory needs. There is no way for a committed file to know either.
+
+      ProgramArguments   the absolute path to scripts/stonksmith-open.sh in your
+                         checkout. The script finds the repository from its own
+                         location, so this is the only path to set.
+
+      PATH               must contain uv. `which uv` says where yours is; uv's
+                         installer puts it in ~/.local/bin, which is not in the
+                         list below, and launchd does no tilde expansion here.
+
+    Install, from the repository:
+
+        mkdir -p ~/Library/LaunchAgents
+        sed "s|/PATH/TO/StonkSmith|$PWD|; s|^\(.*<string>\)/usr/local/bin|\1$(dirname "$(command -v uv)"):/usr/local/bin|" \
+            scripts/com.stonksmith.open.plist > ~/Library/LaunchAgents/com.stonksmith.open.plist
+        launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.stonksmith.open.plist
+
+    `launchctl bootout gui/$(id -u)/com.stonksmith.open` removes it, and
+    `launchctl kickstart -p gui/$(id -u)/com.stonksmith.open` runs it now rather
+    than waiting for the morning, which is how to test it.
+
+    gui/$(id -u) rather than `launchctl load` is the point of the whole file, as
+    it is for the nightly agent: it bootstraps into the GUI login session, which
+    is the context that can read the login keychain. SnapTrade and Schwab 529
+    both resolve a secret from there, and a keyring lookup outside that session
+    returns empty rather than erroring, so a system-level agent would report a
+    missing consumer key and a failed login rather than a permissions problem.
+
+    StartCalendarInterval fires on wake if the machine was asleep at the time.
+    A laptop shut at 06:35 is the ordinary case, not the exception.
+
+    One caveat this file cannot repeat often enough, and the runner spells out
+    at length: only SnapTrade carries new information at the open. TSP, the 529
+    and Ally all rest on a published close that does not exist yet at 06:35, so
+    their 06:35 marks repeat yesterday's numbers under a new timestamp. They
+    report their own as_of honestly, and reading a morning price into them is
+    the mistake to avoid.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stonksmith.open</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/PATH/TO/StonkSmith/scripts/stonksmith-open.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <!-- Weekdays, five minutes after the 06:30 Pacific open and five minutes
+         after the brief. Weekday 1 is Monday; 0 and 7 are both Sunday. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>35</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>35</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>35</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>35</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>35</integer></dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/stonksmith-open.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/stonksmith-open.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

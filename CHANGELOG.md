@@ -33,6 +33,41 @@ the two disagree.
   baseline are written owner-only inside an owner-only directory, on the same
   reasoning as the databases — a rendered brief states the portfolio total and
   every account behind it.
+- **Performance in the brief.** A six-tile summary — Portfolio Value, Gain $,
+  Gain %, Yearly Dividend Income, Dividend Yield, Win / Loss — and a full
+  holdings table with Shares, Purchase, Price, Cost, Market Value, Day, Gain,
+  Growth, a per-position trend sparkline and a W/L flag. Replaces the position
+  movers list: that answered "what changed", and the table answers "what do I
+  own", which is not a longer version of the same question.
+- A figure whose source reported nothing renders as a dash rather than zero.
+  Cost basis is the fault line — SnapTrade states one, a 401k, TSP and a scraped
+  529 do not — so purchase price, gain, growth, yield on cost and the win/loss
+  flag are absent on those rows, and the Gain tile states how many positions it
+  was summed over. An absent cost becoming `0.0` would report a holding that had
+  made exactly nothing, beside what is often the largest number on the page.
+- The Portfolio Value tile reports the **account** total, matching the headline
+  above it, and names the uninvested remainder ("plus $369.50 not in any
+  position") instead of quietly summing the positions to a different number.
+  Dividend yield still divides by the position total, because a yield is what
+  the holdings pay on the holdings.
+- Dividend income is trailing-twelve-month `DIVIDEND` / `DISTRIBUTION` rows from
+  the transaction log, cut on the source's `processed_on` rather than on
+  `first_seen`. A log that has never carried a dividend reports "no dividends in
+  the transaction log" rather than a 0.00% yield, and a log younger than a year
+  says how many days it covers.
+- `BrokerDatabase.get_holdings_history()` and `read_holdings_history()`, which
+  stand to the current-positions reads exactly as `get_account_history()` stands
+  to `get_current_accounts()` — the same columns with the newest-snapshot
+  restriction lifted. Behind `read_workspace(with_history=True)`, off by default:
+  it is one row per position per snapshot and only the brief's trend wants it.
+- **A second scrape every weekday.** `scripts/com.stonksmith.open.plist` and
+  `scripts/stonksmith-open.sh` run at 06:35 local, five minutes after the 06:30
+  Pacific open and five minutes after the brief — the brief reads every database
+  and the opening run writes them, so firing them together would report on a
+  workspace caught mid-write. Ten scrapes a week. The close run stays at 18:30
+  rather than moving to the 13:00 bell because TSP publishes in the evening, and
+  an afternoon run would record yesterday's share price as today's every day
+  with nothing saying so.
 
 ### Changed
 

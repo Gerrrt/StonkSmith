@@ -382,7 +382,13 @@ class StonkSmithDBMenu(cmd.Cmd):
             return
 
         now: dt.datetime = dt.datetime.now(tz=dt.UTC)
-        portfolio: Portfolio = read_workspace(workspace=self.workspace)
+        # with_history, unlike every other reader: the per-position trend needs
+        # every snapshot's positions rather than the newest one's, and this is
+        # the only consumer that wants them. The sheet sync deliberately does
+        # not ask.
+        portfolio: Portfolio = read_workspace(
+            workspace=self.workspace, with_history=True
+        )
         baseline: Baseline | None = read_baseline(path=baseline_path)
 
         brief: Brief = build_brief(

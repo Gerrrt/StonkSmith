@@ -1191,6 +1191,43 @@ class BrokerDatabase:
             ") ORDER BY a.source, a.display_name, h.position"
         )
 
+    def get_holdings_history(self) -> list[tuple[Any, ...]]:
+        """
+        Every position every snapshot ever held, carrying its account identity.
+
+        get_current_holdings above answers "what does each account hold now" by
+        restricting to one snapshot per account. This answers "what has each
+        account held", which is the same question with that restriction taken
+        off -- so it returns the *same fifteen columns in the same order*,
+        deliberately, and one projection loop in etc.portfolio serves both. The
+        same relationship get_account_history has to get_current_accounts, and
+        the same reason: two mappings would be two chances for a position to
+        appear under one name in a table and another in the chart beside it.
+
+        **Deliberately unlimited**, for get_account_history's reason. A trend
+        drawn from the newest five hundred rows is a trend over however much
+        history five hundred rows happens to cover, which changes as positions
+        are added and is not a fact about the portfolio.
+
+        Ordered oldest-first within each position rather than newest-first like
+        the log reads. What comes back here is a series, and a series is read in
+        the direction it was lived -- the same argument net_worth_history makes
+        about its own ordering.
+        :return: Rows of (account_key, position, symbol, fund_code, name, units,
+            price, value, principal, earnings, cost_basis, currency, as_of,
+            scraped_at, units_as_of), oldest snapshot first
+        :rtype: list[tuple[Any, ...]]
+        """
+
+        return self._select(
+            "SELECT a.account_key, h.position, h.symbol, h.fund_code, h.name, "
+            "h.units, h.price, h.value, h.principal, h.earnings, h.cost_basis, "
+            "h.currency, s.as_of, s.scraped_at, h.units_as_of FROM holdings h "
+            "JOIN account_snapshots s ON s.id = h.snapshot_id "
+            "JOIN accounts a ON a.id = s.account_id "
+            "ORDER BY a.source, a.display_name, s.scraped_at, s.id, h.position"
+        )
+
     def get_current_transactions(self) -> list[tuple[Any, ...]]:
         """
         Every movement this database holds, keyed the way the other two are.

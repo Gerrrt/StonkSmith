@@ -397,7 +397,11 @@ It reads the databases — no login, no browser, no network — renders one
 self-contained HTML file to `~/.stonksmith/reports/`, and opens it. A LaunchAgent
 at 06:30 on weekdays is what makes it a reminder rather than a file.
 
-Two things about it are worth knowing before you read one.
+It carries a net-worth headline with the overnight change, a six-tile portfolio
+summary, every holding with its cost, gain and trend, movements recorded since
+you last looked, asset-class drift, and anything that has gone stale.
+
+Three things about it are worth knowing before you read one.
 
 **The headline is built on the Net Worth series, so a broker that did not run is
 not a fall** — and the page says how much of the number was actually read this
@@ -410,6 +414,12 @@ brief covers the weekend, and a morning you skip is still covered by the next
 one — because a brief with nothing new to report deliberately does not advance
 its own baseline. Use `brief peek` to look a second time in one day without
 consuming that comparison.
+
+**A figure nobody reported stays a dash.** Cost basis is the fault line: SnapTrade
+states one and a 401k, TSP and a scraped 529 do not, so purchase price, gain,
+growth and the win/loss flag are absent on those rows rather than zero. Where a
+total *is* summed over the positions that have a cost, the tile says which — *"across
+9 of 12 positions; 3 report no cost basis"*.
 
 Both files it writes are owner-only; old reports are pruned to `[BRIEF] keep_days`.
 The whole design, the rule that keeps a skipped morning from erasing a day's

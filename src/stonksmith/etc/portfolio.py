@@ -254,9 +254,16 @@ _ISO_DATE: re.Pattern[str] = re.compile(pattern=ISO_DATE_PATTERN)
 STALE_DAYS: int = 7
 
 
-def _as_date(as_of: str | None) -> dt.date | None:
+def as_date(as_of: str | None) -> dt.date | None:
     """
     An As Of as a real date, or None when it is not one.
+
+    Public, unlike most of the helpers here, because a second module now needs
+    exactly this judgement and must not arrive at its own. The brief cuts its
+    dividend window on a source's date, and a window that admitted a spelling
+    the staleness rule rejects would count income the panel beside it calls
+    undated. A rule evaluated in two places is two chances for them to disagree
+    about the same row, which is the argument STALE_DAYS already makes.
 
     Two gates, and both are load-bearing.
 
@@ -310,7 +317,7 @@ def is_stale(as_of: str | None, cutoff: str) -> bool:
     normalize sorts above every real one and reads as fresher than today. The
     dashboard's QUERY has exactly this hole -- it is the same reason
     _date_cases() matches Processed On against ISO_DATE_PATTERN rather than
-    trusting an ordering -- and Python can close it here. _as_date is what
+    trusting an ordering -- and Python can close it here. as_date is what
     decides, because matching the shape is not the same as being a date.
     :param as_of: The date the source says the value is for
     :param cutoff: The oldest date that still counts as fresh, ISO
@@ -318,10 +325,10 @@ def is_stale(as_of: str | None, cutoff: str) -> bool:
     :rtype: bool
     """
 
-    if _as_date(as_of=as_of) is None:
+    if as_date(as_of=as_of) is None:
         return True
 
-    # Compared as text rather than as dates, because _as_date has already
+    # Compared as text rather than as dates, because as_date has already
     # guaranteed both are YYYY-MM-DD -- which is the form the dashboard's QUERY
     # compares, so the two cannot part company over an account.
     return (as_of or "") < cutoff
@@ -345,7 +352,7 @@ def stale_reason(as_of: str | None, today: dt.date) -> str:
     if not as_of:
         return "no as-of date"
 
-    dated: dt.date | None = _as_date(as_of=as_of)
+    dated: dt.date | None = as_date(as_of=as_of)
 
     if dated is None:
         return f"an as-of date nothing could read: {as_of!r}"
@@ -794,6 +801,17 @@ class Portfolio:
     #: than one that used to be fourth.
     net_worth: tuple[NetWorthRow, ...] = ()
 
+    #: Every position every snapshot held, when the read asked for it, and empty
+    #: otherwise. Appended last, on the rule above.
+    #:
+    #: **Empty here does not mean the portfolio holds nothing.** It means nobody
+    #: asked -- read_databases only fills this under ``with_history``, because it
+    #: is an order of magnitude larger than the other tuples and only the brief's
+    #: trend column reads it. A consumer that inferred "no history" from an empty
+    #: tuple would be reading a decision about cost as a fact about the money,
+    #: which is why this comment is longer than the field.
+    holdings_history: tuple[HoldingRow, ...] = ()
+
     def total(self, currency: str = "USD") -> float:
         """
         What the accounts in one currency add up to.
@@ -889,6 +907,76 @@ def _account_row(broker: str, row: tuple[Any, ...]) -> AccountRow:
     )
 
 
+def _holding_row(
+    broker: str, row: tuple[Any, ...], by_key: dict[str, AccountRow]
+) -> HoldingRow:
+    """
+    Project one position tuple into the holding view's shape.
+
+    Shared by read_broker and read_holdings_history for the reason _account_row
+    is shared by read_broker and read_history: the two reads behind them return
+    the same fifteen columns deliberately, get_holdings_history being
+    get_current_holdings with its newest-snapshot restriction taken off. One
+    mapping rather than two means the fallbacks below cannot drift apart, which
+    would show a position under one name in the holdings table and another in
+    the trend drawn beside it.
+    :param broker: The broker name, which becomes the Broker column
+    :param row: One row in get_current_holdings() order
+    :param by_key: The accounts this broker returned, keyed by account_key
+    :return: The position as this view spells it
+    :rtype: HoldingRow
+    """
+
+    (
+        account_key,
+        _position,
+        symbol,
+        fund_code,
+        name,
+        units,
+        price,
+        value,
+        principal,
+        earnings,
+        cost_basis,
+        currency,
+        as_of,
+        scraped_at,
+        units_as_of,
+    ) = row
+
+    parent: AccountRow | None = by_key.get(account_key)
+
+    return HoldingRow(
+        broker=broker,
+        # A position whose account did not come back is not something the real
+        # query can produce -- it joins through accounts. It is still carried
+        # rather than dropped, keyed by the one identity it definitely has,
+        # because losing a position silently is worse than showing one whose
+        # name is a key.
+        source=parent.source if parent else broker,
+        account=parent.account if parent else account_key,
+        account_key=account_key,
+        # Which of the two a source fills is a fact about the source; the column
+        # shows whichever there is.
+        symbol=symbol or fund_code,
+        name=name,
+        units=units,
+        price=price,
+        value=value,
+        cost_basis=cost_basis,
+        principal=principal,
+        earnings=earnings,
+        currency=currency or "USD",
+        # The snapshot's date, still: what the position is worth is as of when
+        # its value was struck. The quantity's own date rides separately,
+        # because for TSP they are weeks apart.
+        as_of=as_of,
+        scraped_at=scraped_at or "",
+        units_as_of=units_as_of,
+    )
+
+
 def read_broker(
     broker: str, db: PortfolioDbProtocol
 ) -> tuple[list[AccountRow], list[HoldingRow], list[TransactionRow]]:
@@ -911,57 +999,10 @@ def read_broker(
         accounts.append(row)
         by_key[row.account_key] = row
 
-    holdings: list[HoldingRow] = []
-
-    for (
-        account_key,
-        _position,
-        symbol,
-        fund_code,
-        name,
-        units,
-        price,
-        value,
-        principal,
-        earnings,
-        cost_basis,
-        currency,
-        as_of,
-        scraped_at,
-        units_as_of,
-    ) in db.get_current_holdings():
-        parent: AccountRow | None = by_key.get(account_key)
-
-        holdings.append(
-            HoldingRow(
-                broker=broker,
-                # A position whose account did not come back is not something
-                # the real query can produce -- it joins through accounts. It is
-                # still carried rather than dropped, keyed by the one identity
-                # it definitely has, because losing a position silently is worse
-                # than showing one whose name is a key.
-                source=parent.source if parent else broker,
-                account=parent.account if parent else account_key,
-                account_key=account_key,
-                # Which of the two a source fills is a fact about the source; the
-                # column shows whichever there is.
-                symbol=symbol or fund_code,
-                name=name,
-                units=units,
-                price=price,
-                value=value,
-                cost_basis=cost_basis,
-                principal=principal,
-                earnings=earnings,
-                currency=currency or "USD",
-                # The snapshot's date, still: what the position is worth is as of
-                # when its value was struck. The quantity's own date rides
-                # separately, because for TSP they are weeks apart.
-                as_of=as_of,
-                scraped_at=scraped_at or "",
-                units_as_of=units_as_of,
-            )
-        )
+    holdings: list[HoldingRow] = [
+        _holding_row(broker=broker, row=current, by_key=by_key)
+        for current in db.get_current_holdings()
+    ]
 
     transactions: list[TransactionRow] = []
 
@@ -1037,6 +1078,41 @@ def read_history(broker: str, db: PortfolioDbProtocol) -> list[AccountRow]:
     """
 
     return [_account_row(broker=broker, row=row) for row in db.get_account_history()]
+
+
+def read_holdings_history(broker: str, db: PortfolioDbProtocol) -> list[HoldingRow]:
+    """
+    Every position one broker has ever recorded, oldest snapshot first.
+
+    The counterpart to read_history, and separate from read_broker for the same
+    reason that one is: what comes back is not a fourth tab, it is the input to
+    a trend. A HoldingRow per snapshot rather than a shape of its own, because a
+    past position *is* a holding row -- the same facts about the same position,
+    distinguished only by a newer one existing.
+
+    Read on request rather than always, unlike read_history. The account series
+    is one row per snapshot and every consumer of a Portfolio needs it; this is
+    one row per *position* per snapshot, so on a workspace with a dozen holdings
+    it is an order of magnitude larger and only the brief's trend column wants
+    it. The sheet sync runs on every broker run and would pay for it every time.
+    :param broker: The broker name, which becomes the Broker column
+    :param db: An open database
+    :return: One row per position per snapshot, oldest first
+    :rtype: list[HoldingRow]
+    """
+
+    by_key: dict[str, AccountRow] = {
+        row.account_key: row
+        for row in (
+            _account_row(broker=broker, row=current)
+            for current in db.get_current_accounts()
+        )
+    }
+
+    return [
+        _holding_row(broker=broker, row=past, by_key=by_key)
+        for past in db.get_holdings_history()
+    ]
 
 
 def net_worth_history(
@@ -1203,7 +1279,7 @@ def workspace_path(workspace: str | None = None, root: Path | None = None) -> Pa
     return Path(root or workspace_dir) / (workspace or get_workspace())
 
 
-def read_databases(paths: Iterable[Path]) -> Portfolio:
+def read_databases(paths: Iterable[Path], with_history: bool = False) -> Portfolio:
     """
     Read the given broker databases into one set of canonical rows.
 
@@ -1223,6 +1299,10 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
     the session; the engine's pool holds the SQLite file handle open regardless,
     and this now runs on every broker run rather than only from the shell.
     :param paths: Database files, one per broker
+    :param with_history: Also read every position from every snapshot. Off by
+        default because it is an order of magnitude more rows than the current
+        positions and only the brief's trend column wants them -- the sheet sync
+        runs on every broker run and would otherwise pay for it every time.
     :return: Their accounts and positions, and whatever would not open
     :rtype: Portfolio
     """
@@ -1231,6 +1311,7 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
     holdings: list[HoldingRow] = []
     transactions: list[TransactionRow] = []
     observations: list[AccountRow] = []
+    positions: list[HoldingRow] = []
     read: list[str] = []
     unreadable: list[tuple[str, str]] = []
 
@@ -1246,6 +1327,9 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
                 broker=broker, db=db
             )
             broker_observations: list[AccountRow] = read_history(broker=broker, db=db)
+            broker_positions: list[HoldingRow] = (
+                read_holdings_history(broker=broker, db=db) if with_history else []
+            )
 
         # Deliberately broad. A file in this directory can fail to be a usable
         # database in more ways than are worth enumerating -- corrupt, truncated,
@@ -1267,6 +1351,7 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
         holdings.extend(broker_holdings)
         transactions.extend(broker_transactions)
         observations.extend(broker_observations)
+        positions.extend(broker_positions)
         read.append(broker)
 
     return Portfolio(
@@ -1281,10 +1366,15 @@ def read_databases(paths: Iterable[Path]) -> Portfolio:
         # a time -- a per-broker series would each be right on its own and sum to
         # a portfolio that collapses every day only one of them scraped.
         net_worth=tuple(net_worth_history(observations=observations)),
+        holdings_history=tuple(positions),
     )
 
 
-def read_workspace(workspace: str | None = None, root: Path | None = None) -> Portfolio:
+def read_workspace(
+    workspace: str | None = None,
+    root: Path | None = None,
+    with_history: bool = False,
+) -> Portfolio:
     """
     Every account, position and movement across every broker in one workspace.
 
@@ -1293,6 +1383,7 @@ def read_workspace(workspace: str | None = None, root: Path | None = None) -> Po
     rather than reaching into a broker's tables and inventing its own shape.
     :param workspace: The workspace name, or None for the configured one
     :param root: The directory workspaces live in, for tests
+    :param with_history: Also read every position from every snapshot
     :return: What the workspace holds, and whatever would not open
     :rtype: Portfolio
     """
@@ -1306,7 +1397,9 @@ def read_workspace(workspace: str | None = None, root: Path | None = None) -> Po
             unreadable=((directory.name, f"no workspace directory at {directory}"),)
         )
 
-    return read_databases(paths=sorted(directory.glob(pattern="*.db")))
+    return read_databases(
+        paths=sorted(directory.glob(pattern="*.db")), with_history=with_history
+    )
 
 
 def stale_accounts(portfolio: Portfolio, cutoff: str) -> tuple[AccountRow, ...]:
@@ -1333,7 +1426,7 @@ def stale_accounts(portfolio: Portfolio, cutoff: str) -> tuple[AccountRow, ...]:
         # The same parse is_stale and stale_reason use, not the shape alone: a
         # row reported as carrying no readable date must not then be sorted in
         # among the ones that do, or the list contradicts its own entries.
-        dated: bool = _as_date(as_of=row.as_of) is not None
+        dated: bool = as_date(as_of=row.as_of) is not None
 
         return (1 if dated else 0, row.as_of or "", row.broker)
 

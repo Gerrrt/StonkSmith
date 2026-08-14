@@ -371,11 +371,56 @@ part that carries the meaning.
 
 ---
 
-## The second agent, in the morning
+## The opening-bell run, and why the close does not move
 
-Everything above runs after the close. `stonksmithdb brief` runs at 06:30 the next
-weekday, from its own LaunchAgent — `scripts/com.stonksmith.morning.plist`, driving
-`scripts/stonksmith-morning.sh`, installed exactly like the nightly pair.
+Everything above is the evening run. `scripts/com.stonksmith.open.plist` adds a second
+scrape at **06:35 local**, driving `scripts/stonksmith-open.sh` — ten scrapes a week rather
+than five.
+
+**Only SnapTrade carries new information at the open**, and that is worth stating plainly
+because three of the four entries look identical to their evening counterparts and are not.
+SnapTrade is a live API call returning current positions. TSP, the 529 and Ally all rest on
+a published close that does not exist yet at 06:35, so their morning marks repeat
+yesterday's numbers under a new timestamp. They report their own `as_of` honestly and
+nothing is wrong with them — but reading a morning price into a 06:35 TSP row is the
+mistake available here. All four run anyway: a schedule that quietly scrapes a subset is
+one somebody later reads as complete.
+
+**The close run stays at 18:30 rather than moving to the 13:00 bell.** On Pacific the
+market closes at 13:00 local, so "closing bell" is the obvious slot and it is the wrong
+one. TSP publishes the day's share prices in the evening — the whole reason 18:30 was
+chosen, recorded at `scripts/stonksmith.cron:120` — so a 13:00 run would write yesterday's
+TSP price as today's, every day, with nothing saying so. That is precisely the quiet
+wrongness this file exists to prevent, and `tests/test_open_agent.py` refuses a close run
+earlier than 17:00.
+
+**No `stonksmithdb stale` in the opening run.** The evening run made that check twelve
+hours earlier and nothing can have gone stale since. An alarm that fires more often than it
+has news is the one that gets muted, which is the failure this file opens by naming.
+
+---
+
+## The third agent, in the morning
+
+`stonksmithdb brief` runs at 06:30 the next weekday, from its own LaunchAgent —
+`scripts/com.stonksmith.morning.plist`, driving `scripts/stonksmith-morning.sh`, installed
+exactly like the nightly pair.
+
+It runs **five minutes before** the opening scrape, and the gap is load-bearing rather than
+tidy. The brief reads every database in the workspace and the opening run writes them, so
+firing them together would have the brief reporting on a workspace caught mid-write — some
+brokers updated, some not, and a headline delta assembled across the seam. It would not
+error and it would not look wrong. Brief first is also correct on its own terms: a morning
+brief reports on last night's close, which is exactly what the databases hold until the
+opening run touches them.
+
+The whole weekday, on Pacific:
+
+| Local | Agent | Databases |
+| --- | --- | --- |
+| 06:30 | `com.stonksmith.morning` | reads |
+| 06:35 | `com.stonksmith.open` | writes |
+| 18:30 | `com.stonksmith.nightly` | writes |
 
 **Two agents rather than one entry appended to the nightly script**, because they answer
 to different clocks. A scrape has to happen after the market closes and after TSP
