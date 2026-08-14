@@ -343,10 +343,12 @@ about last night's symbol set. A holding with no public ticker is not asked abou
 would earn a 404 per symbol per night forever. The same rule the brief's fund links
 follow, and there is exactly one implementation of it.
 
-**A failure here costs a number, not the night.** If the feed is unreachable the cache
-keeps yesterday's per-share figures, which are still true — funds distribute quarterly at
-most. If there is no cache at all the brief renders and says it has no dividend figures,
-rather than printing a `$0.00` that reads like one.
+**A failure here costs a number, not the night.** A symbol it could not fetch keeps the
+figure it already had — funds distribute quarterly at most, so yesterday's is still true —
+and keeps the date that figure was fetched on rather than being restamped, so the
+staleness check can still see a refresh that has stopped working. The run names every
+symbol it carried. If there is no cache at all the brief renders and says it has no
+dividend figures, rather than printing a `$0.00` that reads like one.
 
 What is stored is **dividends per share, never an income**. A per-share amount is a fact
 about the fund and stays true however many units are held; an income figure is that

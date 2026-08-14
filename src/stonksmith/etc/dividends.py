@@ -70,6 +70,14 @@ class Paid:
     #: Whether the feed answered for this symbol at all.
     found: bool = False
 
+    #: The day this particular figure was fetched, which is not necessarily the
+    #: day the file was written. A refresh that could not reach the feed keeps
+    #: the last good figure rather than discarding it, and a carried figure
+    #: presented under the file's write date would be the carried-rendered-as-
+    #: observed failure the brief's headline exists to prevent. Empty on a cache
+    #: written before this field existed.
+    as_of: str = ""
+
 
 @dataclass(frozen=True, slots=True)
 class Dividends:
@@ -81,17 +89,40 @@ class Dividends:
 
     def age(self, today: dt.date) -> int | None:
         """
-        How many days old the cache is, or None when it carries no date.
+        How old the **oldest figure** is, or None when nothing carries a date.
+
+        Measured from the oldest per-symbol ``as_of`` rather than from
+        ``fetched_on``, because a run that could not reach the feed still writes
+        the file -- carrying the last good figures forward -- and reading the
+        write date would report a cache of month-old numbers as refreshed today.
+        The staleness warning exists to catch a refresh that has stopped
+        happening, and that is exactly the case it would have gone blind to.
+
+        Falls back to ``fetched_on`` when no entry carries a date, which is what
+        a cache written before ``as_of`` existed looks like.
         :param today: The day to measure from
         :return: The age in days, or None
         :rtype: int | None
         """
 
+        stamps: list[dt.date] = []
+
+        for row in self.paid.values():
+            try:
+                stamps.append(dt.date.fromisoformat(row.as_of))
+
+            except ValueError:
+                continue
+
         try:
-            return (today - dt.date.fromisoformat(self.fetched_on)).days
+            oldest: dt.date = (
+                min(stamps) if stamps else dt.date.fromisoformat(self.fetched_on)
+            )
 
         except ValueError:
             return None
+
+        return (today - oldest).days
 
 
 def read_cache(path: Path) -> Dividends:
@@ -107,30 +138,38 @@ def read_cache(path: Path) -> Dividends:
     :rtype: Dividends
     """
 
-    try:
-        stored: Any = json.loads(path.read_text(encoding="utf-8"))
-
+    # The guard covers the whole read, not just the parse. A file can be valid
+    # JSON and still not be a cache -- `paid` holding a string where a record
+    # belongs is the shape a half-written file takes -- and an AttributeError
+    # raised out of the comprehension below would have escaped this function and
+    # failed the morning, which is precisely what the docstring promises it
+    # will not do.
+    #
     # Deliberately broad, on read_baseline's reasoning: a file in this position
     # can fail to be a usable cache in more ways than are worth enumerating, and
     # none of them is a reason to fail the morning.
+    try:
+        stored: Any = json.loads(path.read_text(encoding="utf-8"))
+
+        if not isinstance(stored, dict) or stored.get("version") != CACHE_VERSION:
+            return Dividends()
+
+        return Dividends(
+            fetched_on=str(stored.get("fetched_on", "")),
+            window_days=int(stored.get("window_days") or 365),
+            paid={
+                str(symbol): Paid(
+                    per_share=float(row.get("per_share") or 0.0),
+                    covered_days=int(row.get("covered_days") or 0),
+                    found=bool(row.get("found")),
+                    as_of=str(row.get("as_of") or ""),
+                )
+                for symbol, row in (stored.get("paid") or {}).items()
+            },
+        )
+
     except Exception:
         return Dividends()
-
-    if not isinstance(stored, dict) or stored.get("version") != CACHE_VERSION:
-        return Dividends()
-
-    return Dividends(
-        fetched_on=str(stored.get("fetched_on", "")),
-        window_days=int(stored.get("window_days") or 365),
-        paid={
-            str(symbol): Paid(
-                per_share=float(row.get("per_share") or 0.0),
-                covered_days=int(row.get("covered_days") or 0),
-                found=bool(row.get("found")),
-            )
-            for symbol, row in (stored.get("paid") or {}).items()
-        },
-    )
 
 
 def write_cache(path: Path, dividends: Dividends) -> None:
@@ -155,6 +194,7 @@ def write_cache(path: Path, dividends: Dividends) -> None:
                         "per_share": row.per_share,
                         "covered_days": row.covered_days,
                         "found": row.found,
+                        "as_of": row.as_of,
                     }
                     for symbol, row in sorted(dividends.paid.items())
                 },

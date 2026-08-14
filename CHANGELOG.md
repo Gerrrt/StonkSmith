@@ -132,6 +132,27 @@ the two disagree.
 
 ### Fixed
 
+- **One unreachable night erased every dividend figure.** `dividends` rebuilds
+  the cache in a single pass and wrote `found=False` over any symbol it could not
+  fetch, so a rate limit, an HTML block page or a dropped connection cost the
+  brief its whole yield — and the result was indistinguishable from a portfolio
+  holding nothing that pays, which is the reading `found` exists to prevent. A
+  failed fetch now keeps the figure it already had. A good fetch still overwrites,
+  including a fetch that legitimately returns zero.
+- Carried figures keep **their own fetch date** rather than being restamped, and
+  the staleness warning reads the oldest of those rather than the file's write
+  date — which moves every night whether or not anything was fetched, and would
+  have reported month-old numbers as refreshed today. The run names every symbol
+  it carried, because a run that carried all of them is a refresh that has
+  stopped refreshing and looks identical in the counts alone.
+- `dividend_events()` read the exchange offset unguarded while guarding the line
+  below it, so a payload whose `meta` was present and null raised `AttributeError`
+  out of a function documented to raise `QuotesUnavailable` — the exception its
+  caller catches by name to decide whether a symbol has a quote page. Guarded as
+  `daily_closes()` guards the same read.
+- `read_cache()` guarded only the JSON parse, so a `paid` entry that was not a
+  mapping raised out of the comprehension past it and failed the morning the
+  docstring promises it cannot fail. The guard now covers the whole read.
 - **Every SnapTrade balance was a day stale.** Balances came from
   `list_user_accounts`, which SnapTrade documents as serving daily-cached data.
   The lag was exact rather than approximate: today's reported balance was

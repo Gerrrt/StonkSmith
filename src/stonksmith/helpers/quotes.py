@@ -174,7 +174,27 @@ def dividend_events(payload: str) -> dict[dt.date, float]:
         raise QuotesUnavailable("the price feed returned no series for that symbol")
 
     series: Any = results[0]
-    offset: int = int(series.get(META, {}).get(GMT_OFFSET) or 0)
+
+    # Guarded exactly as daily_closes guards the same read, down to the `.get(
+    # META, {})` that the line below deliberately does not use. The difference
+    # between the two lines is a difference between the fields: `events` present
+    # and null is the ordinary shape for a fund that pays nothing, while a null
+    # `meta` is a payload that has gone wrong, and every way the offset can be
+    # wrong ends the same way -- ex-dates that cannot be trusted. Falling back
+    # to UTC there would date every dividend plausibly and wrongly.
+    #
+    # What this replaces was the unguarded expression, which raised
+    # AttributeError out of a function whose docstring promises
+    # QuotesUnavailable -- and the caller catches that by name to decide whether
+    # a symbol has a quote page at all.
+    try:
+        offset: int = int(series.get(META, {}).get(GMT_OFFSET) or 0)
+
+    except (TypeError, ValueError, AttributeError) as e:
+        raise QuotesUnavailable(
+            f"the price feed dated its dividends with an unusable offset ({e})"
+        ) from e
+
     events: Any = (series.get(EVENTS) or {}).get(DIVIDENDS) or {}
 
     paid: dict[dt.date, float] = {}

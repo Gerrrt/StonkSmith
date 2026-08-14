@@ -566,11 +566,10 @@ class StonkSmithDBMenu(cmd.Cmd):
         import requests
 
         from stonksmith.etc.brief import fund_url
-        from stonksmith.etc.dividends import Dividends, Paid, write_cache
+        from stonksmith.etc.dividends import Dividends, Paid, read_cache, write_cache
         from stonksmith.etc.paths import dividends_path
         from stonksmith.etc.portfolio import Portfolio, read_workspace
         from stonksmith.helpers.quotes import (
-            QuotesUnavailable,
             dividend_events,
             trailing_dividend,
         )
@@ -601,7 +600,15 @@ class StonkSmithDBMenu(cmd.Cmd):
             print("[-] No holding carries a public ticker; nothing to fetch.")
             return
 
+        # Read before writing, because a failed fetch must not cost a figure that
+        # was already known. This whole command rebuilds the file from one pass,
+        # so a night the feed was unreachable used to write found=False over
+        # every symbol and the next morning's brief lost its yield entirely --
+        # a transient block page downgrading good data to "no such fund".
+        previous: Dividends = read_cache(path=dividends_path)
+
         paid: dict[str, Paid] = {}
+        carried: list[str] = []
 
         for symbol in symbols:
             try:
@@ -612,21 +619,44 @@ class StonkSmithDBMenu(cmd.Cmd):
                 )
                 events = dividend_events(payload=response.text)
 
-            except QuotesUnavailable as e:
-                # Recorded as not found rather than skipped. A symbol the feed
-                # has never heard of and a fund that pays nothing both produce
-                # zero, and only one of those is a fact about the money.
-                print(f"[-] No dividend data for {symbol}: {e}")
-                paid[symbol] = Paid(found=False)
-                continue
-
+            # One handler for both, deliberately. The distinction this used to
+            # draw -- the feed refusing a symbol, against the feed being
+            # unreachable -- is not one the payload can actually support: a rate
+            # limit, an HTML block page and a genuine 404 all arrive here as
+            # QuotesUnavailable, and only the last is a fact about the symbol.
+            # So neither is allowed to overwrite a figure that was already good.
             except Exception as e:
-                print(f"[-] Could not reach the feed for {symbol}: {e}")
-                paid[symbol] = Paid(found=False)
+                held: Paid | None = previous.paid.get(symbol)
+
+                if held is not None and held.found:
+                    # Kept with its own date, not restamped. A carried figure
+                    # wearing today's date is the carried-as-observed failure
+                    # the headline's basis split exists to prevent, and it would
+                    # blind the staleness warning that is supposed to catch a
+                    # refresh which has stopped running.
+                    print(
+                        f"[-] Could not refresh {symbol} ({e}); "
+                        f"keeping the figure from {held.as_of or 'an earlier run'}"
+                    )
+                    paid[symbol] = held
+                    carried.append(symbol)
+                    continue
+
+                # Recorded as not found rather than skipped, when there is
+                # nothing to keep. A symbol the feed has never heard of and a
+                # fund that pays nothing both produce zero, and only one of
+                # those is a fact about the money.
+                print(f"[-] No dividend data for {symbol}: {e}")
+                paid[symbol] = Paid(found=False, as_of=today.isoformat())
                 continue
 
             per_share, covered = trailing_dividend(paid=events, today=today)
-            paid[symbol] = Paid(per_share=per_share, covered_days=covered, found=True)
+            paid[symbol] = Paid(
+                per_share=per_share,
+                covered_days=covered,
+                found=True,
+                as_of=today.isoformat(),
+            )
             print(f"[*] {symbol}: ${per_share:,.4f} per share over {covered} days")
 
         write_cache(
@@ -636,6 +666,16 @@ class StonkSmithDBMenu(cmd.Cmd):
 
         found: int = sum(1 for row in paid.values() if row.found)
         print(f"[+] Cached {found} of {len(symbols)} symbols to {dividends_path}")
+
+        if carried:
+            # Said out loud rather than left in the file. Carrying figures
+            # forward is what stops one bad night costing the yield; a run that
+            # carried every symbol is a refresh that is no longer refreshing,
+            # and the two look identical in the count above.
+            print(
+                f"[-] {len(carried)} of those are older figures kept because the "
+                f"feed could not be reached: {', '.join(carried)}"
+            )
 
         if found < len(symbols):
             # Not a failure: a symbol with no quote page is an ordinary holding
