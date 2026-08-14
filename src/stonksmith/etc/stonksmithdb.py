@@ -40,7 +40,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    sheet             rewrite the Google Sheet from these databases\n"
         "    verify [tabs|guard]  check what a successful sheet write cannot show\n"
         "    stale [days]      report accounts nothing has refreshed lately\n"
-        "    brief [peek]      what changed since the last brief, opened to read\n"
+        "    brief [peek|--no-open]  what changed since the last brief\n"
         "    help              commands at this level\n"
         "    exit              quit\n"
     )
