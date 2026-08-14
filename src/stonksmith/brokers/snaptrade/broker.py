@@ -336,6 +336,38 @@ class SnapTradeBroker(ApiConnection):
             keys=POSITION_KEYS,
         )
 
+    def fetch_balance(self, account_id: str) -> list[dict[str, Any]]:
+        """
+        One account's cash, per currency.
+
+        The half of an account that ``get_all_account_positions`` never returns
+        and that no position can express. It is routinely negative: a margin
+        loan or an overdraft transfer out shows up here as a debt, and an
+        account whose securities are worth $2,986.31 against cash of -$744.28
+        is worth $2,242.03 -- which is exactly what SnapTrade's own account
+        total says, and exactly what summing its positions does not.
+
+        Read for the freshness as much as for the cash. ``fetch_accounts``
+        above is served from a daily cache by design, so the total it carries
+        is the previous sync's; this endpoint answers live on a real-time key.
+        Recomputing the account value as positions plus this is what takes a
+        day of lag out of every SnapTrade balance in the workspace.
+
+        A list rather than a number, because SnapTrade returns one entry per
+        currency -- some brokerages hold several in one account -- and the
+        caller takes the one matching the account's own currency rather than
+        summing across them, which would add a dollar to a euro.
+        :param account_id: The SnapTrade account id
+        :return: One dictionary per currency held
+        :rtype: list[dict[str, Any]]
+        """
+
+        return as_rows(
+            self.client.account_information.get_user_account_balance(
+                account_id=account_id
+            )
+        )
+
     def fetch_activities(
         self,
         account_id: str,

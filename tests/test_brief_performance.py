@@ -468,9 +468,9 @@ class TheValueTileMatchesTheHeadline(UserConfigMixin, unittest.TestCase):
             now=NOW,
         )
 
-        self.assertIn("$369.50 not in any position", page)
+        self.assertIn("$369.50 in cash", page)
 
-    def test_positions_exceeding_the_balances_is_not_called_cash(self) -> None:
+    def test_money_borrowed_against_the_positions_is_named_as_a_debt(self) -> None:
         # The other direction, which "plus $X not in any position" renders as a
         # negative quantity of cash. It is not cash: it is the same source's own
         # balance and positions disagreeing, which on this workspace happens on
@@ -506,8 +506,8 @@ class TheValueTileMatchesTheHeadline(UserConfigMixin, unittest.TestCase):
             now=NOW,
         )
 
-        self.assertIn("positions total $763.58 more than the account balances", page)
-        self.assertNotIn("not in any position", page)
+        self.assertIn("$763.58 borrowed against them", page)
+        self.assertNotIn("in cash", page)
         self.assertNotIn("$-", page)
 
 

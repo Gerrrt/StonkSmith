@@ -110,13 +110,18 @@ Dividend **yield**, by contrast, divides by the position total: a yield is what 
 holdings pay on the holdings, and including idle cash would report a portfolio yielding
 less the more of it is waiting to be invested.
 
-The difference between the two runs the other way more often than you would expect. When
-the positions total *more* than the balances, that cannot be cash, and the tile says so —
-*"positions total $1,036.22 more than the account balances"* — rather than reporting a
-negative quantity of it. SnapTrade states an account balance and a set of positions, and on
-a real workspace those disagree on every account, by a third on one of them. One of the two
-readings is wrong or they were struck at different moments; either way it is a fact about
-the source and the reader is owed it.
+The difference between the two is cash, exactly — the SnapTrade sync computes an account's
+value as its positions plus its cash balance, so the gap is that cash by construction rather
+than a residue of two numbers struck at different times. See
+[`docs/brokers.md`](brokers.md) for why it is computed rather than taken from the total
+SnapTrade reports.
+
+**Negative is a debt, not a discrepancy.** A brokerage account worth less than the fund
+inside it has money borrowed against it — an overdraft transfer out, or a margin loan — and
+the tile names it: *"12 holdings, less $744.28 borrowed against them"*. This read "positions
+total $1,036.22 more than the account balances" while the value came from SnapTrade's
+daily-cached total, and back then that wording was the honest one: two numbers genuinely
+did disagree. They no longer can.
 
 ### Dividends come from the transaction log, not from a quote feed
 

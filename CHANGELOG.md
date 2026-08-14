@@ -104,6 +104,29 @@ the two disagree.
   an afternoon run would record yesterday's share price as today's every day
   with nothing saying so.
 
+### Fixed
+
+- **Every SnapTrade balance was a day stale.** Balances came from
+  `list_user_accounts`, which SnapTrade documents as serving daily-cached data.
+  The lag was exact rather than approximate: today's reported balance was
+  measurably the previous sync's position value, to the cent, on two independent
+  accounts. The daily *change* was unaffected — both ends shifted together — but
+  every level was, and the Net Worth series is built on levels.
+- **An account's cash was invisible, including when it was negative.**
+  `get_all_account_positions` returns securities only. One account here holds
+  $2,986.31 of a fund against **-$744.28** of cash from an overdraft transfer,
+  so SnapTrade's total said $2,242.03 and summing the positions said $2,986.31 —
+  a third of the account, unexplained. The sync now reads
+  `get_user_account_balance` per account and stores positions plus cash, which
+  is live on both halves and reconciles exactly. It falls back to the reported
+  total when positions could not be read, when the account reports none, or when
+  cash could not be read — each a case where computing would be wrong rather
+  than merely unavailable.
+- The brief's Portfolio Value tile now names that difference for what it is:
+  "plus $X in cash", or "less $X borrowed against them". It previously read
+  "positions total $X more than the account balances", which was the honest
+  wording while the value came from a cached total and is not any more.
+
 ### Changed
 
 - A broker package needs only `broker.py`. `BrokerLoader` supplies

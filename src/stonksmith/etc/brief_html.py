@@ -382,32 +382,29 @@ def _tiles(brief: Brief) -> str:
     else:
         span = "trailing twelve months"
 
-    # What the accounts say, minus what the positions account for. Three cases,
-    # and the third is the one that had to be learned.
+    # What the accounts are worth, minus what the positions account for, which
+    # is cash -- and now exactly cash rather than approximately it. The SnapTrade
+    # sync computes an account's value as its positions plus its cash balance, so
+    # this difference is that cash by construction instead of a residue of two
+    # numbers struck at different times.
     #
-    # Positive is uninvested cash sitting in a balance and in no holding, which
-    # is ordinary and worth naming. Nothing is the tidy case.
-    #
-    # **Negative cannot be cash**, and rendering it as "plus $-1,036.22 not in
-    # any position" was the first thing this did. It means the two numbers the
-    # same source reported disagree -- SnapTrade states an account balance and a
-    # set of positions, and on this workspace the positions total more, by a
-    # third on one account. One of the two is wrong or they were marked at
-    # different moments, and either way a reader should be told that rather than
-    # handed a negative quantity of cash.
+    # **Negative is a debt, not a discrepancy.** This read "positions total
+    # $1,036.22 more than the account balances" while the value came from
+    # SnapTrade's daily-cached total, and the honest reading then was that two
+    # numbers disagreed. They no longer can: a brokerage account worth less than
+    # the fund inside it has money borrowed against it -- an overdraft transfer
+    # out, or a margin loan -- and naming it as one is the difference between a
+    # reader checking their broker and a reader ignoring a caveat.
     cash: float = money_of.value - money_of.invested
     holds: str = f"{money_of.holdings} holdings"
 
     if round(cash, 2) > 0:
-        holds = (
-            f"{holds}, plus "
-            f"{money(value=cash, currency=money_of.currency)} not in any position"
-        )
+        holds = f"{holds}, plus {money(value=cash, currency=money_of.currency)} in cash"
     elif round(cash, 2) < 0:
         holds = (
-            f"{holds}; positions total "
-            f"{money(value=abs(cash), currency=money_of.currency)} more than the "
-            f"account balances"
+            f"{holds}, less "
+            f"{money(value=abs(cash), currency=money_of.currency)} borrowed "
+            f"against them"
         )
 
     return (
