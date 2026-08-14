@@ -144,6 +144,11 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .scroll table { min-width: 46rem; }
 .spark { display: block; }
 .wl { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; }
+/* A linked symbol still reads as the symbol. Underlined only on hover, because
+   twelve underlined rows is a page that looks like a link farm rather than a
+   holdings table. */
+a.sym { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--line); }
+a.sym:hover { border-bottom-color: currentColor; }
 /* Whose account a row belongs to. Redundant with the name beside it by design:
    colour is a scanning aid here, never the only thing carrying the fact, so the
    page still reads correctly in monochrome or to a colourblind reader. */
@@ -666,6 +671,37 @@ def _movers(
     )
 
 
+def _symbol(row: Position) -> str:
+    """
+    A holding's symbol, linked to its quote page where it has one.
+
+    Plain text otherwise, and that is most of the interesting cases: a 401k fund
+    code, a 529 portfolio number and a TSP fund are real holdings with nothing
+    public to point at. An unlinked symbol looks exactly like an unlinkable one,
+    which is true and is better than a link that 404s -- a reader has to click
+    the second to learn it was worthless.
+
+    The href is escaped like everything else here, though the value cannot carry
+    anything to escape: etc.brief only builds a URL from one to five ASCII
+    letters, and etc.config refuses a template that is not https. Escaped anyway,
+    because "the input is already constrained" is the sentence that precedes
+    every injection.
+    :param row: The position
+    :return: The symbol, linked or not
+    :rtype: str
+    """
+
+    name: str = escape(s=row.symbol)
+
+    if not row.url:
+        return f'<span class="who">{name}</span>'
+
+    return (
+        f'<a class="sym who" href="{escape(s=row.url)}" '
+        f'target="_blank" rel="noopener noreferrer">{name}</a>'
+    )
+
+
 def _owner_dot(color: str) -> str:
     """
     The dot that says whose account a row is.
@@ -787,7 +823,7 @@ def _holdings(rows: Iterable[Position], hidden: int = 0) -> str:
 
     body: str = "".join(
         f"<tr><td>"
-        f'{_owner_dot(color=row.color)}<span class="who">{escape(s=row.symbol)}</span>'
+        f"{_owner_dot(color=row.color)}{_symbol(row=row)}"
         f'<div class="broker">{escape(s=_under(row=row))}'
         f"{_bought(row=row)}</div></td>"
         f'<td class="num">{escape(s=_units_of(value=row.units))}</td>'

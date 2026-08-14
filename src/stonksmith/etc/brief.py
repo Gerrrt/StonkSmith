@@ -29,13 +29,18 @@ Brief counts both, so the render has no way to show one without the other.
 
 import datetime as dt
 import json
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from stonksmith.etc.config import get_account_colors, get_asset_classes
+from stonksmith.etc.config import (
+    get_account_colors,
+    get_asset_classes,
+    get_brief_fund_link,
+)
 from stonksmith.etc.permissions import restrict
 from stonksmith.etc.portfolio import (
     OBSERVED,
@@ -56,6 +61,19 @@ from stonksmith.etc.portfolio import (
 #: subtract against, and treating it as absent produces a first-brief -- which
 #: says so -- instead of a delta computed against fields that moved.
 BASELINE_VERSION: int = 1
+
+#: What a symbol has to look like before it is linked to a quote page.
+#:
+#: One to five **ASCII** letters, and the ASCII part is load-bearing rather than
+#: pedantic: str.isalpha() is true of Cyrillic and full-width characters too, so
+#: a scraped symbol could otherwise put arbitrary text into a URL. Constrained
+#: this tightly, there is nothing left to inject with.
+#:
+#: It is also what keeps a link off the holdings that have no public page.
+#: "O7M8" is a 401k fund code, "14002" a 529 portfolio number and "L 2060" a TSP
+#: fund -- real positions, none of them findable on a quote site, and a link that
+#: 404s is worse than no link because the reader has to click to learn that.
+_TICKER: re.Pattern[str] = re.compile(pattern=r"^[A-Za-z]{1,5}$")
 
 #: What an unclassified position is grouped under. The same wording the config
 #: comment uses for the sheet's allocation block, because a reader comparing the
@@ -264,6 +282,10 @@ class Position:
 
     #: Whose account holds this, as a colour name from [ACCOUNTS] colors.
     color: str = ""
+
+    #: Where this symbol's quote page is, or empty when it has none. A 401k fund
+    #: code and a 529 portfolio number are real holdings with nothing to link to.
+    url: str = ""
 
     #: How the quantity moved since the last brief, where it moved at all.
     #:
@@ -1016,6 +1038,29 @@ def significant(moves: Iterable[Movement], limit: int) -> tuple[Movement, ...]:
     return tuple(moves)[:limit]
 
 
+def fund_url(symbol: str, template: str) -> str:
+    """
+    Where a symbol's quote page is, or empty when it has none to point at.
+
+    Two gates, and both refuse rather than guess. The symbol has to look like a
+    public ticker, which excludes every fund code in this workspace that has no
+    page; and the template has to have survived the config's https check, which
+    is what makes writing the result into an href safe.
+
+    Empty for anything else, which renders plain text. A symbol that is not
+    linked looks exactly like one that is not linkable, which is the truth.
+    :param symbol: The holding's symbol, as the source spelled it
+    :param template: A validated URL template containing {symbol}
+    :return: The URL, or ""
+    :rtype: str
+    """
+
+    if not template or not _TICKER.match(string=symbol):
+        return ""
+
+    return template.replace("{symbol}", symbol.upper())
+
+
 def owner_color(name: str, palette: Iterable[tuple[str, str]]) -> str:
     """
     Whose account this is, as a colour name, or empty when nothing claims it.
@@ -1066,6 +1111,7 @@ def positions(
     history: dict[tuple[str, str, str], list[float]],
     baseline: dict[tuple[str, str, str], Mark] | None = None,
     palette: Iterable[tuple[str, str]] = (),
+    link: str = "",
 ) -> list[Position]:
     """
     Every holding, with what follows from what the source reported.
@@ -1127,6 +1173,7 @@ def positions(
                 name=first.name,
                 asset_class=classes.get(key[2], UNCLASSIFIED),
                 color=owner_color(name=first.account, palette=palette),
+                url=fund_url(symbol=key[2] or "", template=link),
                 units=units,
                 # The price the source stated, not value/units. They agree when
                 # both are given, and where they disagree the source's own
@@ -1294,6 +1341,7 @@ def build_brief(
     # anything. etc.stonksmithdb.do_brief asks get_account_colors() again --
     # the config is cached, so that is a dictionary lookup -- and names each one.
     palette, _ = get_account_colors()
+    link: str = get_brief_fund_link()
     income, covered = dividends(rows=portfolio.transactions, today=today)
 
     # Computed once rather than inside the Brief() call, because two fields now
@@ -1317,6 +1365,7 @@ def build_brief(
         history=trends(rows=portfolio.holdings_history),
         baseline=since.holdings if since.taken_on else None,
         palette=palette,
+        link=link,
     )
 
     # Split for display only. `held` stays whole and is what performance()
