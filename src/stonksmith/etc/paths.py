@@ -29,6 +29,8 @@ config_path: Path = stonksmith_path / "stonksmith.conf"
 reports_path: Path = stonksmith_path / "reports"
 #: What the last brief was shown, so the next one can say what changed.
 baseline_path: Path = stonksmith_path / "brief_baseline.json"
+#: What each held symbol pays per share, so the brief need not reach the network.
+dividends_path: Path = stonksmith_path / "dividends.json"
 token_path: Path = home_path / "token.json"
 creds_path: Path = home_path / "credentials.json"
 

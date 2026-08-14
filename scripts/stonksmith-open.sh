@@ -37,6 +37,11 @@
 #                  the published close, and today's close does not exist at
 #                  06:35, so it reprices against yesterday's.
 #
+#   dividends      Not run here at all, unlike the nightly script. A fund
+#                  distributes quarterly at most, so a second fetch twelve hours
+#                  after the last one asks the price feed the same question and
+#                  can only get the same answer.
+#
 # All four run anyway rather than snaptrade alone. A schedule that quietly
 # scrapes a subset is a schedule somebody later reads as complete, and the three
 # above cost one duplicate row each and report their own as_of honestly. What

@@ -39,6 +39,12 @@ TIMESTAMP = "timestamp"
 META = "meta"
 GMT_OFFSET = "gmtoffset"
 
+#: Where dividend events live when the request asks for them, and the field
+#: inside each one that carries the per-share amount.
+EVENTS = "events"
+DIVIDENDS = "dividends"
+AMOUNT = "amount"
+
 
 class QuotesUnavailable(Exception):
     """The payload carried no usable prices, and says why."""
@@ -124,6 +130,112 @@ def daily_closes(payload: str) -> dict[dt.date, float]:
         prices[dt.datetime.fromtimestamp(stamp, tz=zone).date()] = float(close)
 
     return prices
+
+
+def dividend_events(payload: str) -> dict[dt.date, float]:
+    """
+    Every dividend a chart payload reports, keyed by the day it went ex.
+
+    Asked for with ``&events=div`` on the same endpoint the closes come from, so
+    one request answers both and the two can never disagree about which symbol
+    they describe.
+
+    **An empty result is an ordinary answer, not a failure.** Plenty of funds pay
+    nothing, and a symbol that paid nothing this year is a fact worth reporting
+    rather than an error to raise. What *is* raised is a payload that is not a
+    chart at all -- the same distinction daily_closes draws, and for the same
+    reason: "this fund pays no dividend" and "the feed did not answer" must not
+    arrive as the same empty dict.
+
+    ``events`` comes back **present and null** for symbols that have none, which
+    is why every step below is `or {}` rather than `.get(key, {})`. A default
+    only applies to a missing key, and the key is not missing.
+    :param payload: The chart response body, requested with events=div
+    :return: {ex-date: amount per share}, empty when the fund paid nothing
+    :rtype: dict[dt.date, float]
+    :raises QuotesUnavailable: when the payload is not a chart, or reports an
+        error, or carries no result
+    """
+
+    try:
+        chart: Any = json.loads(s=payload)[CHART_ROOT]
+
+    except (ValueError, KeyError, TypeError) as e:
+        raise QuotesUnavailable(
+            f"the price feed did not answer with a chart ({e})"
+        ) from e
+
+    if chart.get("error"):
+        raise QuotesUnavailable(f"the price feed reported: {chart['error']}")
+
+    results: Any = chart.get("result") or []
+
+    if not results:
+        raise QuotesUnavailable("the price feed returned no series for that symbol")
+
+    series: Any = results[0]
+    offset: int = int(series.get(META, {}).get(GMT_OFFSET) or 0)
+    events: Any = (series.get(EVENTS) or {}).get(DIVIDENDS) or {}
+
+    paid: dict[dt.date, float] = {}
+
+    for stamp, event in events.items():
+        amount: Any = (event or {}).get(AMOUNT)
+
+        if amount is None:
+            continue
+
+        try:
+            # Exchange time, not UTC, on daily_closes' reasoning: the feed states
+            # its own offset and an ex-date is a calendar day in the market's
+            # own zone. Reading these as UTC happens to agree for a US fund and
+            # would quietly disagree for one that is not.
+            when: dt.date = dt.datetime.fromtimestamp(
+                int(stamp) + offset, tz=dt.UTC
+            ).date()
+
+        except ValueError, TypeError, OSError:
+            continue
+
+        # Summed rather than assigned. Two distributions can share an ex-date --
+        # an income distribution and a capital gain, most often in December --
+        # and the last one winning would silently drop the other.
+        paid[when] = paid.get(when, 0.0) + float(amount)
+
+    return paid
+
+
+def trailing_dividend(
+    paid: dict[dt.date, float], today: dt.date, days: int = 365
+) -> tuple[float, int]:
+    """
+    What one share was paid over the trailing window, and how much of it was real.
+
+    Two returns, and the second is what keeps the first honest. A fund listed
+    four months ago has paid four months of dividends, and reporting that sum as
+    an annual figure understates its yield by two thirds. The caller states the
+    coverage rather than presenting a partial year as a whole one.
+
+    Measured from the oldest payment actually inside the window rather than from
+    the window's edge: a fund that has paid once, last month, covers a month of
+    income however far back the window reaches.
+    :param paid: Ex-dates to per-share amounts
+    :param today: The day the window is measured back from
+    :param days: How far back to reach
+    :return: (per-share total, days of payment history it stands on)
+    :rtype: tuple[float, int]
+    """
+
+    since: dt.date = today - dt.timedelta(days=days)
+    inside: list[dt.date] = [when for when in paid if since <= when <= today]
+
+    if not inside:
+        return 0.0, 0
+
+    return (
+        round(number=sum(paid[when] for when in inside), ndigits=6),
+        min(days, (today - min(inside)).days),
+    )
 
 
 def close_on(
