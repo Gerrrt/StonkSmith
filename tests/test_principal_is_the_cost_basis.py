@@ -196,6 +196,42 @@ class ThePlanStatesItsCostAsPrincipal(
         # account. It is reading them as a *position's* cost that is refused.
         self.assertEqual([row.principal for row in rows], [1303.68, 1303.68])
 
+    def test_a_row_a_single_cent_out_is_still_read(self) -> None:
+        # The page rounds value, principal and earnings independently, so the
+        # identity can legitimately land a cent from zero. Nothing is given away
+        # by allowing it -- the case being screened for misses by hundreds.
+        #
+        # This is also the case the float form got wrong in the direction its
+        # own comment denied: 1421.93 - 1303.68 - 118.24 is 0.010000000000005 in
+        # binary floating point, so `> 0.01` rejected it while another triple a
+        # cent out would pass. A boundary that moves with the values is not one.
+        self._write(
+            symbol="",
+            fund_code="14002",
+            units=131.0534,
+            price=10.85,
+            value=1421.93,
+            principal=1303.68,
+            earnings=118.24,
+        )
+
+        self.assertEqual(self._read().holdings[0].cost_basis, 1303.68)
+
+    def test_a_row_two_cents_out_is_not_read(self) -> None:
+        # The other side of the same boundary, so "one cent" is a rule rather
+        # than a number that happens to work.
+        self._write(
+            symbol="",
+            fund_code="14002",
+            units=131.0534,
+            price=10.85,
+            value=1421.93,
+            principal=1303.68,
+            earnings=118.23,
+        )
+
+        self.assertIsNone(self._read().holdings[0].cost_basis)
+
     def test_a_principal_with_no_earnings_beside_it_is_not_read(self) -> None:
         # Nothing to check the interpretation against, so it is not made. The
         # 529 always reports the pair -- they come off one table row -- so this

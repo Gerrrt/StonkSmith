@@ -984,6 +984,9 @@ def _cost_from_principal(value: Any, principal: Any, earnings: Any) -> float | N
     the whole account, false on any row that is one fund of several. Where it
     does not hold, the cost stays absent -- a dash, which is honest -- rather than
     becoming a number nobody can check.
+
+    The comparison is in whole cents, allowed to be one out; the reason for each
+    of those is at the line itself.
     :param value: What the position is worth
     :param principal: What the source says was put in
     :param earnings: What the source says was made on it
@@ -995,10 +998,26 @@ def _cost_from_principal(value: Any, principal: Any, earnings: Any) -> float | N
         return None
 
     try:
-        # To the cent, because that is the precision the page reports in. A
-        # looser tolerance would start admitting the two-fund case on a small
-        # enough account.
-        if abs(float(value) - float(principal) - float(earnings)) > 0.01:
+        # Compared as whole cents, and allowed to be one out.
+        #
+        # Both halves of that are deliberate. Cents because the float form was
+        # not the check its own comment described: 1421.93 - 1303.68 - 118.24 is
+        # 0.010000000000005 in binary floating point, so `> 0.01` *rejected* a
+        # row exactly a cent out, while a different triple a cent out would pass.
+        # A boundary that moves with the values is not a boundary.
+        #
+        # One cent because the page rounds all three figures independently, so
+        # the identity can legitimately land a cent from zero. Nothing is given
+        # away by allowing it: the case being screened for -- an account total
+        # stamped onto one fund of several -- misses by hundreds, not by pennies.
+        if (
+            abs(
+                round(float(value) * 100)
+                - round(float(principal) * 100)
+                - round(float(earnings) * 100)
+            )
+            > 1
+        ):
             return None
 
         return float(principal)
