@@ -1018,7 +1018,22 @@ def _holding_row(
         units=units,
         price=price,
         value=value,
-        cost_basis=cost_basis,
+        # Principal *is* the cost basis where a source reports one and not the
+        # other, and the 529 scraper is the only one that does. A plan states
+        # contributions and earnings rather than an average purchase price
+        # because that is the split a 529 is about -- and it is the same fact
+        # under another name: this workspace's plan reports 1,303.68 principal
+        # against 1,421.93 of value, and 118.25 of earnings, which is the
+        # subtraction exactly.
+        #
+        # Read here rather than left to each consumer. Everything downstream --
+        # purchase price, gain, growth, yield on cost, the win/loss flag -- is
+        # computed from cost_basis, so a source that reports its cost under a
+        # different name was showing a dash on all five while the number sat in
+        # the column beside them. Both fields are still carried out unchanged;
+        # this fills the one that was empty, and never the reverse, since a
+        # source stating both means them separately.
+        cost_basis=cost_basis if cost_basis is not None else principal,
         principal=principal,
         earnings=earnings,
         currency=currency or "USD",
