@@ -443,6 +443,7 @@ after that the portfolio has stopped updating with nothing to say so.
 | `schwab529plan` | Yes. A form post with a stored credential |
 | `ally` | `--from-prices` only, which reprices a stale unit count rather than scraping |
 | `fidelity` | No. Link it through SnapTrade instead |
+| `manual` | Yes. Nothing to log in to — a configured unit count at a published price |
 
 Weekdays after the close, one process per broker — `broker` is a positional
 subcommand, so there is no `--all` — staggered, because two runs inside the same

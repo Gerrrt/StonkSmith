@@ -60,6 +60,17 @@ the two disagree.
   to `get_current_accounts()` — the same columns with the newest-snapshot
   restriction lifted. Behind `read_workspace(with_history=True)`, off by default:
   it is one row per position per snapshot and only the brief's trend wants it.
+- **A `manual` broker**, for accounts you can see but cannot scrape — a plan
+  portal with no API, no scrapeable page and no export. Configured in `[MANUAL]`
+  as `Name | SYMBOL | units | units_as_of | cost_basis`, valued every run as the
+  unit count times a published close from the same feed Ally's `--from-prices`
+  uses. No credential, so it schedules like TSP.
+- That broker stores a **unit count, never a balance**, on the rule the `[TSP]`
+  comment already states: a balance is true for one day and would silently rot,
+  while units move only when money does. A symbol with no published close is
+  skipped and reported rather than written at zero, `as_of` is the price date so
+  the account ages visibly in `stale`, and no transactions are recorded — the
+  deposits that produced the count are not movements this module observed.
 - **`[ACCOUNTS] aliases`** — call an account what you call it. Applied on the way
   out of the databases so the sheet and the brief agree, keyed on the same
   `Source / Account` label `exclude_accounts` matches and through the same

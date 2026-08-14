@@ -54,10 +54,19 @@ What no amount of that settles is which brokers can run with nobody watching.
 | `schwab529plan` | Yes | Posts a form with a stored credential. No browser, no bot detection, no session to keep |
 | `ally` | `--from-prices` only, and it is not a scrape | Ally honours no restored session, so a scrape needs a human every time |
 | `fidelity` | No — replace it with SnapTrade | Browser-backed behind bot detection and 2FA |
+| `manual` | Yes | Nothing to log in to. A configured unit count times a published close |
 
 The first three are the uninteresting rows, and they are uninteresting on purpose: put
-them in a crontab and they work. The last two are the reason this file is longer than the
-table.
+them in a crontab and they work. `manual` joins them for TSP's reason rather than its
+own — no credential in the path, so nothing can expire — and the two after it are why
+this file is longer than the table.
+
+`manual` is the row for an account no program can reach at all: a plan portal with no API,
+no scrapeable page and no export, whose only way out is a transfer. Leaving one out makes
+every total short by its value while looking complete. It stores a **unit count, never a
+balance**, on the rule the `[TSP]` config comment states in a line — a balance is true for
+one day and would silently rot, while units move only when money does. See
+[`docs/brief.md`](brief.md#accounts-you-can-see-but-cannot-scrape).
 
 ### SnapTrade expires, and that is not a failure
 

@@ -163,6 +163,61 @@ The **Industry** column has no equivalent here. No source StonkSmith reads state
 so the nearest thing is the `[ALLOCATION] asset_classes` table — declare symbols there and
 they join the account name under each holding.
 
+## Accounts you can see but cannot scrape
+
+Some accounts have no API, no scrapeable page and no export — a plan portal that shows a
+balance and a fund and offers nothing else, whose only way out is a transfer that has not
+opened. Leaving one out makes every total short by its value while looking complete, and
+unlike a broker that breaks, nothing ever says so.
+
+The `manual` broker values those from a unit count you supply and a price the market
+publishes:
+
+```ini
+[MANUAL]
+accounts =
+    Ezekiel Trump | SPYM | 1.650717 | 2026-08-10 | 150.00
+```
+
+```bash
+uv run stonksmith manual -M manual
+```
+
+**What is stored is a unit count, never a balance**, and that is the whole design. The
+`[TSP]` config comment states the rule in one line: *a balance is true for one day, so
+storing it would leave a value that silently rots*. Units move only when money goes in or
+out, so an account nobody is funding has a count that stays exactly right while a published
+price does the moving. A hardcoded balance would be correct the morning it was typed and
+wrong every morning after — and because it feeds the Net Worth series, it would draw a flat
+line through that slice of the portfolio while looking entirely like data.
+
+To turn a balance into a unit count, divide it by that day's close — a balance is units ×
+price, so the division inverts it exactly. Where the account lists its purchases, deriving
+the count from those is better still: each buy is an exact amount on a known date, so the
+result is reproducible and the fifth field can carry what was paid, which makes the account
+report a real gain rather than the dash every cost-less holding shows.
+
+Five fields: `Name | SYMBOL | units | units_as_of | cost_basis`, the last optional. The
+symbol is whatever the chart feed knows the fund by — the same feed Ally's `--from-prices`
+reprices against, deliberately, since two brokers pricing the same fund from two sources
+would disagree about it on the same day.
+
+Three things it will not do:
+
+- **It never writes a value it did not compute.** A symbol with no published close is
+  skipped and reported, not written at zero — a zero is a number rather than an error, and
+  the series would carry it forward for thirty days.
+- **`as_of` is the price date**, not the run's clock and not the unit date. That is what
+  makes a manual account age visibly beside scraped ones: a stale price shows up in
+  `stale` exactly as a stale scrape does.
+- **It records no transactions.** A movement is money changing hands and this observes
+  none — it prices a count. Writing the deposits that produced the count would be inventing
+  a log from a configuration line, and the brief would report them as new movements.
+
+What it costs: a contribution nobody types in leaves the mark short by exactly that
+contribution — bounded, and self-correcting the moment the count is updated. `units_as_of`
+rides on every mark so a reader can judge how much room that leaves.
+
 ## Calling accounts what you call them
 
 Brokers name accounts for their own screens. "MICROSOFT CORPORATION SAVINGS PLUS 401(K)

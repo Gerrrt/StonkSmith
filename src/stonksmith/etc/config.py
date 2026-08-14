@@ -9,6 +9,7 @@ first use and cached.
 
 import ast
 import configparser
+from dataclasses import dataclass
 from pathlib import Path
 
 from stonksmith.etc.logger import stonksmith_logger
@@ -493,6 +494,97 @@ def get_asset_classes() -> dict[str, str]:
         classes[symbol.strip()] = name.strip()
 
     return classes
+
+
+@dataclass(frozen=True, slots=True)
+class ManualHolding:
+    """
+    One account valued from a unit count the operator supplies.
+
+    Units and a symbol rather than a balance, on the rule the [TSP] comment
+    states: a balance is true for one day and would silently rot, while a unit
+    count only moves when money does. ``units_as_of`` rides along because an
+    account priced from an old count is right if nothing has been paid in and
+    wrong by exactly what has -- and the date is the only way to tell.
+    """
+
+    name: str
+    symbol: str
+    units: float
+    units_as_of: str
+
+    #: What was paid, where the operator knows it. Optional because most
+    #: portals that cannot be scraped cannot be asked this either -- and None
+    #: rather than zero, so the brief renders a dash instead of reporting a
+    #: position that has made exactly its whole value.
+    cost_basis: float | None = None
+
+
+def get_manual_accounts() -> tuple[list[ManualHolding], list[str]]:
+    """
+    Accounts that can be seen but not scraped, and the lines that made no sense.
+
+    Two returns, because a line that does not parse must not be dropped in
+    silence. This is hand-typed configuration for an account no source will ever
+    correct: a mistyped unit count produces a plausible number and a mistyped
+    line produces nothing at all, and the second one is only distinguishable
+    from "no manual accounts configured" if somebody says so.
+
+    Four fields split on "|" rather than on whitespace, because an account name
+    has spaces in it and a fund symbol does not have a pipe. A fifth is
+    optional and carries what was paid, so an account that knows its cost basis
+    reports a gain rather than the dash every unpriced holding shows.
+    :return: (the accounts, the lines that could not be read)
+    :rtype: tuple[list[ManualHolding], list[str]]
+    """
+
+    raw: str = get_config().get(section="MANUAL", option="accounts", fallback="")
+    accounts: list[ManualHolding] = []
+    refused: list[str] = []
+
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+
+        fields: list[str] = [field.strip() for field in line.split("|")]
+
+        # Four required, a fifth optional. The required ones must all be filled
+        # in: a blank symbol or a blank date is a half-written line, and half a
+        # line is the shape a copy-paste leaves behind.
+        if len(fields) not in (4, 5) or not all(fields[:4]):
+            refused.append(line.strip())
+            continue
+
+        name, symbol, units, as_of = fields[:4]
+        paid: str = fields[4] if len(fields) == 5 else ""
+
+        try:
+            held = float(units)
+            cost: float | None = float(paid) if paid else None
+
+        except ValueError:
+            refused.append(line.strip())
+            continue
+
+        # A negative unit count is not a short position here -- nothing in this
+        # format can express one -- it is a typo that would subtract from the
+        # portfolio while looking like a holding. A negative cost is the same
+        # kind of mistake and would report a gain larger than the position.
+        if held < 0 or (cost is not None and cost < 0):
+            refused.append(line.strip())
+            continue
+
+        accounts.append(
+            ManualHolding(
+                name=name,
+                symbol=symbol,
+                units=held,
+                units_as_of=as_of,
+                cost_basis=cost,
+            )
+        )
+
+    return accounts, refused
 
 
 def get_account_aliases() -> dict[str, str]:
