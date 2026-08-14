@@ -570,6 +570,7 @@ class StonkSmithDBMenu(cmd.Cmd):
         from stonksmith.etc.paths import dividends_path
         from stonksmith.etc.portfolio import Portfolio, read_workspace
         from stonksmith.helpers.quotes import (
+            QuotesUnavailable,
             dividend_events,
             trailing_dividend,
         )
@@ -619,13 +620,23 @@ class StonkSmithDBMenu(cmd.Cmd):
                 )
                 events = dividend_events(payload=response.text)
 
-            # One handler for both, deliberately. The distinction this used to
-            # draw -- the feed refusing a symbol, against the feed being
-            # unreachable -- is not one the payload can actually support: a rate
-            # limit, an HTML block page and a genuine 404 all arrive here as
-            # QuotesUnavailable, and only the last is a fact about the symbol.
-            # So neither is allowed to overwrite a figure that was already good.
-            except Exception as e:
+            # Two exceptions, handled identically, and the pairing is the point.
+            # RequestException is the network failing to answer; QuotesUnavailable
+            # is an answer this cannot use -- and that second one covers a rate
+            # limit, an HTML block page and a genuine 404 alike, of which only
+            # the last is a fact about the symbol. Since the payload cannot tell
+            # them apart, none of them is allowed to overwrite a good figure.
+            #
+            # Named rather than bare `Exception`, which is what this was. The
+            # carry above is exactly what makes the difference matter: a
+            # TypeError from a regression in the parsing would have been caught
+            # here, reported as "kept the earlier figure" and cached as a
+            # success, so the brief would render perfectly every morning off code
+            # that had stopped working. A broad catch that predates a fallback is
+            # a broad catch that hides less than one behind it. Anything not
+            # named here ends the run non-zero, which is the whole contract the
+            # nightly script's `status=1` rests on.
+            except (requests.RequestException, QuotesUnavailable) as e:
                 held: Paid | None = previous.paid.get(symbol)
 
                 if held is not None and held.found:

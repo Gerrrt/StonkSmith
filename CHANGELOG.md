@@ -139,6 +139,13 @@ the two disagree.
   holding nothing that pays, which is the reading `found` exists to prevent. A
   failed fetch now keeps the figure it already had. A good fetch still overwrites,
   including a fetch that legitimately returns zero.
+- The refresh catches `requests.RequestException` and `QuotesUnavailable` rather
+  than every exception. The carry above is what makes the difference matter: a
+  bug in the parsing would have been caught, reported as "kept the earlier
+  figure" and cached as a success, so the brief would render perfectly every
+  morning off code that had stopped working. A broad catch in front of a
+  fallback hides strictly more than one in front of a zero. Anything else now
+  ends the run non-zero, which is what the nightly script's `status=1` rests on.
 - Carried figures keep **their own fetch date** rather than being restamped, and
   the staleness warning reads the oldest of those rather than the file's write
   date — which moves every night whether or not anything was fetched, and would

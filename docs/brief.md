@@ -215,6 +215,13 @@ staleness check reads the oldest of those, and the command names every symbol it
 A run that carried everything is a refresh that has stopped refreshing, and it looks
 identical to a good run in the counts alone.
 
+**Only the feed's own failures are carried.** The handler catches a network error and a
+payload this cannot use, and nothing else — so a bug in StonkSmith ends the run non-zero
+and the nightly script reports the night. Caught, it would have been filed as "kept the
+earlier figure" and cached as a success, and the brief would have rendered perfectly every
+morning off code that had stopped working. A broad catch in front of a fallback hides
+strictly more than one in front of a zero.
+
 ### The holdings table
 
 Every position, not the top movers — the difference between *what changed* and *what do I
