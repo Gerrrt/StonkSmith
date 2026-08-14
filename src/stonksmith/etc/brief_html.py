@@ -606,6 +606,11 @@ def _movers(
     :param moves: The movements to render, in order
     :param currency: The currency they are in
     :param empty: What to say when there are none
+    :param dropped: How many moved but did not fit under the ``[BRIEF] movers``
+        cap, counted by build_brief rather than derived here -- ``moves`` has
+        already been truncated by the time it arrives, so this is the only way
+        the table can know it is not the whole list. Zero renders no line at all,
+        which is every ordinary morning
     :return: The section
     :rtype: str
     """

@@ -968,11 +968,19 @@ def significant(moves: Iterable[Movement], limit: int) -> tuple[Movement, ...]:
       it is invariant to the size of the portfolio -- the one property a floor of
       either kind loses the moment the book grows.
 
-    The cost is that it can drop a real mover, so the count of what was dropped
-    travels with the result and the page states it. A list that silently ends at
-    eight reports the eighth as the smallest thing that moved, which is the
-    quiet-truncation failure this project already names about `get_transactions`
-    -- its five-hundred-row limit is why that read cannot back a sheet.
+    The cost is that it can drop a real mover, and a list that silently ends at
+    eight reports the eighth as the smallest thing that moved -- the
+    quiet-truncation failure this project already names about `get_transactions`,
+    whose five-hundred-row limit is why that read cannot back a sheet.
+
+    **This function does not report what it dropped.** It returns the rows that
+    fit and nothing else, and the caller counts the difference: build_brief sets
+    ``Brief.account_movers_dropped`` from the same list it passes here, and
+    brief_html states it under the table. Kept that way rather than returning a
+    pair, because the count is only meaningful against the list this was given
+    and build_brief is holding that list already -- returning it from here would
+    be the same subtraction done twice, in two places free to disagree about how
+    many accounts moved.
 
     Dollars rather than percent for the ranking itself, because the reader's
     question at that hour is what moved the portfolio, and a portfolio is moved
