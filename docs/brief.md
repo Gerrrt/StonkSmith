@@ -195,8 +195,25 @@ Two distinctions the cache keeps that a simpler one would lose:
   thirds. The coverage is measured from the oldest payment actually inside the window, so
   a fund that has paid once, last month, covers a month.
 
-If the feed is unreachable the cache keeps the last figures, which are still true — funds
-distribute quarterly at most. A failure here costs a number, not the morning.
+**A failed fetch keeps the figure it already had, with its own date.** The refresh rebuilds
+the whole file in one pass, so this is not automatic — it is the difference between one
+rate-limited night costing nothing and one rate-limited night erasing every yield the brief
+can report. A rate limit, an HTML block page and a genuine 404 all arrive at the caller
+identically, and only the last is a fact about the symbol, so none of them is allowed to
+overwrite a good figure.
+
+The date matters as much as the figure. A carried number restamped with today's date would
+make the staleness warning blind, because the file is written every night whether or not
+anything was fetched — so each symbol carries the day *its own* figure was fetched, the
+staleness check reads the oldest of those, and the command names every symbol it carried:
+
+```
+[-] Could not refresh SWPPX (…); keeping the figure from 2026-08-01
+[-] 1 of those are older figures kept because the feed could not be reached: SWPPX
+```
+
+A run that carried everything is a refresh that has stopped refreshing, and it looks
+identical to a good run in the counts alone.
 
 ### The holdings table
 
