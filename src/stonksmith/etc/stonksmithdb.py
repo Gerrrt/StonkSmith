@@ -360,9 +360,6 @@ class StonkSmithDBMenu(cmd.Cmd):
         )
         from stonksmith.etc.brief_html import render
         from stonksmith.etc.config import (
-            get_account_aliases,
-            get_account_colors,
-            get_brief_fund_link,
             get_brief_keep_days,
             get_brief_min_position,
             get_brief_movers,
@@ -374,7 +371,6 @@ class StonkSmithDBMenu(cmd.Cmd):
         from stonksmith.etc.portfolio import (
             Portfolio,
             read_workspace,
-            unmatched_aliases,
         )
 
         asked: set[str] = set(line.split())
@@ -436,49 +432,11 @@ class StonkSmithDBMenu(cmd.Cmd):
             print(f"[-] Not in the brief: {name} could not be read ({reason}).")
             self.failed = True
 
-        for label in unmatched_aliases(
-            portfolio=portfolio, aliases=get_account_aliases()
-        ):
-            # Reported rather than ignored, on the rule the asset class table
-            # follows. A line that matches nothing is either a typo or a broker
-            # that has renamed an account -- and in the second case the account
-            # has quietly reverted to the broker's own wording, which is the
-            # outcome the alias was written to prevent. Not a failure: the brief
-            # is correct, it is just not saying what was asked.
-            print(f"[-] Alias matched no account: {label}")
-
-        stale_by: int | None = rates.age(today=now.date())
-
-        if not rates.paid:
-            print(
-                "[*] No dividend figures cached; run `stonksmithdb dividends` "
-                "to fill the indicated yield in."
-            )
-        elif stale_by is not None and stale_by > DIVIDENDS_STALE_DAYS:
-            # Not a failure: distributions are quarterly at most, so an old file
-            # is not a wrong one. Said anyway, because a refresh that has stopped
-            # running otherwise shows up as a yield that never moves.
-            print(
-                f"[-] Dividend figures are {stale_by} days old; "
-                "run `stonksmithdb dividends` to refresh them."
-            )
-
-        if not get_brief_fund_link():
-            # Refused rather than silently unlinked, on the rule the colour
-            # lines follow: a template that is not https leaves every symbol as
-            # plain text, which looks exactly like a workspace of unlinkable
-            # fund codes.
-            print(
-                "[-] [BRIEF] fund_link is not an https URL containing "
-                "{symbol}; symbols are not linked."
-            )
-
-        for line in get_account_colors()[1]:
-            # Named for the reason the [MANUAL] parser names its own refused
-            # lines: a colour that was not understood leaves the row with no
-            # dot, which looks exactly like an owner nobody wrote a line for.
-            # Silence here would make a typo indistinguishable from a decision.
-            print(f"[-] Unreadable [ACCOUNTS] colors line, skipped: {line!r}")
+        self._report_settings(
+            portfolio=portfolio,
+            stale_by=rates.age(today=now.date()),
+            cached=bool(rates.paid),
+        )
 
         if peek:
             print("[*] Baseline left where it was: this was a peek.")
@@ -536,6 +494,72 @@ class StonkSmithDBMenu(cmd.Cmd):
 
             except OSError as e:
                 print(f"[-] Could not remove {stale_report}: {e}")
+
+    @staticmethod
+    def _report_settings(portfolio: Any, stale_by: int | None, cached: bool) -> None:
+        """
+        Say which settings did not take, and which figures are getting old.
+
+        Split out of ``do_brief`` when it crossed the complexity limit, and the
+        split is along a real seam rather than a convenient one: everything here
+        is advisory. None of it changes the page, none of it sets ``failed``, and
+        every line exists because the *symptom* of a setting quietly not applying
+        is indistinguishable from the condition that setting was written to fix.
+        A colour that was not understood leaves an uncoloured row; a stated cost
+        that did not land leaves a dash; an alias that matched nothing leaves the
+        broker's own wording. In each case the brief is correct and is simply not
+        saying what was asked, which is precisely the failure nobody notices.
+        :param portfolio: What the workspace holds, carrying its own unused lines
+        :param stale_by: How old the oldest dividend figure is, or None
+        :param cached: Whether any dividend figure is cached at all
+        """
+
+        from stonksmith.etc.config import (
+            get_account_aliases,
+            get_account_colors,
+            get_account_costs,
+            get_brief_fund_link,
+        )
+        from stonksmith.etc.portfolio import unmatched_aliases
+
+        for label in unmatched_aliases(
+            portfolio=portfolio, aliases=get_account_aliases()
+        ):
+            # A line that matches nothing is either a typo or a broker that has
+            # renamed an account -- and in the second case the account has
+            # quietly reverted to the broker's own wording, which is the outcome
+            # the alias was written to prevent.
+            print(f"[-] Alias matched no account: {label}")
+
+        for line in portfolio.unused_costs:
+            print(f"[-] [ACCOUNTS] cost_basis not applied: {line}")
+
+        for line in get_account_costs()[1]:
+            print(f"[-] Unreadable [ACCOUNTS] cost_basis line, skipped: {line}")
+
+        if not cached:
+            print(
+                "[*] No dividend figures cached; run `stonksmithdb dividends` "
+                "to fill the indicated yield in."
+            )
+
+        elif stale_by is not None and stale_by > DIVIDENDS_STALE_DAYS:
+            # Not a failure: distributions are quarterly at most, so an old file
+            # is not a wrong one. Said anyway, because a refresh that has stopped
+            # running otherwise shows up as a yield that never moves.
+            print(
+                f"[-] Dividend figures are {stale_by} days old; "
+                "run `stonksmithdb dividends` to refresh them."
+            )
+
+        if not get_brief_fund_link():
+            print(
+                "[-] [BRIEF] fund_link is not an https URL containing "
+                "{symbol}; symbols are not linked."
+            )
+
+        for line in get_account_colors()[1]:
+            print(f"[-] Unreadable [ACCOUNTS] colors line, skipped: {line!r}")
 
     def do_dividends(self, line: str) -> None:
         """

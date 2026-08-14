@@ -72,7 +72,11 @@ from typing import Any
 from sqlalchemy import Engine
 
 from stonksmith.etc.broker_db import BrokerDatabase
-from stonksmith.etc.config import get_account_aliases, get_workspace
+from stonksmith.etc.config import (
+    get_account_aliases,
+    get_account_costs,
+    get_workspace,
+)
 from stonksmith.etc.context import PortfolioDbProtocol
 from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.etc.paths import workspace_dir
@@ -852,6 +856,16 @@ class Portfolio:
     #: which is why this comment is longer than the field.
     holdings_history: tuple[HoldingRow, ...] = ()
 
+    #: `[ACCOUNTS] cost_basis` lines that were not used, each with the reason.
+    #:
+    #: Carried on the record rather than recomputed by the caller, unlike the
+    #: alias check beside it, because after the costs are filled in the fact is
+    #: gone: a holding whose cost this supplied and one whose broker reported it
+    #: are indistinguishable by then, and "that line was ignored" is exactly the
+    #: distinction. A reason that cannot be re-derived has to be carried out --
+    #: the argument ``unreadable`` already makes one field up.
+    unused_costs: tuple[str, ...] = ()
+
     def total(self, currency: str = "USD") -> float:
         """
         What the accounts in one currency add up to.
@@ -1388,6 +1402,85 @@ def apply_aliases(portfolio: Portfolio, aliases: dict[str, str]) -> Portfolio:
     )
 
 
+def apply_costs(portfolio: Portfolio, costs: dict[str, float]) -> Portfolio:
+    """
+    Fill in what the operator paid, where the source reported no cost basis.
+
+    Applied **before** the aliases, deliberately: both settings name an account
+    by the label the broker gave, and renaming first would leave every stated
+    cost looking for an account under a name it no longer has. That is the same
+    ordering trap ``unmatched_aliases`` documents from the other side.
+
+    **A stated cost never overwrites a reported one.** What SnapTrade returns is
+    a real average over real lots; what a config line carries is a figure typed
+    off a statement. Where both exist the source wins and the line is reported
+    as unused, because silently preferring the typed number would let a stale
+    config quietly diverge from a broker that has been right all along.
+
+    Assigned only when the account has exactly **one** uncosted holding. Every
+    account this exists for holds a single position, and an account holding
+    three would need the lump sum split between them -- which cannot be done
+    from a total without inventing the per-position gains that the split
+    decides. Refused and reported instead, which is the same answer
+    ``get_account_costs`` gives a line it cannot parse.
+    :param portfolio: What the workspace holds
+    :param costs: Label to cost, from the config
+    :return: The portfolio with stated costs filled in, carrying the lines that
+        were not used and why
+    :rtype: Portfolio
+    """
+
+    if not costs:
+        return portfolio
+
+    stated: dict[str, float] = {
+        normalize_label(label=label): cost for label, cost in costs.items()
+    }
+
+    #: Which holdings each named account has, and how many of them still want a
+    #: cost. Counted over the whole account before anything is assigned, since
+    #: "exactly one" is a fact about the account rather than about the row.
+    wanting: dict[str, list[int]] = {}
+    holdings: list[HoldingRow] = list(portfolio.holdings)
+
+    for index, row in enumerate(holdings):
+        label: str = normalize_label(label=account_label(row=row))
+
+        if label in stated and row.cost_basis is None:
+            wanting.setdefault(label, []).append(index)
+
+    #: Every account the config names that the workspace actually has, whether
+    #: or not it wanted a cost. Separates "no such account" from "that account
+    #: already reports its own cost", which are different mistakes.
+    present: set[str] = {
+        normalize_label(label=account_label(row=row)) for row in portfolio.holdings
+    }
+    unused: list[str] = []
+
+    for label, cost in costs.items():
+        key: str = normalize_label(label=label)
+        rows: list[int] = wanting.get(key, [])
+
+        if not rows:
+            unused.append(
+                f"{label} (already reports its own cost basis)"
+                if key in present
+                else f"{label} (no holding in this workspace)"
+            )
+            continue
+
+        if len(rows) > 1:
+            unused.append(
+                f"{label} ({len(rows)} holdings report no cost basis, so a single "
+                "total cannot be divided between them without inventing the split)"
+            )
+            continue
+
+        holdings[rows[0]] = replace(holdings[rows[0]], cost_basis=cost)
+
+    return replace(portfolio, holdings=tuple(holdings), unused_costs=tuple(unused))
+
+
 def unmatched_aliases(portfolio: Portfolio, aliases: dict[str, str]) -> list[str]:
     """
     Alias lines that name no account in the workspace.
@@ -1515,19 +1608,28 @@ def read_databases(paths: Iterable[Path], with_history: bool = False) -> Portfol
         read.append(broker)
 
     return apply_aliases(
-        portfolio=Portfolio(
-            accounts=tuple(accounts),
-            holdings=tuple(holdings),
-            transactions=tuple(transactions),
-            brokers_read=tuple(read),
-            unreadable=tuple(unreadable),
-            # Built here rather than inside the loop, and that is the whole design.
-            # The dates one broker's accounts must be carried onto are the dates the
-            # *other* brokers ran on, so the series cannot be assembled a database at
-            # a time -- a per-broker series would each be right on its own and sum to
-            # a portfolio that collapses every day only one of them scraped.
-            net_worth=tuple(net_worth_history(observations=observations)),
-            holdings_history=tuple(positions),
+        # Costs first, aliases second, and the order is load-bearing. Both
+        # settings name an account by the label the broker gave, so renaming
+        # first would leave every stated cost hunting for an account under a
+        # name it no longer has -- and reporting each working line as unused,
+        # which is the failure mode unmatched_aliases had to be written around.
+        portfolio=apply_costs(
+            portfolio=Portfolio(
+                accounts=tuple(accounts),
+                holdings=tuple(holdings),
+                transactions=tuple(transactions),
+                brokers_read=tuple(read),
+                unreadable=tuple(unreadable),
+                # Built here rather than inside the loop, and that is the whole
+                # design. The dates one broker's accounts must be carried onto are
+                # the dates the *other* brokers ran on, so the series cannot be
+                # assembled a database at a time -- a per-broker series would each
+                # be right on its own and sum to a portfolio that collapses every
+                # day only one of them scraped.
+                net_worth=tuple(net_worth_history(observations=observations)),
+                holdings_history=tuple(positions),
+            ),
+            costs=get_account_costs()[0],
         ),
         # Read here rather than passed in, so every consumer of the canonical
         # read gets the operator's names without having to know they exist.

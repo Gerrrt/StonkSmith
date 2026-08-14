@@ -9,6 +9,7 @@ first use and cached.
 
 import ast
 import configparser
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -624,6 +625,78 @@ def get_account_aliases() -> dict[str, str]:
         aliases[label.strip()] = name.strip()
 
     return aliases
+
+
+def get_account_costs() -> tuple[dict[str, float], list[str]]:
+    """
+    What the operator paid, for accounts whose source will not say.
+
+    Three real holdings report no cost basis and each refuses for its own
+    reason, which is why this is stated rather than derived. A Fidelity 401k
+    reaches SnapTrade as ``kind: "other"`` carrying units and price and nothing
+    else -- not even eligible for tax lots. A Schwab 529 arrives as a bare
+    balance with no symbol at all. And the TSP unit count is anchored to a
+    figure typed off a quarterly statement, so the only units whose cost is
+    known are the ones accrued since; reporting *those* as the basis would put
+    a five-figure balance against a few hundred dollars and print a gain of
+    some two thousand percent. A partial cost basis is worse than none.
+
+    Keyed on the "Source / Account" label, and read against the label the
+    *broker* gave -- the same spelling ``exclude_accounts`` matches and
+    ``[ACCOUNTS] aliases`` renames from. Under `[ACCOUNTS]` beside them rather
+    than in a section of its own for that reason: three settings identify an
+    account, and one rule for saying which is what stops a line that works in
+    one from doing nothing in another.
+
+    Refusals are returned rather than raised. A cost that will not parse is a
+    typo in a config file, and the honest outcome is a holding that still shows
+    a dash plus a line saying why -- not a failed morning, and emphatically not
+    a zero, which would report the position's whole value as gain.
+    :return: (label to cost, the lines that were refused)
+    :rtype: tuple[dict[str, float], list[str]]
+    """
+
+    raw: str = get_config().get(section="ACCOUNTS", option="cost_basis", fallback="")
+    costs: dict[str, float] = {}
+    refused: list[str] = []
+
+    for line in raw.splitlines():
+        label, sep, amount = line.rpartition("=")
+
+        if not sep or not label.strip() or not amount.strip():
+            continue
+
+        # Punctuation stripped before parsing, since a figure copied off a
+        # statement arrives as "$1,300.00" and refusing that would be pedantry
+        # about a value nobody could misread.
+        try:
+            cost = float(amount.strip().lstrip("$").replace(",", "").replace("_", ""))
+
+        except ValueError:
+            refused.append(f"{line.strip()} (not an amount)")
+            continue
+
+        # Checked before the sign, because the sign test cannot see these.
+        # float() accepts "nan", "inf" and anything that overflows to one --
+        # "1e400" parses to inf -- and `nan < 0` is False, so a NaN would sail
+        # through the line below and land in the cost basis. From there it
+        # propagates: the gain is nan, the growth is nan, the win/loss flag
+        # compares false against everything, and the tile renders the word.
+        # Silent, contagious, and not obviously traceable to a config file.
+        if not math.isfinite(cost):
+            refused.append(f"{line.strip()} (not a finite amount)")
+            continue
+
+        # Negative is refused rather than clamped. A cost basis below zero is
+        # not a number anybody meant, and passing it through would report a
+        # growth percentage with the sign inverted.
+        if cost < 0:
+            refused.append(f"{line.strip()} (a cost cannot be negative)")
+            continue
+
+        costs[label.strip()] = cost
+
+    return costs, refused
 
 
 #: The colours an account may be tagged with.
