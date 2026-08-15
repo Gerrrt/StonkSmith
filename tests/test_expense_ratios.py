@@ -90,14 +90,31 @@ class TheRatioIsReadAsAFundPagePrintsIt(UserConfigMixin, unittest.TestCase):
         self.assertEqual(ratios, {"CHEAP": 0.02, "DEAR": 0.60})
         self.assertEqual(refused, [])
 
-    def test_a_figure_that_looks_like_basis_points_is_refused(self) -> None:
-        # "2" for two basis points is the mistake this catches: it would be read
-        # as two percent, a hundred times the truth, and produce a fee figure
-        # nobody would question because it is merely large rather than absurd.
+    def test_a_decimal_point_in_the_wrong_place_entirely_is_refused(self) -> None:
+        # What the cap actually does: 20 is above any fund anybody holds, so it
+        # is a decimal point somewhere it does not belong.
         _ratios, refused = self._reload("[FEES]\nexpense_ratios =\n\tCHEAP = 20\n")
 
         self.assertEqual(len(refused), 1)
         self.assertIn("percentage like 0.02", refused[0])
+
+    def test_the_cap_does_not_catch_the_mistake_that_matters(self) -> None:
+        # Pinned because the comments here claimed otherwise in three places,
+        # and a guard described as catching something it does not is worse than
+        # no guard: it invites the reader to stop checking.
+        #
+        # "0.2" for "0.02" is ten times the truth, "2" is a hundred times, and
+        # both are accepted -- necessarily, because a two percent expense ratio
+        # is a real thing somebody could hold. The figure has to be right going
+        # in, which is what the config comment now says.
+        for amount in ("0.2", "2"):
+            with self.subTest(amount=amount):
+                ratios, refused = self._reload(
+                    f"[FEES]\nexpense_ratios =\n\tCHEAP = {amount}\n"
+                )
+
+                self.assertEqual(ratios, {"CHEAP": float(amount)})
+                self.assertEqual(refused, [])
 
     def test_something_that_is_not_a_number_is_named(self) -> None:
         _ratios, refused = self._reload("[FEES]\nexpense_ratios =\n\tCHEAP = cheap\n")

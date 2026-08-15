@@ -646,6 +646,11 @@ def get_expense_ratios() -> tuple[dict[str, float], list[str]]:
     Percentages, so "0.02" for two basis points rather than "0.0002". That is
     how every fund page prints it, and asking somebody to convert on the way in
     is asking for a factor-of-a-hundred error in a figure nobody re-checks.
+
+    The bound below is a sanity cap on gross errors and not a guard against that
+    factor: a ratio ten or a hundred times too large is still a plausible
+    percentage, so it is accepted and the resulting fee looks entirely credible.
+    Copy the figure; do not convert it.
     :return: (symbol to percentage, the lines that were refused)
     :rtype: tuple[dict[str, float], list[str]]
     """
@@ -667,9 +672,16 @@ def get_expense_ratios() -> tuple[dict[str, float], list[str]]:
             refused.append(f"{line.strip()} (not a percentage)")
             continue
 
-        # Ten percent is far above any real fund and well below a plausible
-        # basis-point mix-up, so it catches "2" meant as 0.02 without refusing
-        # anything anybody actually holds.
+        # A sanity cap, and worth being exact about what it does and does not
+        # do. Ten percent is above any fund anybody holds, so it catches a gross
+        # error -- 20 or 200 from a decimal in the wrong place entirely.
+        #
+        # It does not catch the mistake that matters. "0.2" meant as "0.02" is
+        # ten times the truth and "2" is a hundred times, and both are inside
+        # any bound wide enough to admit a real fund, because a two percent
+        # expense ratio genuinely exists. No validation can separate them: the
+        # figure has to be right going in, and what the brief can do about a
+        # wrong one is nothing.
         if not math.isfinite(value) or not 0.0 <= value <= 10.0:
             refused.append(f"{line.strip()} (expected a percentage like 0.02)")
             continue
