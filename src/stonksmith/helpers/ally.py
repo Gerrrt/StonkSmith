@@ -66,11 +66,11 @@ ACCOUNT_CLASS_SUFFIX = "-account"
 INVESTMENT_KIND = "investments"
 
 #: Separates the nickname from the account number in the page heading:
-#: "Individual - 3LD20847".
+#: "Individual - 3LD21234".
 SELECTED_ACCOUNT_SEPARATOR = " - "
 
 #: How many trailing characters Ally leaves visible when it masks an account
-#: number: "...0847".
+#: number: "...1234".
 MASKED_DIGITS = 4
 
 
@@ -131,7 +131,7 @@ def selected_account(soup: BeautifulSoup) -> tuple[str, str]:
     """
     The account the holdings table is currently showing.
 
-    Ally puts it in the page heading as "Individual - 3LD20847". The number is
+    Ally puts it in the page heading as "Individual - 3LD21234". The number is
     the unmasked one, which the sidebar only shows masked, so it is what pairs
     the two together.
     :param soup: The parsed holdings page
@@ -165,7 +165,7 @@ def sidebar_accounts(soup: BeautifulSoup) -> list[dict[str, str]]:
     to succeed.
     :param soup: The parsed holdings page
     :return: One dict per account with "Kind" ("investments", "savings", ...),
-        "Group", "Name", "Number" (masked, e.g. "...0847"), "Label" and
+        "Group", "Name", "Number" (masked, e.g. "...1234"), "Label" and
         "Balance"
     :rtype: list[dict[str, str]]
     """
@@ -223,13 +223,13 @@ def account_label(name: str, number: str) -> str:
     """
     Build the display and identity string for an account.
 
-    "Individual (...0847)". The masked number is deliberately part of it: two
+    "Individual (...1234)". The masked number is deliberately part of it: two
     Ally accounts can share a nickname, and the masked digits are the only
     thing on the page that tells them apart. It is also stable -- Ally masks
     the same trailing digits every run -- which matters because this string is
     the database's identity key.
     :param name: The account nickname
-    :param number: The masked account number, e.g. "...0847"
+    :param number: The masked account number, e.g. "...1234"
     :return: The label, falling back to whichever half is present
     :rtype: str
     """
@@ -246,12 +246,12 @@ def masked_form(number: str) -> str:
 
     Used when the holdings heading names an account the sidebar did not, so
     that both routes produce the same label. Deriving one identity from
-    "...0847" and another from "3LD20847" would give one account two rows in
+    "...1234" and another from "3LD21234" would give one account two rows in
     the database the first time the sidebar failed to render -- the same
     double-count that excluding overlapping SnapTrade accounts exists to
     prevent, arriving from the opposite direction.
     :param number: The full account number
-    :return: The masked form, e.g. "...0847"; "" for an empty number
+    :return: The masked form, e.g. "...1234"; "" for an empty number
     :rtype: str
     """
 
@@ -267,7 +267,7 @@ def masked_matches(masked: str, number: str) -> bool:
     """
     Whether a masked sidebar number refers to the same account as a full one.
 
-    The sidebar says "...0847" and the heading says "3LD20847"; pairing them is
+    The sidebar says "...1234" and the heading says "3LD21234"; pairing them is
     what lets the holdings on screen be attributed to a sidebar account rather
     than becoming a second row for an account already listed.
     :param masked: The masked number from the sidebar
@@ -437,8 +437,8 @@ def holdings(soup: BeautifulSoup) -> list[Holding]:
     Every position in the holdings table.
 
     ``cost_basis`` is stored as the position's *total* cost, which is what Ally
-    puts in that column: the sample row reads 2500.00 against 125.000 units at
-    an 18.12 average price, and 125.000 x 18.12 is 2238.16. That is the same
+    puts in that column: the sample row reads 2265.00 against 125.000 units at
+    an 18.12 average price, and 125.000 x 18.12 is 2265.00. That is the same
     convention ``Holding.cost_basis`` already carries for SnapTrade positions,
     where the API reports a per-unit figure that the module multiplies out --
     so the two sources agree on what the column means, and a test pins it.

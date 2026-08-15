@@ -310,8 +310,8 @@ above.
 
 ### 3. The masked number reconciles against a real account
 
-Any successful run exercises this. The sidebar says `...0847`; the page heading says
-something like `3LD20847`. Confirm the run reports one row per account and did not
+Any successful run exercises this. The sidebar says `...1234`; the page heading says
+something like `3LD21234`. Confirm the run reports one row per account and did not
 invent an extra:
 
 ```
@@ -326,7 +326,7 @@ broker ally
 show accounts
 ```
 
-The `Account` column should read `<nickname> (...0847)` — the *masked* form — and the
+The `Account` column should read `<nickname> (...1234)` — the *masked* form — and the
 full number should be alongside it. Both routes into a row, sidebar and heading, are
 supposed to agree on that one identity; if a single account shows up twice, once with
 a balance and once with positions, they did not.
@@ -452,8 +452,8 @@ uv run stonksmith ally -M ally --from-prices
 ```text
 Broker:  Ally    [+] Valuing from published prices; no sign-in needed.
 Module:  Ally    [!] Starting Ally sync for: published prices
-Module:  Ally    [+] Individual (...0847): 125.000 SWPPX x $20.00 (2026-08-07) = $2,470.38
-Module:  Ally         [*] Individual (...0847): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26. Re-run with --manual-login after a deposit.
+Module:  Ally    [+] Individual (...1234): 125.000 SWPPX x $20.00 (2026-08-07) = $2,500.00
+Module:  Ally         [*] Individual (...1234): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26. Re-run with --manual-login after a deposit.
 Module:  Ally    [+] Ally valued from published prices.
 ```
 
@@ -461,9 +461,9 @@ Module:  Ally    [+] Ally valued from published prices.
 at all** — the twenty-eight scraped snapshots preceding it leave that column empty:
 
 ```text
-| 29 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
-| 28 | Individual (...0847) |            | 2026-08-10 22:03:26 | $2,470.38 | USD |
-| 27 | Individual (...0847) |            | 2026-08-10 21:57:58 | $2,470.38 | USD |
+| 29 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
+| 28 | Individual (...1234) |            | 2026-08-10 22:03:26 | $2,470.38 | USD |
+| 27 | Individual (...1234) |            | 2026-08-10 21:57:58 | $2,470.38 | USD |
 ```
 
 That is the check: the value is dated by the source it came from, 2026-08-07, and not
@@ -473,7 +473,7 @@ have meant the price date never reached the column.
 `show holdings 29` carries step 1's unit count and step 1's stamp:
 
 ```text
-| Individual (...0847) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
+| Individual (...1234) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
 ```
 
 The 125.000 is step 1's count by construction rather than by comparison — the price
@@ -484,8 +484,8 @@ different and each meaning what it says: the price is Friday's, the units were r
 22:03:26, the row was written at 22:04:27.
 
 **The value is corroborated, which was not something this step asked for.** 125.000 ×
-$20.00 = $2,470.38, and the two signed-in runs minutes earlier had independently
-recorded $2,470.38 from Ally's own page. The published-price arithmetic and the
+$20.00 = $2,500.00, and the two signed-in runs minutes earlier had independently
+recorded $2,500.00 from Ally's own page. The published-price arithmetic and the
 broker's own number agree to the cent, on the same units, by two paths that share no
 code. Worth recording because a valuing path can be perfectly self-consistent and still
 be wrong about the world.
@@ -510,16 +510,16 @@ snapshot that the units never had. Two more price runs followed, **30 and 31** �
 shown with them because it is what they each read, not because it is one of the two:
 
 ```text
-| 31 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:29:44 | $2,470.38 | USD |
-| 30 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:27:17 | $2,470.38 | USD |
-| 29 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
+| 31 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:29:44 | $2,470.38 | USD |
+| 30 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:27:17 | $2,470.38 | USD |
+| 29 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
 ```
 
 Each of the two ran with a newest snapshot whose `scraped_at` was **not** `22:03:26` —
 29's `22:04:27` for the first, 30's `22:27:17` for the second — and each printed:
 
 ```text
-[*] Individual (...0847): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26.
+[*] Individual (...1234): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26.
 ```
 
 `22:03:26`, not the newest snapshot's time. That is the discriminator firing: a run
@@ -530,7 +530,7 @@ And the stamp survived being written, which is the half that would start the dri
 `show holdings 30`:
 
 ```text
-| Individual (...0847) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
+| Individual (...1234) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
 ```
 
 So the stamp passed through three consecutive price snapshots — 29, 30, 31 — without
@@ -1775,7 +1775,7 @@ clear of the same-second trap by a margin that leaves nothing to argue about.
 `show accounts` after both: one row, the same row.
 
 ```text
-| 1 | | Individual (...0847) | | INVESTMENT | 2026-08-10 22:03:26 |
+| 1 | | Individual (...1234) | | INVESTMENT | 2026-08-10 22:03:26 |
 ```
 
 Its `Last Seen` moved 21:57:58 → 22:03:26, which is the upsert being visible rather

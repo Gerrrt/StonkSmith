@@ -76,7 +76,7 @@ the two disagree.
 - The indicated yield divides by **the holdings it has figures for**, and states
   their count and value. Two thirds of a real workspace can sit in a 401k, a TSP
   fund and a 529, none of which has a public ticker; dividing nine known funds'
-  income by all thirteen positions reports 0.27% where the answer is 1.27%.
+  income by all thirteen positions reports 0.29% where the answer is 1.33%.
 - A symbol the feed has never heard of is recorded as unanswered rather than as
   a fund paying nothing — both come to `0.0`, and only one is a fact about money.
   A fund listed part-way through the year reports how many days of payments its

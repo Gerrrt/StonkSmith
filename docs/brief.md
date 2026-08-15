@@ -156,13 +156,13 @@ Indicated Income   $240.00   a year at today's holdings, across 9 of 13 position
 
 **Indicated Yield is divided by the holdings it knows, not by the portfolio.** Two thirds
 of a real workspace can sit in a 401k, a TSP fund and a 529, none of which has a public
-ticker. Dividing nine known funds' income by all thirteen positions' value reports `0.27%`
-where the answer for what is actually known is `1.27%`, and nothing in the number tells
+ticker. Dividing nine known funds' income by all thirteen positions' value reports `0.29%`
+where the answer for what is actually known is `1.33%`, and nothing in the number tells
 the reader which they were given. The coverage travels with the figure, on the same rule
 the priced/unpriced gain split follows:
 
 ```
-Indicated Yield      1.27%   over $18,000.00 of holdings with a published dividend
+Indicated Yield      1.33%   over $18,000.00 of holdings with a published dividend
 ```
 
 Where the feed answered for nothing at all, both tiles show `—` and say **"no holding has

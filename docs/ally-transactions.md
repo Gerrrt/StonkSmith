@@ -73,7 +73,7 @@ between scrapes by multiplying recorded units by today's close, and units only m
 deposit lands — which is why every per-account line it prints ends the same way:
 
 ```text
-[*] Individual (...0847): priced at 2026-08-06; units as recorded 2026-08-07 20:40:18. Re-run with --manual-login after a deposit.
+[*] Individual (...1234): priced at 2026-08-06; units as recorded 2026-08-07 20:40:18. Re-run with --manual-login after a deposit.
 ```
 
 But the only way to fetch the transactions that would replace that guess with a fact is to

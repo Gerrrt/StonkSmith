@@ -126,7 +126,7 @@ uv run stonksmith ally -M ally --from-prices
 
 ```text
 [+] Valuing from published prices; no sign-in needed.
-[+] Individual (...1234): 125.000 SWPPX x $19.88 (2026-08-06) = $2,455.56
+[+] Individual (...1234): 125.000 SWPPX x $19.88 (2026-08-06) = $2,485.00
 [*] Individual (...1234): priced at 2026-08-06; units as recorded 2026-08-07 20:40:18. Re-run with --manual-login after a deposit.
 ```
 
@@ -241,7 +241,7 @@ store its positions too. Ally *Bank* deposit accounts appear in the same
 sidebar; they are reported as skipped rather than filed under a brokerage.
 
 All of that has met a real page. The parse, the account rail, the reconciliation
-of a masked sidebar number like `...0847` against a full `3LD20847`, and the
+of a masked sidebar number like `...1234` against a full `3LD21234`, and the
 bank/brokerage split were each exercised on every one of those nine runs. But
 they were nine runs against **one account state** — one investment account, one
 holding, one deposit account — and `tests/ally_holdings.html`, the signed-in page
@@ -639,8 +639,8 @@ uv run stonksmith tsp -M tsp --balance 8409.71 --balance-as-of 2026-08-05
 ```
 
 ```text
-Balance $8,409.71 on 2026-08-05 at $24.7344 (2026-08-05) = 315.7885 units
-Store it: [TSP] units = 315.7885, units_as_of = 2026-08-05
+Balance $8,409.71 on 2026-08-05 at $24.7344 (2026-08-05) = 340.0006 units
+Store it: [TSP] units = 340.0006, units_as_of = 2026-08-05
 ```
 
 So any moment spent logged in is worth a fresh unit count, and the two numbers
@@ -689,7 +689,7 @@ E-7 at Over 10: $5,300.40 basic pay per month
   2026-06-30: E-7 Over 10 $5,300.40 x 10% = $530.04 at $24.2990 (2026-06-30) = 21.813243 units
   2026-07-31: E-7 Over 10 $5,300.40 x 10% = $530.04 at $24.0756 (2026-07-31) = 22.015651 units
 Contributions since 2026-03-31: 4 month(s), $2,120.16 at 5% member + 5% agency = 88.571847 estimated units
-L 2060: 315.7885 anchored + 88.571847 estimated = 404.360347 units x $24.7344 (2026-08-05) = $10,001.61
+L 2060: 340.0006 anchored + 88.571847 estimated = 428.572447 units x $24.7344 (2026-08-05) = $10,600.48
 ```
 
 Each month is priced on its own posting date — the last day of the month unless

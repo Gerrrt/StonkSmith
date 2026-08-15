@@ -42,7 +42,7 @@ def _run(markup: str, capture: str | None = "/tmp/ally-empty-account-rail.html")
 
     module = AllyModule()
     module.scrape_accounts = MagicMock(
-        return_value=[{"Label": "Individual (...0847)", "Holdings": []}]
+        return_value=[{"Label": "Individual (...1234)", "Holdings": []}]
     )
     context = MagicMock()
 
