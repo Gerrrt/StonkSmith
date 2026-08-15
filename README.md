@@ -17,7 +17,7 @@
 <!-- PROJECT HEADER -->
 <br />
 <div align="center">
-  <img src="docs/logo.svg" alt="StonkSmith" width="88" height="88">
+  <img src="src/stonksmith/etc/logo.svg" alt="StonkSmith" width="88" height="88">
 
   <h1 align="center">StonkSmith</h1>
 
