@@ -106,7 +106,7 @@ class TheCountMatchesTheRowsBeneathIt(UserConfigMixin, unittest.TestCase):
                 account_key="f1",
                 symbol="FSKAX",
                 units=10.0,
-                value=1922.62,
+                value=1999.92,
             ),
             HoldingRow(
                 broker="b",
@@ -125,7 +125,7 @@ class TheCountMatchesTheRowsBeneathIt(UserConfigMixin, unittest.TestCase):
                     source="Fidelity",
                     account="An Account",
                     account_key="f1",
-                    value=1922.70,
+                    value=2000.00,
                     as_of="2026-08-14",
                 ),
             ),
@@ -137,7 +137,7 @@ class TheCountMatchesTheRowsBeneathIt(UserConfigMixin, unittest.TestCase):
                     account="An Account",
                     account_key="f1",
                     date="2026-08-14",
-                    value=1922.70,
+                    value=2000.00,
                     basis=OBSERVED,
                     observed_on="2026-08-14",
                 ),
@@ -156,6 +156,15 @@ class TheCountMatchesTheRowsBeneathIt(UserConfigMixin, unittest.TestCase):
         # row in the same glance, and the sentence that resolves it has to be in
         # that glance too.
         self.assertIn("2 holdings, 1 shown below", self._page(floor=1.00))
+
+    def test_everything_hidden_is_the_case_that_most_needs_saying(self) -> None:
+        # A count above an empty table reads as data that failed to load. This
+        # was skipped by a truthiness guard on the shown count -- the largest
+        # discrepancy the page can produce, and the only one with no rows to
+        # count as a clue.
+        page: str = self._page(floor=10_000.00)
+
+        self.assertIn("2 holdings, 0 shown below", page)
 
     def test_nothing_hidden_says_nothing_about_showing(self) -> None:
         # The qualifier appears only when it is needed. A page that explains an

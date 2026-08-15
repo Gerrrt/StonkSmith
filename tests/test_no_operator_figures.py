@@ -192,8 +192,15 @@ def tracked() -> list[Path]:
     """
 
     try:
+        # Tracked files *and* untracked ones git would not ignore. Tracked alone
+        # is the set that is already published, and scanning only that makes the
+        # check useless exactly when it is needed: a brand new file full of real
+        # figures is invisible until the commit that publishes it, so the guard
+        # goes green locally and fails in CI after the leak is in a commit
+        # message. That happened, on the commit that added this comment's
+        # sibling test file.
         listed: str = subprocess.run(
-            ["git", "ls-files"],
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
             capture_output=True,
             text=True,
             check=True,

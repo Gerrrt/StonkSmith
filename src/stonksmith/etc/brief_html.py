@@ -496,7 +496,11 @@ def _tiles(brief: Brief) -> str:
 
     shown: int = len(brief.positions)
 
-    if shown and shown != money_of.holdings:
+    if shown != money_of.holdings:
+        # No truthiness guard on `shown`. Zero is the case that most needs
+        # saying: every position filtered out leaves a count above an empty
+        # table, which reads as data that failed to load rather than as a
+        # deliberate floor. The largest discrepancy was the one being skipped.
         holds = f"{money_of.holdings} holdings, {shown} shown below"
 
     if round(cash, 2) > 0:
