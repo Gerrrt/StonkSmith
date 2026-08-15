@@ -1001,10 +1001,14 @@ def _cost_from_principal(value: Any, principal: Any, earnings: Any) -> float | N
         # Compared as whole cents, and allowed to be one out.
         #
         # Both halves of that are deliberate. Cents because the float form was
-        # not the check its own comment described: 2300.00 - 2140.00 - 159.99 is
-        # 0.010000000000005 in binary floating point, so `> 0.01` *rejected* a
+        # not the check its own comment described: 2200.00 - 2040.01 - 159.98 is
+        # 0.010000000000019327 in binary floating point, so `> 0.01` *rejected* a
         # row exactly a cent out, while a different triple a cent out would pass.
-        # A boundary that moves with the values is not a boundary.
+        # A boundary that moves with the values is not a boundary. Those three
+        # numbers are the ones test_a_row_a_single_cent_out_is_still_read uses,
+        # and they are chosen rather than illustrative -- a triple that does not
+        # land the wrong side of 0.01 demonstrates nothing, which is exactly how
+        # this comment came to cite one that did not.
         #
         # One cent because the page rounds all three figures independently, so
         # the identity can legitimately land a cent from zero. Nothing is given
