@@ -124,7 +124,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | Fidelity — the session survives to the next run | `tests/test_fidelity_refused_and_session.py` and `test_fidelity_lifecycle.py`. Ally's equivalent claim is settled the other way, which is the reason this one is worth asking | No | — |
 | Fidelity — database write | `tests/test_module_snapshot_writes.py` and `test_fidelity_module_capture.py` | No | — |
 | The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes | 2026-08-10 |
-| The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting. `verify volume` supplies its own rows instead, and was run against the real spreadsheet on 2026-08-15: both requests landed, all 2,500 rows came back, and the first and last row of each write sat in the cell it was addressed to. That settles the second-chunked-write half and cannot settle this one — the window it would have to find is upstream of the write, and rows the check supplies itself enter below it | No | — |
+| The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first, and on 2026-08-15 it confirmed 18 against 18. Nothing was dropped at either size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting — the count has grown by nine in five days, which is the rate that makes it a wait rather than an afternoon. `verify volume` supplies its own rows instead, and was run against the real spreadsheet on 2026-08-15: both requests landed, all 2,500 rows came back, and the first and last row of each write sat in the cell it was addressed to. That settles the second-chunked-write half and cannot settle this one — the window it would have to find is upstream of the write, and rows the check supplies itself enter below it | No | — |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes | 2026-08-10 |
 | The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes | 2026-08-11 |
 | The sheet — every allocation block adding up to the total it is a share of | `verify tabs` on 2026-08-15 against the real spreadsheet, the first run since the check was written: all three blocks were drawn and all three read back — account kind, position, and asset class — which is why that run counts thirteen checks where 2026-08-11 counted ten. The asset class line appearing at all is the config half, since it is drawn only when `asset_classes` is set. The refusal state was not seen and cannot be arranged; it needs positions exceeding balances, which check 8 says in advance is the expected outcome. Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, cover the wrong sum, the wrong share, and a refusal not being mistaken for either | Yes | 2026-08-15 |
@@ -1846,15 +1846,22 @@ day; the other two are not laziness.
 - *The whole-sync abort.* Covered above — a workspace whose data has not moved cannot tell a
   rewritten `Accounts` from an untouched one, so it rests on the claim loop preceding every
   write and on `test_nothing_is_written_when_a_tab_is_refused`.
-- *The window at five hundred.* 9 movements. Unchanged, and unchangeable from here.
+- *The window at five hundred.* 9 movements on the day. Unchanged, and unchangeable from here.
 
 The look was taken and the four tabs were deleted and remade, so *four machine-owned tabs* is
-settled too, and **the sheet has one row left**: *the whole transaction history reaching a tab*,
+settled too, and **the sheet had one row left**: *the whole transaction history reaching a tab*,
 waiting on a broker rather than on anybody's afternoon. Nine movements cannot put a question
-about five hundred, and no amount of care here changes that — it needs a workspace with the
+about five hundred, and no amount of care could change that — it needs a workspace with the
 rows, ideally past 2,000 so a second chunked write meets Sheets at all. It has an issue of its
 own, #141, because a row blocked on data volume should not hold a finished investigation open;
 #115 closed on everything above.
+
+**That count has since grown and the row has not moved**, which is worth stating here rather
+than leaving a reader to reconcile 9 against the 18 in the next section. The figures in this
+write-up are the 2026-08-10 run's own and stay as they were recorded; the workspace has kept
+scraping since, and 18 movements is no closer to putting a question about five hundred than 9
+was. `verify volume` settled the second chunked write on 2026-08-15 by sending its own rows,
+and that is a different question from this one — see check 5.
 
 ### Nine dates, twelve accounts, on 2026-08-15
 
