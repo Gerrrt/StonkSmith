@@ -201,21 +201,24 @@ class ThePlanStatesItsCostAsPrincipal(
         # identity can legitimately land a cent from zero. Nothing is given away
         # by allowing it -- the case being screened for misses by hundreds.
         #
-        # This is also the case the float form got wrong in the direction its
-        # own comment denied: 2300.00 - 2140.00 - 159.99 is 0.010000000000005 in
-        # binary floating point, so `> 0.01` rejected it while another triple a
-        # cent out would pass. A boundary that moves with the values is not one.
+        # **These three numbers are chosen, not illustrative.** In binary
+        # floating point 2200.00 - 2040.01 - 159.98 is 0.010000000000019, so the
+        # float form this replaced *rejected* a row exactly a cent out -- while a
+        # different triple, a cent out by the same amount, sailed through. A
+        # boundary that moves with the values is not a boundary, and only a pair
+        # that actually lands the wrong side of it can say so. 200.0000 x 11.00
+        # is 2200.00 exactly, so the row stays internally honest as well.
         self._write(
             symbol="",
             fund_code="70310",
             units=200.0000,
-            price=10.85,
-            value=2300.00,
-            principal=2140.00,
-            earnings=159.99,
+            price=11.00,
+            value=2200.00,
+            principal=2040.01,
+            earnings=159.98,
         )
 
-        self.assertEqual(self._read().holdings[0].cost_basis, 2140.00)
+        self.assertEqual(self._read().holdings[0].cost_basis, 2040.01)
 
     def test_a_row_two_cents_out_is_not_read(self) -> None:
         # The other side of the same boundary, so "one cent" is a rule rather
