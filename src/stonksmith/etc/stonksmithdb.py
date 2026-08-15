@@ -518,7 +518,9 @@ class StonkSmithDBMenu(cmd.Cmd):
             get_account_aliases,
             get_account_colors,
             get_account_costs,
+            get_allocation_targets,
             get_brief_fund_link,
+            get_expense_ratios,
         )
         from stonksmith.etc.portfolio import unmatched_aliases
 
@@ -536,6 +538,16 @@ class StonkSmithDBMenu(cmd.Cmd):
 
         for line in get_account_costs()[1]:
             print(f"[-] Unreadable [ACCOUNTS] cost_basis line, skipped: {line}")
+
+        for line in get_expense_ratios()[1]:
+            # Reported for the reason every refusal here is: a rejected ratio
+            # shows up only as a fee figure covering one position fewer, which
+            # is a number that looks right. "SWPPX = O.02" with a letter O is
+            # indistinguishable from a fund nobody has looked up yet.
+            print(f"[-] Unreadable [FEES] expense_ratios line, skipped: {line}")
+
+        for line in get_allocation_targets()[1]:
+            print(f"[-] Unreadable [ALLOCATION] targets line, skipped: {line}")
 
         if not cached:
             print(

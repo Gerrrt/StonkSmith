@@ -178,6 +178,43 @@ class ThePageLeadsWithTheMoney(UserConfigMixin, unittest.TestCase):
     def test_the_coverage_travels_with_it(self) -> None:
         self.assertIn("across 2 of 3 positions", self._page(fees=RATIOS))
 
+    def test_declared_but_worthless_does_not_deny_the_count(self) -> None:
+        # The count and the sentence must agree. A holding with a declared ratio
+        # and no value leaves nothing to charge a rate against -- which is not
+        # the same as nothing being declared, and saying so would contradict the
+        # "across N positions" the tile is already carrying.
+        held = (
+            HoldingRow(
+                broker="b",
+                source="s",
+                account="An Account",
+                account_key="a1",
+                symbol="CHEAP",
+                units=0.0,
+                value=0.0,
+            ),
+        )
+
+        import datetime as dt
+
+        from stonksmith.etc.brief import build_brief
+
+        self.config_body = "[FEES]\nexpense_ratios =\n\tCHEAP = 0.02\n"
+        self.tearDown()
+        self.setUp()
+
+        page: str = render(
+            brief=build_brief(
+                portfolio=Portfolio(holdings=held),
+                baseline=None,
+                today=dt.date(2026, 8, 14),
+            ),
+            now=dt.datetime(2026, 8, 14, 6, 30, tzinfo=dt.UTC),
+        )
+
+        self.assertIn("worth nothing to charge a rate against", page)
+        self.assertNotIn("no holding has a declared expense ratio", page)
+
     def test_nothing_declared_says_so_rather_than_showing_nought(self) -> None:
         # A fee of zero is a claim about the funds. Nothing declared is a claim
         # about the config, and the page says which.
@@ -185,6 +222,57 @@ class ThePageLeadsWithTheMoney(UserConfigMixin, unittest.TestCase):
 
         self.assertIn("no holding has a declared expense ratio", page)
         self.assertNotIn("$0.00 a year", page)
+
+
+class ARefusedLineReachesTheOperator(UserConfigMixin, unittest.TestCase):
+    """
+    The refusal has to be said out loud, or it is not a refusal.
+
+    A rejected ratio shows up only as a fee figure covering one position fewer,
+    which is a number that looks entirely right. "SWPPX = O.02" with a letter O
+    is indistinguishable, on the page, from a fund nobody has looked up yet --
+    and the second is an ordinary state this brief reports every morning.
+
+    This is the third time in this codebase that a parser built a list of
+    refused lines and the caller dropped it: the account colours did it, the
+    stated cost basis did it, and so did this.
+    """
+
+    def test_the_brief_command_names_what_it_could_not_read(self) -> None:
+        import tempfile
+        from pathlib import Path as P
+        from unittest.mock import patch
+
+        from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
+
+        self.config_body = "[FEES]\nexpense_ratios =\n\tSWPPX = O.02\n"
+        self.tearDown()
+        self.setUp()
+
+        printed: list[str] = []
+        shell = StonkSmithDBMenu.__new__(StonkSmithDBMenu)
+        shell.workspace = "default"
+        shell.failed = False
+
+        with tempfile.TemporaryDirectory() as root:
+            (P(root) / "default").mkdir()
+
+            with (
+                patch("stonksmith.etc.portfolio.workspace_dir", str(object=root)),
+                patch("stonksmith.etc.paths.reports_path", P(root) / "reports"),
+                patch("stonksmith.etc.paths.baseline_path", P(root) / "b.json"),
+                patch("webbrowser.open"),
+                patch(
+                    "builtins.print",
+                    side_effect=lambda *a: printed.append(" ".join(map(str, a))),
+                ),
+            ):
+                shell.do_brief("--no-open")
+
+        said: str = "\n".join(printed)
+
+        self.assertIn("[FEES] expense_ratios", said)
+        self.assertIn("O.02", said)
 
 
 if __name__ == "__main__":

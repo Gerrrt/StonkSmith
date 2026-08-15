@@ -454,6 +454,39 @@ def mini(values: Iterable[float], width: int = 96, height: int = 24) -> str:
     )
 
 
+def _fee_note(money_of: Performance) -> str:
+    """
+    What the fee figure stands on, and the two ways it can stand on nothing.
+
+    Three cases rather than two, because the obvious pair conflates them. A
+    portfolio where nothing has a declared ratio and one where the declared
+    holdings are worth zero produce the same missing rate, and saying "no
+    holding has a declared expense ratio" in the second contradicts the count
+    the tile is already carrying.
+    :param money_of: The portfolio summary
+    :return: The line under the figure
+    :rtype: str
+    """
+
+    if not money_of.fee_over:
+        return "no holding has a declared expense ratio"
+
+    if money_of.fee_ratio is None:
+        # Declared, and worth nothing to charge a rate on. Rare, and the reason
+        # it is stated rather than folded into the case above: the count and the
+        # sentence must not disagree.
+        return (
+            f"across {money_of.fee_over} of {money_of.holdings} positions, "
+            "which are worth nothing to charge a rate against"
+        )
+
+    return (
+        f"a year at {money_of.fee_ratio:.3f}% of "
+        + money(value=money_of.fee_value, currency=money_of.currency)
+        + f", across {money_of.fee_over} of {money_of.holdings} positions"
+    )
+
+
 def _tile(caption: str, figure: str, sub: str = "", tone: str = "") -> str:
     """
     One statistic, captioned.
@@ -632,13 +665,7 @@ def _tiles(brief: Brief) -> str:
                     if money_of.fee_over
                     else '—'
                 ),
-                sub=(
-                    f'a year at {money_of.fee_ratio:.3f}% of '
-                    + money(value=money_of.fee_value, currency=money_of.currency)
-                    + f', across {money_of.fee_over} of {money_of.holdings} positions'
-                    if money_of.fee_over and money_of.fee_ratio is not None
-                    else 'no holding has a declared expense ratio'
-                ),
+                sub=_fee_note(money_of=money_of),
             )
         }"
         f"{
