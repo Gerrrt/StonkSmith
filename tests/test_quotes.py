@@ -250,7 +250,7 @@ class Repricing(unittest.TestCase):
 
     Ally will not reuse a session, but a unit count does not change between
     deposits and a published price does not need a login. The real position is
-    125.000 units of SWPPX, which Ally itself marked at $19.88 for $2,455.56 --
+    125.000 units of SWPPX, which Ally itself marked at $19.88 for $2,485.00 --
     the same close the feed publishes, to the cent.
     """
 

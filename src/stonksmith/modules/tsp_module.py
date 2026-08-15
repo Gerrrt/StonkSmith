@@ -429,7 +429,7 @@ class TspModule:
             # returned. A statement for one fund was then priced with the
             # configured fund's price -- 340.000 units of L 2050 marked at L
             # 2060's $24.6710 came to $8,388.14, where the statement's own fund
-            # gives $14,794.59. Ninety percent wrong, with both names printed
+            # gives $15,928.86. Ninety percent wrong, with both names printed
             # on adjacent lines and nothing said about it.
             units, statement_fund, as_of = read_statement(path=self.statement)
 

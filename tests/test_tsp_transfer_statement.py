@@ -26,8 +26,8 @@ row.
 one figure sits under a two-fund header and position cannot say whose it is. It
 was paired with funds[0]: the right unit count under the wrong fund's name.
 
-What that produced live was a mark of $8,388.14 where the truth was $7,790.82 --
-off by a cent, from units that were right and a label that was not. The fund
+What that produced live was a mark struck from units that were right under a
+fund name that was not -- close enough to the truth to pass any eye on it. The fund
 guard then refused it, correctly, and advised setting the configured fund to
 L 2050, which would have priced L 2060's units with L 2050's price and been
 wrong by ninety percent in the other direction.

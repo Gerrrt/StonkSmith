@@ -93,7 +93,7 @@ EMPLOYER_LABEL = "Employer"
 #: account-wide total that is not a fund and carries no fund name.
 #:
 #:     Fund Name       All Funds Total  L 2050  L 2060
-#:     Closing Balance $7,810.84        $0.00   $7,810.84
+#:     Closing Balance $8,409.71        $0.00   $8,409.71
 #:
 #: Three numbers, two fund names. Read positionally that puts the account total
 #: against the first fund and drops the last fund entirely -- which on the

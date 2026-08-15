@@ -83,7 +83,7 @@ The headline answers *what moved since I last looked*. The tiles under it answer
 different question — *what have I made since I bought it* — and that one depends on a
 field most sources here do not report.
 
-**Cost basis is the fault line.** SnapTrade states one. A Microsoft 401k, TSP and a
+**Cost basis is the fault line.** SnapTrade states one. An employer 401k, TSP and a
 scraped 529 do not, and every figure that divides by it is therefore absent for those
 positions: purchase price, gain, growth, yield on cost, the win/loss flag. They render as
 a dash.

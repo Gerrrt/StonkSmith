@@ -5,7 +5,7 @@ does not: the headline answers "what moved since you last looked" and these
 numbers answer "what have I made since I bought it". Different question, and it
 depends on a field most of this workspace's sources do not report.
 
-**Cost basis is the fault line.** SnapTrade states one; TSP, a Microsoft 401k and
+**Cost basis is the fault line.** SnapTrade states one; TSP, an employer 401k and
 a scraped 529 do not. Every figure that divides by it -- purchase price, gain,
 growth, yield on cost, the win/loss flag -- is therefore absent for those
 positions, and the single most tempting bug in this file is to let an absent cost

@@ -16,7 +16,7 @@ only the units. The units were then valued at the configured fund's price.
 
 On the published prices for that day, L 2050 was $46.8496 and L 2060 was
 $24.6710. The run reported $8,388.14 where the statement's own fund gives
-$14,794.59: ninety percent wrong, with both fund names printed on adjacent
+$15,928.86: ninety percent wrong, with both fund names printed on adjacent
 lines and nothing said about the difference. No exception, no warning, and a
 total that looks entirely reasonable.
 

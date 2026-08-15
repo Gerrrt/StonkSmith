@@ -1,7 +1,7 @@
 """A symbol links to its quote page, unless there is no page to link to.
 
 Nine of the twelve holdings in a real workspace are public tickers. The other
-three are "Q4R7", a Microsoft 401k fund code; "70310", a Schwab 529 portfolio
+three are "Q4R7", an employer 401k fund code; "70310", a Schwab 529 portfolio
 number; and "L 2060", a TSP fund. All three are real positions and none of them
 is findable on a quote site.
 

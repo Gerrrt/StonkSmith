@@ -108,7 +108,7 @@ class DeleteSnapshot(_DbCase):
 
     def test_the_other_marks_stay(self) -> None:
         bad = self.save()
-        good = self.save(scraped_at="2026-08-07 13:00:00", value=14794.59)
+        good = self.save(scraped_at="2026-08-07 13:00:00", value=15928.86)
 
         self.db.delete_snapshot(snapshot_id=bad)
 

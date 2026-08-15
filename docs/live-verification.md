@@ -461,9 +461,9 @@ Module:  Ally    [+] Ally valued from published prices.
 at all** — the twenty-eight scraped snapshots preceding it leave that column empty:
 
 ```text
-| 29 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
-| 28 | Individual (...1234) |            | 2026-08-10 22:03:26 | $2,470.38 | USD |
-| 27 | Individual (...1234) |            | 2026-08-10 21:57:58 | $2,470.38 | USD |
+| 29 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:04:27 | $2,500.00 | USD |
+| 28 | Individual (...1234) |            | 2026-08-10 22:03:26 | $2,500.00 | USD |
+| 27 | Individual (...1234) |            | 2026-08-10 21:57:58 | $2,500.00 | USD |
 ```
 
 That is the check: the value is dated by the source it came from, 2026-08-07, and not
@@ -473,7 +473,7 @@ have meant the price date never reached the column.
 `show holdings 29` carries step 1's unit count and step 1's stamp:
 
 ```text
-| Individual (...1234) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
+| Individual (...1234) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,500.00 | ... | 2026-08-10 22:03:26 |
 ```
 
 The 125.000 is step 1's count by construction rather than by comparison — the price
@@ -510,9 +510,9 @@ snapshot that the units never had. Two more price runs followed, **30 and 31** �
 shown with them because it is what they each read, not because it is one of the two:
 
 ```text
-| 31 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:29:44 | $2,470.38 | USD |
-| 30 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:27:17 | $2,470.38 | USD |
-| 29 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
+| 31 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:29:44 | $2,500.00 | USD |
+| 30 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:27:17 | $2,500.00 | USD |
+| 29 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:04:27 | $2,500.00 | USD |
 ```
 
 Each of the two ran with a newest snapshot whose `scraped_at` was **not** `22:03:26` —
@@ -530,7 +530,7 @@ And the stamp survived being written, which is the half that would start the dri
 `show holdings 30`:
 
 ```text
-| Individual (...1234) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
+| Individual (...1234) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,500.00 | ... | 2026-08-10 22:03:26 |
 ```
 
 So the stamp passed through three consecutive price snapshots — 29, 30, 31 — without
@@ -1787,7 +1787,7 @@ two timestamps. So the two keys behave differently on the same pair of runs — 
 updated in place, snapshots appended — which is the whole of the claim.
 
 Both runs read one investment account and skipped the same Ally Bank savings account,
-and both wrote $2,470.38.
+and both wrote $2,500.00.
 
 **This does not make anything plural true.** One account, one holding, one deposit
 account skipped — the same single state the nine earlier runs saw. That the row count
