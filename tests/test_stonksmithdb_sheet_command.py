@@ -12,7 +12,13 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-from stonksmith.etc.portfolio_sheet import GUARD_CHECK_TAB, GuardCase, SheetSync
+from stonksmith.etc.portfolio_sheet import (
+    GUARD_CHECK_TAB,
+    VOLUME_CHECK_ROWS,
+    VOLUME_CHECK_TAB,
+    GuardCase,
+    SheetSync,
+)
 from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
 from stonksmith.helpers.sheets import SheetNotOwned, SheetsUnavailable
 
@@ -404,6 +410,84 @@ class VerifyCommandTests(unittest.TestCase):
         import stonksmith.etc.stonksmithdb as shell_module
 
         self.assertFalse(hasattr(shell_module, "check_ownership_guard"))
+
+    # The third check, which has to be asked for by name. It writes thousands of
+    # rows to a scratch tab, and what it settles does not change between runs the
+    # way the other two do -- a sync landed or it did not, and the guard behaves
+    # or it does not, but whether Sheets takes a second request is a property of
+    # Sheets. So it stays out of the bare form.
+
+    def test_the_volume_check_never_runs_unless_it_was_asked_for(self) -> None:
+        with (
+            patch("stonksmith.etc.portfolio_sheet.check_write_volume") as volume,
+            patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as guard,
+            patch("stonksmith.etc.portfolio_sheet.check_tabs") as tabs,
+        ):
+            guard.return_value = self._cases(True)
+            tabs.return_value = self._cases(True)
+
+            for line in ("", "tabs", "guard"):
+                with self.subTest(line=line):
+                    self._run(line=line)
+                    volume.assert_not_called()
+
+    def test_asking_for_volume_by_name_runs_it_and_nothing_else(self) -> None:
+        with (
+            patch("stonksmith.etc.portfolio_sheet.check_write_volume") as volume,
+            patch("stonksmith.etc.portfolio_sheet.check_ownership_guard") as guard,
+            patch("stonksmith.etc.portfolio_sheet.check_tabs") as tabs,
+        ):
+            volume.return_value = self._cases(True, True, True)
+            self._run(line="volume")
+
+        volume.assert_called_once()
+        guard.assert_not_called()
+        tabs.assert_not_called()
+
+    def test_the_volume_check_says_how_many_rows_and_where(self) -> None:
+        # A command that made a tab, wrote two and a half thousand rows to it and
+        # deleted it again, having announced none of that, is one nobody should
+        # run against a spreadsheet they care about.
+        with patch("stonksmith.etc.portfolio_sheet.check_write_volume") as volume:
+            volume.return_value = self._cases(True, True, True)
+            printed = self._run(line="volume")
+
+        self.assertIn(VOLUME_CHECK_TAB, printed)
+        self.assertIn(str(object=VOLUME_CHECK_ROWS), printed)
+        self.assertIn("deleting it again", printed)
+
+    def test_the_volume_check_names_only_the_gap_that_is_its_own(self) -> None:
+        # And its gap is the one this whole check does not close: the rows enter
+        # below read_workspace, so a window between the databases and the cells
+        # is still something only a real history would show.
+        with patch("stonksmith.etc.portfolio_sheet.check_write_volume") as volume:
+            volume.return_value = self._cases(True)
+            printed = self._run(line="volume")
+
+        self.assertIn("Transactions tab windows", printed)
+        self.assertIn("One thing", printed)
+        self.assertNotIn("empty cell", printed)
+        self.assertNotIn("aborting the whole sync", printed)
+
+    def test_a_size_the_volume_check_refused_is_reported_not_raised(self) -> None:
+        with patch("stonksmith.etc.portfolio_sheet.check_write_volume") as volume:
+            volume.side_effect = SheetsUnavailable("goes up in one request")
+            menu = shell()
+            self._run_on(menu, line="volume")
+
+        self.assertTrue(menu.failed)
+
+    def test_a_write_that_did_not_land_is_a_failure_a_scheduler_can_see(self) -> None:
+        menu = shell()
+
+        with patch("stonksmith.etc.portfolio_sheet.check_write_volume") as volume:
+            volume.return_value = self._cases(True, False, True)
+            self._run_on(menu, line="volume")
+
+        self.assertTrue(menu.failed)
+
+    def test_the_command_advertises_all_three(self) -> None:
+        self.assertIn("volume", StonkSmithDBMenu.intro)
 
 
 if __name__ == "__main__":

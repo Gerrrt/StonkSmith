@@ -1199,6 +1199,307 @@ def _guard_case(
     )
 
 
+#: The tab check_write_volume() makes and removes. Named by the same rule as
+#: GUARD_CHECK_TAB -- disposable-sounding and nothing a person would reach for --
+#: because the one thing a check that deletes a tab must never do is delete one
+#: somebody wanted.
+VOLUME_CHECK_TAB: str = "StonkSmith volume check"
+
+#: How many rows that check writes. Past both thresholds and no further. 500 is
+#: where get_transactions caps, so it is the number a tab that silently windowed
+#: would agree with; CHUNK_ROWS is where write_rows stops fitting the write into
+#: one request. CHUNK_ROWS + 500 clears both, and is the size
+#: tests/test_portfolio_sheet_write.py already chunks against a stub -- the same
+#: shape, in front of the real API rather than a recording of it.
+VOLUME_CHECK_ROWS: int = CHUNK_ROWS + 500
+
+#: Which column of a synthetic row carries its ordinal. Account Key rather than a
+#: column invented for the purpose, because _count_case counts that column on the
+#: real Transactions tab: a volume check counting a different one would be
+#: checking something the real check does not do.
+VOLUME_MARKER_COLUMN: str = "Account Key"
+
+#: What a synthetic row calls its broker and its source. Not a broker anything
+#: loads, and not a name a real one could collide with.
+VOLUME_CHECK_BROKER: str = "volume-check"
+
+#: The date every synthetic row carries, on all three of its date columns. One
+#: fixed literal and never a clock: these rows are rebuilt to be compared against
+#: what came back, so a date that moved between two calls would report every
+#: boundary as displaced. Chosen to be visibly not data as well.
+VOLUME_ROW_DATE: str = "2000-01-01"
+
+#: What each synthetic row says it is. Every row rather than one, because the
+#: reader this is for is somebody who found the tab still there after a teardown
+#: that failed, and a note in row 1 is the one row they may not be looking at.
+VOLUME_ROW_DESCRIPTION: str = (
+    "StonkSmith volume check -- a synthetic row, not a movement. This tab is "
+    "written and deleted by 'verify volume'; delete it by hand if it was left "
+    "behind."
+)
+
+
+def check_write_volume(
+    spreadsheet: str = SPREADSHEET_NAME,
+    book: Any | None = None,
+    tab: str = VOLUME_CHECK_TAB,
+    rows: int = VOLUME_CHECK_ROWS,
+) -> tuple[GuardCase, ...]:
+    """
+    Put a second chunked write in front of real Sheets, on a tab of its own.
+
+    `Transactions` is written in full on purpose -- a tab whose purpose is
+    history, showing the newest few hundred rows with nothing saying so, would be
+    worse than not having one -- and until now nothing had observed that holding
+    past one request. The stub test settles the arithmetic: CHUNK_ROWS then the
+    remainder, at the ranges write_rows computes. What it cannot settle is
+    whether the second request arrives, because the thing it asks is a double
+    that agrees by construction.
+
+    Observing that used to mean waiting for a broker to accumulate the history.
+    That is the same shape as defacing a live tab to watch the guard refuse: a
+    thing done once, late, if ever, holding up a claim the whole tab rests on.
+    And it does not need to be that. write_rows() decides on the rows and the
+    contract it is handed, not on where they came from, so the same function can
+    send the same volume over the same network into a tab made for it.
+
+    **What this settles and what it does not.** It settles the write: that
+    CHUNK_ROWS + 500 rows sent as two requests come back as that many rows, with
+    the row on each side of the boundary in the place it was sent to. It settles
+    nothing about the real `Transactions` tab, whose rows come from a workspace
+    this cannot fill -- if a window exists between the databases and the cells it
+    is in read_workspace or in the row-building, and synthetic rows enter below
+    both. docs/live-verification.md check 5 keeps that half.
+
+    The guards are check_ownership_guard's, for its reason: deleting a tab is not
+    something anything else here does. A name already taken is somebody's and
+    stops the run, the only tab removed is the one this call made, and a name
+    that has reached MACHINE_OWNED_TABS is refused before Sheets is opened. One
+    guard is this function's own -- a row count that fits in a single request is
+    refused, because it would pass without ever asking the question.
+    :param spreadsheet: The spreadsheet to work in
+    :param book: An already-open spreadsheet, to save an authorization
+    :param tab: The throwaway tab's name
+    :param rows: How many synthetic rows to write
+    :return: One GuardCase per outcome, in the order they were tried
+    :rtype: tuple[GuardCase, ...]
+    :raises SheetsUnavailable: if Sheets is unreachable, the tab is taken, or the
+        row count would not reach a second request
+    """
+
+    if tab in MACHINE_OWNED_TABS:
+        raise SheetsUnavailable(
+            f"'{tab}' is one of the tabs StonkSmith writes, so it cannot be used "
+            "as the throwaway tab for this check. Pass a different name."
+        )
+
+    if rows <= CHUNK_ROWS:
+        raise SheetsUnavailable(
+            f"A volume check of {rows} rows goes up in one request, since "
+            f"write_rows sends {CHUNK_ROWS} at a time. It would pass without a "
+            "second write ever reaching Sheets, which is the question. Ask for "
+            f"more than {CHUNK_ROWS}."
+        )
+
+    opened: Any = (
+        book if book is not None else open_spreadsheet(spreadsheet=spreadsheet)
+    )
+
+    if tab_exists(book=opened, worksheet_name=tab, spreadsheet=spreadsheet):
+        # Not ours, so not ours to write over and not ours to delete. The same
+        # answer claim() gives, for the same reason.
+        raise SheetsUnavailable(
+            f"Spreadsheet '{spreadsheet}' already has a tab named '{tab}'. This "
+            "check makes that tab and deletes it again, so it will not touch one "
+            "that is already there. Rename or remove it, or pass another name."
+        )
+
+    made: Any = opened.add_worksheet(title=tab, rows=100, cols=len(TRANSACTION_COLUMNS))
+    cases: list[GuardCase] = []
+
+    try:
+        sent: list[list[Any]] = _volume_rows(count=rows)
+        write_rows(worksheet=made, tab=tab, columns=TRANSACTION_COLUMNS, rows=sent)
+        # A fresh handle to read with. The write adopted this tab and claim()
+        # remembers that on the object, so re-fetching keeps the read a round
+        # trip rather than something answered out of the handle that wrote it.
+        cases.extend(_volume_cases(worksheet=opened.worksheet(tab), sent=sent))
+
+    finally:
+        # Whatever happened above, including something unexpected. remove_tab
+        # reports rather than raises, so a scratch tab that would not go cannot
+        # replace the findings with the news that it is still there -- and this
+        # tab is the big one, so leaving it is the more expensive kind of litter.
+        failure: str = remove_tab(book=opened, worksheet=made, worksheet_name=tab)
+        cases.append(
+            GuardCase(
+                name="The throwaway tab was removed",
+                expected="removed",
+                passed=not failure,
+                detail=failure,
+            )
+        )
+
+    return tuple(cases)
+
+
+def _volume_rows(count: int) -> list[list[Any]]:
+    """
+    ``count`` rows in TRANSACTION_COLUMNS order, for the volume check to send.
+
+    Nothing here is a movement and nothing reads these rows but _volume_cases,
+    which asks one question of them: what should row *n* have said? So the
+    contract is one line -- **the cell at VOLUME_MARKER_COLUMN must be different
+    for every row and the same on every call** -- and the rest of the row is a
+    choice about what a failure will look like when there is one.
+
+    **The marker names the request and the cell it was addressed to**, which is
+    the whole of what a displaced boundary can say. _volume_cases prints the
+    sheet row it read against the marker that should have been in it, so a bare
+    ordinal would report "row 2003 holds 1999, not 2000" and leave the reader
+    doing the arithmetic between a row number and an index. Carrying
+    ``n + FIRST_DATA_ROW`` instead makes the same failure read "row 2003 holds
+    write-1-row-2002, not write-2-row-2003", which says both that the second
+    request is the one that moved and that it landed a row late.
+
+    Nothing is derived from a clock or a random source, and that is a
+    requirement rather than a preference: these rows are not stored, they are
+    rebuilt to be compared against what came back, so anything varying between
+    two calls would report every boundary as displaced.
+
+    **The rest of the row is filled rather than blanked.** It goes up RAW through
+    the same write_rows the real tabs use, so what is in it decides how closely
+    the request resembles the one being asked about, and a row of empty strings
+    is not the shape of the write it stands in for -- the question is about a
+    large payload, and cells are only half of what makes one. The values are also
+    unmistakably not data: a tab left behind by a failed teardown says in every
+    row what it is and who to delete it.
+    :param count: How many rows to build
+    :return: One list of cells per row, in TRANSACTION_COLUMNS order
+    :rtype: list[list[Any]]
+    """
+
+    built: list[list[Any]] = []
+
+    for n in range(count):
+        marker: str = f"write-{n // CHUNK_ROWS + 1}-row-{n + FIRST_DATA_ROW}"
+        # By name, not by position, for the reason column_of exists: a column
+        # appended to the contract should leave this an empty cell rather than
+        # shifting every value one to the left of where it belongs.
+        row: dict[str, Any] = {
+            "Broker": VOLUME_CHECK_BROKER,
+            "Source": VOLUME_CHECK_BROKER,
+            "Account": VOLUME_CHECK_TAB,
+            VOLUME_MARKER_COLUMN: marker,
+            "Type": "buy",
+            "Symbol": "VOLCHK",
+            "Description": VOLUME_ROW_DESCRIPTION,
+            "Units": 1.0,
+            "Price": 100.0,
+            "Value": 100.0,
+            "Currency": "USD",
+            "Processed On": VOLUME_ROW_DATE,
+            "Traded On": VOLUME_ROW_DATE,
+            "First Seen": VOLUME_ROW_DATE,
+            # Unique per movement in the real schema -- it is the natural key a
+            # re-scrape conflicts on -- so a synthetic row holding one constant
+            # would be the wrong shape for the thing it stands in for.
+            "External Id": marker,
+        }
+        built.append([row.get(name, "") for name in TRANSACTION_COLUMNS])
+
+    return built
+
+
+def _chunk_edges(count: int) -> tuple[int, ...]:
+    """
+    The first and last row index of every request write_rows would send.
+
+    These are the rows worth reading back one at a time. A second chunk that
+    never arrived shows in the count; a second chunk that arrived at the wrong
+    range does not, because the rows are all there and only their addresses are
+    wrong -- and it is the boundary rows that move when that happens. An
+    interior row of a chunk cannot land somewhere its neighbours did not.
+    :param count: How many rows are being written
+    :return: Row indices, ascending, first and last of each chunk
+    :rtype: tuple[int, ...]
+    """
+
+    edges: list[int] = []
+
+    for start in range(0, count, CHUNK_ROWS):
+        last: int = min(start + CHUNK_ROWS, count) - 1
+        edges.append(start)
+
+        # A final chunk of exactly one row is its own first and last, and naming
+        # it twice would report one cell as two checks.
+        if last != start:
+            edges.append(last)
+
+    return tuple(edges)
+
+
+def _volume_cases(
+    worksheet: Any, sent: Sequence[Sequence[Any]]
+) -> tuple[GuardCase, GuardCase]:
+    """
+    Read the markers back, and ask the two questions separately.
+
+    One read for both, because they are two readings of one column and a second
+    download of it would say nothing new. They are kept apart because they fail
+    apart: a short column means a request did not arrive, a displaced boundary
+    means one arrived somewhere else, and those are different things to go and
+    look at.
+    :param worksheet: The throwaway tab, freshly fetched
+    :param sent: The rows that were written, in the order they went up
+    :return: The count case and the boundary case
+    :rtype: tuple[GuardCase, GuardCase]
+    """
+
+    index: int = list(TRANSACTION_COLUMNS).index(VOLUME_MARKER_COLUMN)
+    found: list[str] = [
+        str(object=value)
+        for value in _column_at(
+            worksheet=worksheet,
+            letter=column_of(columns=TRANSACTION_COLUMNS, name=VOLUME_MARKER_COLUMN),
+        )
+    ]
+    landed: int = len([value for value in found if value])
+
+    edges: tuple[int, ...] = _chunk_edges(count=len(sent))
+    at: dict[int, str] = {n: found[n] if n < len(found) else "" for n in edges}
+    displaced: list[int] = [n for n in edges if at[n] != str(object=sent[n][index])]
+
+    # Counted off the function that decides it rather than off the edges, which
+    # are two per chunk except where a final chunk of one row is its own first
+    # and last -- halving them would report that run as one write short.
+    writes: int = len(_chunks(rows=sent, size=CHUNK_ROWS))
+    first: int = displaced[0] if displaced else 0
+
+    return (
+        GuardCase(
+            name=f"All {len(sent)} rows came back off the tab",
+            expected="all",
+            passed=landed == len(sent),
+            detail="" if landed == len(sent) else f"the tab has {landed}",
+        ),
+        GuardCase(
+            name=(
+                f"The {len(edges)} rows at the edges of the {writes} writes are "
+                "the ones sent there"
+            ),
+            expected="in place",
+            passed=not displaced,
+            detail=""
+            if not displaced
+            else (
+                f"row {first + FIRST_DATA_ROW} holds "
+                f"{at[first] or 'nothing'}, not {sent[first][index]}"
+            ),
+        ),
+    )
+
+
 def _chunks(rows: Sequence[Sequence[Any]], size: int) -> list[list[Sequence[Any]]]:
     """
     Split rows into writes of at most ``size``.

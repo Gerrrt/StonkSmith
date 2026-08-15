@@ -26,6 +26,25 @@ BROKER_SHELL_COMMANDS: frozenset[str] = frozenset(
     {"add", "delete", "show", "export", "back"}
 )
 
+#: Which checks `verify` with no argument runs. Not all of them: `volume` writes
+#: thousands of rows to a scratch tab to put a second request in front of Sheets,
+#: and unlike the other two its answer does not change between runs -- a sync
+#: landed or it did not, but whether Sheets accepts a chunked write is a property
+#: of Sheets. Folding it in would put that write on every routine verification.
+BARE_VERIFY_CHECKS: frozenset[str] = frozenset({"tabs", "guard"})
+
+
+def asked_for(which: str, name: str) -> bool:
+    """
+    Whether a `verify` argument selects a given check.
+    :param which: What was typed, lowercased, or "" for the bare form
+    :param name: The check's name
+    :return: True if it should run
+    :rtype: bool
+    """
+
+    return which == name or (not which and name in BARE_VERIFY_CHECKS)
+
 
 class StonkSmithDBMenu(cmd.Cmd):
     """
@@ -39,7 +58,8 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    broker <name>     enter that broker (add/show/export live in there)\n"
         "    workspace list    list workspaces\n"
         "    sheet             rewrite the Google Sheet from these databases\n"
-        "    verify [tabs|guard]  check what a successful sheet write cannot show\n"
+        "    verify [tabs|guard|volume]  check what a successful sheet write "
+        "cannot show\n"
         "    stale [days]      report accounts nothing has refreshed lately\n"
         "    brief [peek|--no-open]  what changed since the last brief\n"
         "    dividends         refresh what each holding pays per share\n"
@@ -758,7 +778,8 @@ class StonkSmithDBMenu(cmd.Cmd):
         """
         Check what a successful sync cannot show, against real Sheets.
 
-        Two halves, and `verify` on its own runs both. ``tabs`` reads the
+        Three checks, and `verify` on its own runs the two that are cheap.
+        ``tabs`` reads the
         machine-owned tabs back: a write that returned says the request was
         accepted, not that
         the values arrived as the kind of thing they were meant to be. ``guard``
@@ -766,16 +787,26 @@ class StonkSmithDBMenu(cmd.Cmd):
         refusal is the one rule here whose failure cannot be undone by running
         again, and observing it used to mean defacing a live tab.
 
-        Neither half retires the manual steps entirely. A refusal aborting the
-        *whole* sync is refresh() claiming every tab before clearing any, and the
-        scratch tab is not one of them; and an absent value arriving as an empty
-        cell rather than an empty string cannot be seen from a read at all.
+        ``volume`` is the third and has to be asked for by name. It writes
+        thousands of synthetic rows to a tab of its own to put a *second* chunked
+        request in front of Sheets, which is the half of "Transactions carries
+        the whole history" that no workspace here is long enough to ask. Folding
+        it into the bare form would put that write on every routine verification,
+        and the question it settles does not change between runs the way the
+        other two do.
+
+        None of the three retires the manual steps entirely. A refusal aborting
+        the *whole* sync is refresh() claiming every tab before clearing any, and
+        neither scratch tab is one of them; an absent value arriving as an empty
+        cell rather than an empty string cannot be seen from a read at all; and
+        the volume check enters below read_workspace, so a window between the
+        databases and the rows is still something only a long history would show.
 
         A check that did not behave sets ``self.failed``, as does a half that
         could not run at all, so the scripted form exits on the finding. A
         verification that reports "unguarded" and exits 0 would be read by
         everything downstream as a clean run.
-        :param line: "tabs", "guard", or empty for both
+        :param line: "tabs", "guard", "volume", or empty for tabs and guard
         :return: None
         """
 
@@ -783,45 +814,73 @@ class StonkSmithDBMenu(cmd.Cmd):
         # shell is mostly used for things that never touch Sheets.
         from stonksmith.etc.portfolio_sheet import (
             GUARD_CHECK_TAB,
+            VOLUME_CHECK_ROWS,
+            VOLUME_CHECK_TAB,
             check_ownership_guard,
             check_tabs,
+            check_write_volume,
         )
         from stonksmith.helpers.sheets import SPREADSHEET_NAME
 
         which = line.strip().lower()
 
-        if which not in ("", "tabs", "guard"):
-            print(f"[-] Unknown check '{which}'. Use 'tabs', 'guard', or neither.")
+        # Announcement, label and runner per check, in the order they run. Tabs
+        # before guard deliberately: reading them back says whether the last sync
+        # landed, and a reader wants that before a scratch tab appears. Volume
+        # last, and only when named -- BARE_VERIFY_CHECKS is what `verify` on its
+        # own runs, and it is not in it.
+        checks: tuple[tuple[str, str, str, Any], ...] = (
+            (
+                "tabs",
+                f"[*] Reading the tabs back from '{SPREADSHEET_NAME}'.",
+                "Tab check",
+                lambda: check_tabs(workspace=self.workspace),
+            ),
+            (
+                "guard",
+                (
+                    f"[*] Making the tab '{GUARD_CHECK_TAB}' in "
+                    f"'{SPREADSHEET_NAME}', asking the guard about it, and "
+                    "deleting it again. No other tab is opened."
+                ),
+                "Ownership check",
+                check_ownership_guard,
+            ),
+            (
+                "volume",
+                (
+                    f"[*] Making the tab '{VOLUME_CHECK_TAB}' in "
+                    f"'{SPREADSHEET_NAME}', writing {VOLUME_CHECK_ROWS} rows to "
+                    "it as two requests, reading them back, and deleting it "
+                    "again. No other tab is opened."
+                ),
+                "Volume check",
+                check_write_volume,
+            ),
+        )
+
+        if which not in ("", *(name for name, _, _, _ in checks)):
+            print(
+                f"[-] Unknown check '{which}'. Use 'tabs', 'guard', 'volume', or "
+                "neither."
+            )
             self.failed = True
             return
 
         cases: list[Any] = []
 
-        if which in ("", "tabs"):
-            print(f"[*] Reading the tabs back from '{SPREADSHEET_NAME}'.")
-            read = self._checked(
-                run=lambda: check_tabs(workspace=self.workspace), what="Tab check"
-            )
+        for name, announcement, label, check in checks:
+            if not asked_for(which=which, name=name):
+                continue
 
-            if read is None:
+            print(announcement)
+            found = self._checked(run=check, what=label)
+
+            if found is None:
                 self.failed = True
                 return
 
-            cases.extend(read)
-
-        if which in ("", "guard"):
-            print(
-                f"[*] Making the tab '{GUARD_CHECK_TAB}' in '{SPREADSHEET_NAME}', "
-                "asking the guard about it, and deleting it again. No other tab "
-                "is opened."
-            )
-            guarded = self._checked(run=check_ownership_guard, what="Ownership check")
-
-            if guarded is None:
-                self.failed = True
-                return
-
-            cases.extend(guarded)
+            cases.extend(found)
 
         for case in cases:
             print(f"{'[+]' if case.passed else '[-]'} {case.name}")
@@ -845,17 +904,31 @@ class StonkSmithDBMenu(cmd.Cmd):
             self.failed = True
             return
 
-        # Named per half that actually ran. A guard-only run listing the
-        # empty-cell gap points at a tab check nobody asked for, and a reader who
-        # sees a caveat that does not apply learns to skim the ones that do.
-        gaps: list[str] = []
+        # Named per check that actually ran, and selected by the same predicate
+        # that ran them. A guard-only run listing the empty-cell gap points at a
+        # tab check nobody asked for, and a reader who sees a caveat that does not
+        # apply learns to skim the ones that do.
+        gaps: list[str] = [
+            gap
+            for name, gap in (
+                ("tabs", "an absent value arriving as an empty cell"),
+                ("guard", "a refusal aborting the whole sync"),
+                (
+                    "volume",
+                    (
+                        "whether the real Transactions tab windows, which is "
+                        "upstream of the write and needs a broker with the "
+                        "movements"
+                    ),
+                ),
+            )
+            if asked_for(which=which, name=name)
+        ]
 
-        if which in ("", "tabs"):
-            gaps.append("an absent value arriving as an empty cell")
-
-        if which in ("", "guard"):
-            gaps.append("a refusal aborting the whole sync")
-
+        # One or two, never three: the bare form runs tabs and guard, and volume
+        # runs alone. The sentence below counts in words and would say "Two
+        # things" for three of them, so a check joining BARE_VERIFY_CHECKS is a
+        # change here as well as there.
         print(
             f"[*] All {len(cases)} checks behaved, against real Sheets rather "
             f"than a stub. {'One thing' if len(gaps) == 1 else 'Two things'} "

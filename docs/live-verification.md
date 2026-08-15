@@ -1250,7 +1250,8 @@ client ID with **both** the Sheets and the Drive API enabled, saved as
 that Google account or shared with it. That name is `SPREADSHEET_NAME` in the same file
 and nothing reads it from config. Then a workspace with at least one broker database
 already in it, and for check 5 specifically, a broker with a long transaction history
-rather than a fresh one.
+rather than a fresh one — for the windowing half of it, which is the half `verify volume`
+cannot supply its own rows for.
 
 **If a token is already cached, expect the first attempt to fail on authorization.** A
 first run with none authorizes in a browser and is fine; it is the returning one that
@@ -1456,9 +1457,55 @@ The seven checks, and which of them `verify tabs` settles:
 
    *Is there a window at five hundred* is the question that needs the rows, and no
    workspace under that number can put it — a tab that had silently windowed would
-   agree with everything. Past 2,000 movements is also the only thing that puts a
-   second write in front of real Sheets, since `write_rows()` sends `CHUNK_ROWS` rows
-   at a time.
+   agree with everything.
+
+   *Does a second chunked write reach Sheets at all* used to need the rows too, and
+   no longer does. **`verify volume` asks it**, and it is the same move as `verify
+   guard`: `write_rows()` decides on the rows and the contract it is handed, not on
+   where they came from, so it can be sent `CHUNK_ROWS + 500` synthetic rows on a tab
+   made for the purpose and removed afterwards. It has to be named — bare `verify`
+   does not run it — and it refuses a size that would fit in one request, since that
+   would pass without asking anything.
+
+   ```
+   stonksmithdb (default) > verify volume
+   [*] Making the tab 'StonkSmith volume check' in 'Investment Account Scrapes', writing 2500 rows to it as two requests, reading them back, and deleting it again. No other tab is opened.
+   [+] All 2500 rows came back off the tab
+   [+] The 4 rows at the edges of the 2 writes are the ones sent there
+   [+] The throwaway tab was removed
+   [*] All 3 checks behaved, against real Sheets rather than a stub. One thing it cannot cover is still in docs/live-verification.md: whether the real Transactions tab windows, which is upstream of the write and needs a broker with the movements.
+   ```
+
+   **Not run against Sheets yet, and this block did not come from a session.** It is
+   what the command prints, taken off the test double in
+   `tests/test_portfolio_sheet_volume.py` — so the lines are real output over a fake
+   spreadsheet, which is precisely the thing this page says is not evidence. It is
+   the only block here written that way and it is marked because a plausible
+   transcript nobody produced is the failure this file exists to prevent. Run it,
+   replace this with what came back, and say which it was.
+
+   What a failure reads like is worth knowing before you need it. A second request
+   landing one row low keeps the count and moves the boundary:
+
+   ```
+   [+] All 2500 rows came back off the tab
+   [-] The 4 rows at the edges of the 2 writes are the ones sent there
+       Expected in place: row 2003 holds nothing, not write-2-row-2003
+   ```
+
+   The marker names the request it belonged to and the sheet row it was addressed
+   to, so that line is read rather than worked out — and the count agreeing above it
+   is the point: every row arrived, and a check that only counted would have called
+   this clean.
+
+   **What it will and will not settle.** It settles the write: that two requests
+   land, and that the row on each side of the boundary is in the place it was sent
+   to — which a count alone cannot say, since a chunk at the wrong range leaves the
+   right number of rows in the wrong cells. It settles nothing about the real
+   `Transactions` tab. Those rows come from `read_workspace()`, and synthetic ones
+   enter below it, so a window between the databases and the cells would be
+   untouched by a passing run. That half still needs the movements, and this row
+   stays `No` until it has them.
 
    Check the dates too: the 529 scraper stores `12/30/2025` and SnapTrade
    stores ISO, so the tab is where they must both read `YYYY-MM-DD`, sorted
@@ -1597,9 +1644,15 @@ tab nothing has ever written.
 *The sheet — the whole transaction history reaching a tab* is check 5 alone, and it has a
 wrong way to pass: agreement with `show transactions` confirms nothing, at any size,
 because that reader stops where the question starts. Counting the database settles whether
-every row landed; only a workspace past five hundred settles whether there is a window,
-and only one past 2,000 puts a second chunked write in front of Sheets. The date half of
-the check belongs to this row too, and needs no volume at all.
+every row landed; only a workspace past five hundred settles whether there is a window.
+The date half of the check belongs to this row too, and needs no volume at all.
+
+The second chunked write used to be listed here as a third thing needing volume, and it
+has been taken out of that list rather than settled: `verify volume` sends the rows itself,
+so the question no longer waits on a broker. It waits on somebody running the command,
+which is a different kind of outstanding and is recorded as such under check 5. Whichever
+way that run goes, the row stays `No` — the window is upstream of the write, and nothing
+sending its own rows can reach it.
 
 *The sheet — the fifth tab, `Net Worth`, created, written and read back* is what checks 1
 through 3 reach on the fifth tab, and it was settled on 2026-08-11: one run made the tab,
