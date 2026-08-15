@@ -1265,7 +1265,7 @@ def check_write_volume(
 
     **What this settles and what it does not.** It settles the write: that
     CHUNK_ROWS + 500 rows sent as two requests come back as that many rows, with
-    the row on each side of the boundary in the place it was sent to. It settles
+    the first and last row of each write in the place it was sent to. It settles
     nothing about the real `Transactions` tab, whose rows come from a workspace
     this cannot fill -- if a window exists between the databases and the cells it
     is in read_workspace or in the row-building, and synthetic rows enter below
