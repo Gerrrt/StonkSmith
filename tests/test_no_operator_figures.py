@@ -32,10 +32,6 @@ from pathlib import Path
 #: amounts, unit counts, family names, employer and account number that were
 #: removed from the tree. Numbers are hashed as written without separators;
 #: words are hashed lower-cased.
-#: sha256, first sixteen hex characters, of each scrubbed literal: the real
-#: amounts, unit counts, family names, employer and account number that were
-#: removed from the tree. Numbers are hashed as written without separators;
-#: words are hashed lower-cased.
 HASHES: frozenset[str] = frozenset(
     {
         "01d7a0fbfd9da5f3",
