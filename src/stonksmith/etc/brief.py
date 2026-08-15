@@ -38,6 +38,7 @@ from typing import Any
 
 from stonksmith.etc.config import (
     get_account_colors,
+    get_allocation_targets,
     get_asset_classes,
     get_brief_fund_link,
 )
@@ -212,6 +213,38 @@ class Allocation:
     #: rule the row shapes already follow: a class that was not measured is not a
     #: class that was measured at nothing.
     was: float | None = None
+
+    #: The share this class is meant to hold, or None when nothing was declared
+    #: for it. None rather than zero for the reason above and one more: a class
+    #: with no target is not a class targeted at nothing, and rendering the two
+    #: alike would show every unlisted holding as an overweight to correct.
+    target: float | None = None
+
+    #: How far the held share sits from the target, in percentage points, or
+    #: None when there is no target to sit away from.
+    off: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Concentration:
+    """
+    The single largest holding and the single largest account.
+
+    An allocation table can look balanced while one fund inside a class carries
+    most of it, so the class view and this one answer different questions: what
+    the money is in, and how much of it rides on one thing. Both are stated
+    because a reader who has only the first will believe the diversification the
+    table implies.
+    """
+
+    #: The largest single position, and what share of the portfolio it is.
+    holding: str = ""
+    holding_share: float = 0.0
+
+    #: The largest account, likewise. Named separately because a position can be
+    #: modest while the account holding it is not.
+    account: str = ""
+    account_share: float = 0.0
 
 
 #: How far back the dividend figures reach. A trailing year rather than a
@@ -438,6 +471,9 @@ class Brief:
     account_movers_dropped: int = 0
     new_transactions: tuple[TransactionRow, ...] = ()
     allocation: tuple[Allocation, ...] = ()
+
+    #: How much of the portfolio rides on one position and one account.
+    concentration: Concentration = field(default_factory=Concentration)
 
     #: (account, reason) for everything that cannot be shown to be fresh.
     stale: tuple[tuple[str, str], ...] = ()
@@ -711,10 +747,57 @@ def holding_movements(
     return sorted(moves, key=lambda move: abs(move.delta), reverse=True)
 
 
+def concentration(rows: Iterable[HoldingRow], accounts: Iterable[Any]) -> Concentration:
+    """
+    The largest single position and the largest single account.
+
+    Answers the question an asset-class table cannot: a portfolio can be split
+    evenly across classes and still have most of its money in one fund. Both
+    are reported because a reader given only the class view will believe the
+    diversification it implies.
+
+    Shares are of the *position* total and the *account* total respectively,
+    which are different denominators and deliberately so -- uninvested cash sits
+    in an account balance and in no holding, so dividing both by one figure
+    would understate whichever it was not.
+    :param rows: The current positions
+    :param accounts: The account rows
+    :return: The two largest, or an empty record when there is nothing to rank
+    :rtype: Concentration
+    """
+
+    held_rows = list(rows)
+
+    # The mark's key is its identity -- (broker, account_key, symbol) -- and the
+    # display name lives on the row, so the two are joined here rather than
+    # stored twice.
+    named: dict[str, str] = {row.account_key: row.account for row in held_rows}
+
+    marks = mark_holdings(rows=held_rows)
+    held: float = sum(mark.value or 0.0 for mark in marks.values())
+    top = max(marks.items(), key=lambda kv: kv[1].value or 0.0, default=None)
+
+    balances = [(row.account, row.value or 0.0) for row in accounts]
+    total: float = sum(value for _, value in balances)
+    biggest = max(balances, key=lambda kv: kv[1], default=None)
+
+    return Concentration(
+        holding=(
+            f"{top[0][2] or '(no symbol)'} in {named.get(top[0][1], top[0][1])}"
+            if top
+            else ""
+        ),
+        holding_share=((top[1].value or 0.0) / held) if top and held else 0.0,
+        account=biggest[0] if biggest else "",
+        account_share=(biggest[1] / total) if biggest and total else 0.0,
+    )
+
+
 def allocation_breakdown(
     rows: Iterable[HoldingRow],
     classes: dict[str, str],
     baseline: dict[tuple[str, str, str], Mark],
+    targets: dict[str, float] | None = None,
 ) -> list[Allocation]:
     """
     What the portfolio holds, by the asset classes the operator declared.
@@ -727,6 +810,7 @@ def allocation_breakdown(
     :param rows: The current positions
     :param classes: Symbol to asset class, from the config
     :param baseline: What those positions were worth when the last brief ran
+    :param targets: Class to the percentage it is meant to hold
     :return: One entry per class, largest first, or none when nothing is declared
     :rtype: list[Allocation]
     """
@@ -753,6 +837,14 @@ def allocation_breakdown(
 
     total: float = sum(now.values())
     prior: float = sum(then.values())
+    aimed: dict[str, float] = targets or {}
+
+    # A class that is targeted and not held is a real gap, and dropping it would
+    # hide the one entry most worth seeing: nothing bought yet reads as nothing
+    # to report. Added at zero, which here is a measurement rather than an
+    # absence -- the holdings were read and this class was not among them.
+    for label in aimed:
+        now.setdefault(label, 0.0)
 
     return sorted(
         (
@@ -764,6 +856,16 @@ def allocation_breakdown(
                 # against, so a class that has always been 4% is not rendered as
                 # one that has just grown from nothing.
                 was=(then[label] / prior) if prior else None,
+                target=aimed.get(label),
+                # Percentage points, on the same reasoning the baseline drift
+                # states: a class at 20% against an 18% target is two points
+                # over and eleven percent of itself over, and those two numbers
+                # invite opposite conclusions about one position.
+                off=(
+                    None
+                    if label not in aimed
+                    else (value / total if total else 0.0) * 100 - aimed[label]
+                ),
             )
             for label, value in now.items()
         ),
@@ -1469,7 +1571,11 @@ def build_brief(
                 rows=portfolio.holdings,
                 classes=classes,
                 baseline=since.holdings,
+                targets=get_allocation_targets()[0],
             )
+        ),
+        concentration=concentration(
+            rows=portfolio.holdings, accounts=portfolio.accounts
         ),
         stale=_stale_pairs(portfolio=portfolio, today=today),
         unreadable=portfolio.unreadable,

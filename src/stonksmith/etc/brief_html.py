@@ -30,6 +30,7 @@ red-green dashboard is unreadable to about one man in twelve.
 """
 
 import datetime as dt
+import re
 from collections.abc import Iterable
 from html import escape
 
@@ -38,10 +39,12 @@ from stonksmith.etc.brief import (
     Allocation,
     Brief,
     BriefState,
+    Concentration,
     Movement,
     Performance,
     Position,
 )
+from stonksmith.etc.config import get_drift_band
 from stonksmith.etc.portfolio import OBSERVED, TransactionRow
 
 #: The sparkline's coordinate space. Rendered at width 100% with a non-scaling
@@ -97,7 +100,11 @@ body {
    behind a gesture at exactly the moment somebody is skimming. */
 main { max-width: 78rem; margin: 0 auto; }
 h1 { font-size: 0.95rem; font-weight: 600; letter-spacing: 0.08em;
-     text-transform: uppercase; color: var(--dim); margin: 0 0 1.25rem; }
+     text-transform: uppercase; color: var(--dim); margin: 0 0 1.25rem;
+     display: flex; align-items: center; gap: 0.6rem; }
+/* The mark from the README, inlined. Sized here rather than in the file, so one
+   SVG can render at 88px on GitHub and as a badge on this page. */
+.mark { width: 1.9rem; height: 1.9rem; flex: none; border-radius: 0.42rem; }
 h2 { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.08em;
      text-transform: uppercase; color: var(--dim); margin: 0 0 0.75rem; }
 section { background: var(--card); border: 1px solid var(--line);
@@ -272,6 +279,49 @@ def _brief_money(value: float) -> str:
     """
 
     return f"${value:,.0f}"
+
+
+def logo() -> str:
+    """
+    The StonkSmith mark, inlined.
+
+    Read from the package rather than embedded as a string constant here, so
+    the README and the brief render the same file and there is no second copy
+    to drift. Inlined rather than referenced, because a brief is one
+    self-contained file that has to render from a `file://` URL with no server
+    and no assets beside it -- an `<img src>` would be a broken icon the moment
+    the page were moved or mailed.
+
+    Returns "" on any failure. A missing mark costs the page its badge; it must
+    not cost the page.
+    :return: The SVG markup, or "" when it cannot be read
+    :rtype: str
+    """
+
+    from stonksmith.etc.paths import etc_path
+
+    try:
+        mark: str = (etc_path / "logo.svg").read_text(encoding="utf-8")
+
+    except OSError:
+        return ""
+
+    # The file carries its own 128x128 so it renders standalone on GitHub. Here
+    # the CSS decides the size, and leaving those attributes in would win
+    # against it.
+    mark = re.sub(pattern=r'\s(?:width|height)="128"', repl="", string=mark, count=2)
+    mark = re.sub(pattern=r"<!--.*?-->", repl="", string=mark, flags=re.S)
+
+    # Decorative here, and hidden from the accessibility tree accordingly. The
+    # file names itself -- role="img", an aria-label and a <title> -- which is
+    # right on GitHub where the mark stands alone, and wrong beside the word
+    # "StonkSmith": a screen reader would announce the name twice and read the
+    # heading as "StonkSmith StonkSmith morning brief".
+    mark = re.sub(pattern=r"<title>.*?</title>", repl="", string=mark, flags=re.S)
+    mark = re.sub(pattern=r'\s(?:role|aria-label)="[^"]*"', repl="", string=mark)
+    mark = re.sub(pattern=r"\s*\n\s*", repl="", string=mark)
+
+    return mark.replace("<svg ", '<svg class="mark" aria-hidden="true" ', 1)
 
 
 def sparkline(points: Iterable[tuple[str, float, bool]]) -> str:
@@ -1083,10 +1133,12 @@ def _detail(row: TransactionRow) -> str:
     return " · ".join(parts)
 
 
-def _allocation(rows: Iterable[Allocation]) -> str:
+def _allocation(rows: Iterable[Allocation], focus: Concentration, band: float) -> str:
     """
     The asset-class breakdown, with what each slice was before.
     :param rows: The breakdown, largest first
+    :param focus: The largest single position and account
+    :param band: How far a class may sit from target unremarked
     :return: The section, or "" when nothing is classified
     :rtype: str
     """
@@ -1101,6 +1153,8 @@ def _allocation(rows: Iterable[Allocation]) -> str:
         f'<div class="bar" style="width:{entry.share * 100:.1f}%"></div></td>'
         f'<td class="num">{escape(s=money(value=entry.value))}</td>'
         f'<td class="num">{entry.share * 100:.1f}%</td>'
+        f'<td class="num">{_target(entry=entry)}</td>'
+        f'<td class="num">{_off(entry=entry, band=band)}</td>'
         f'<td class="num">{_drift(entry=entry)}</td></tr>'
         for entry in classes
     )
@@ -1108,9 +1162,80 @@ def _allocation(rows: Iterable[Allocation]) -> str:
     return (
         f"<section><h2>Allocation</h2><table>"
         f'<tr><th>Class</th><th class="num">Value</th>'
-        f'<th class="num">Share</th><th class="num">Drift</th></tr>'
-        f"{body}</table></section>"
+        f'<th class="num">Share</th><th class="num">Target</th>'
+        f'<th class="num">Off target</th><th class="num">Drift</th></tr>'
+        f"{body}</table>{_concentration(entry=focus)}</section>"
     )
+
+
+def _target(entry: Allocation) -> str:
+    """
+    The share a class is meant to hold.
+    :param entry: The class
+    :return: The target, or a dash where none was declared
+    :rtype: str
+    """
+
+    return "—" if entry.target is None else f"{entry.target:.0f}%"
+
+
+def _off(entry: Allocation, band: float) -> str:
+    """
+    How far a class sits from its target, and whether that is worth saying.
+
+    Stated as a distance, never as an instruction. What to do about a gap is a
+    decision this page has no business making; what it can do is measure one.
+
+    Outside the band the figure is marked, and the mark is a word rather than a
+    colour alone -- "off" reads the same to somebody who cannot distinguish the
+    two tones this page would otherwise rely on.
+    :param entry: The class
+    :param band: How many points a class may sit from target unremarked
+    :return: The gap in percentage points, or a dash
+    :rtype: str
+    """
+
+    if entry.off is None:
+        return "—"
+
+    if abs(entry.off) <= band:
+        return f'<span class="flat">{entry.off:+.1f} pp</span>'
+
+    tone: str = "up" if entry.off > 0 else "down"
+
+    return f'<span class="{tone}">{entry.off:+.1f} pp <b class="wl">OFF</b></span>'
+
+
+def _concentration(entry: Concentration) -> str:
+    """
+    What share of the money rides on one position and one account.
+
+    Under the class table on purpose: a breakdown that looks evenly split can
+    still have most of its money in a single fund, and a reader who has just
+    read the classes is exactly the reader about to conclude otherwise.
+    :param entry: The two largest
+    :return: The line, or "" when there is nothing to rank
+    :rtype: str
+    """
+
+    if not entry.holding and not entry.account:
+        return ""
+
+    parts: list[str] = []
+
+    if entry.holding:
+        parts.append(
+            f"{entry.holding_share * 100:.1f}% of the positions is "
+            f"{escape(s=entry.holding)}"
+        )
+
+    if entry.account:
+        parts.append(
+            f"{entry.account_share * 100:.1f}% of the money is in "
+            f"{escape(s=entry.account)}"
+        )
+
+    return f'<p class="note">{"; ".join(parts)}.</p>'
 
 
 def _drift(entry: Allocation) -> str:
@@ -1191,19 +1316,24 @@ def render(brief: Brief, now: dt.datetime) -> str:
         # being shown a filtered subset of it.
         _holdings(rows=brief.positions, hidden=brief.positions_hidden),
         _transactions(rows=brief.new_transactions),
-        _allocation(rows=brief.allocation),
+        _allocation(
+            rows=brief.allocation,
+            focus=brief.concentration,
+            band=get_drift_band(),
+        ),
         _stale(rows=brief.stale),
     ]
 
     stamp: str = now.strftime("%A %d %B %Y, %H:%M")
     title: str = escape(s=brief.as_of or "no readings")
+    brand: str = logo()
 
     return (
         f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f'<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"<title>StonkSmith — {title}</title>"
         f"<style>{STYLE}</style></head><body><main>"
-        f"<h1>StonkSmith · morning brief</h1>"
+        f"<h1>{brand}StonkSmith · morning brief</h1>"
         f"{''.join(part for part in body if part)}"
         f"<footer>Rendered {escape(s=stamp)} from the databases, "
         f"not from a broker.</footer>"

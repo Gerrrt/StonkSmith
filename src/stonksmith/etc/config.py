@@ -627,6 +627,72 @@ def get_account_aliases() -> dict[str, str]:
     return aliases
 
 
+def get_allocation_targets() -> tuple[dict[str, float], list[str]]:
+    """
+    The share of the portfolio each asset class is meant to hold.
+
+    Stated rather than derived, for the reason ``get_asset_classes`` is: no
+    source knows what anybody is aiming at. What this enables is a factual
+    comparison -- held against intended -- and deliberately not a
+    recommendation. The brief reports the distance; what to do about it is a
+    decision this tool has no business making.
+
+    Percentages, so "85" rather than "0.85". A set that does not sum to about a
+    hundred is reported rather than normalised: scaling 40/40 up to 50/50 would
+    silently invent an intention, and the likeliest cause is a class the
+    operator meant to add and has not.
+    :return: (class to percentage, the lines that were refused)
+    :rtype: tuple[dict[str, float], list[str]]
+    """
+
+    raw: str = get_config().get(section="ALLOCATION", option="targets", fallback="")
+    targets: dict[str, float] = {}
+    refused: list[str] = []
+
+    for line in raw.splitlines():
+        label, sep, share = line.rpartition("=")
+
+        if not sep or not label.strip() or not share.strip():
+            continue
+
+        try:
+            value = float(share.strip().rstrip("%").replace(",", ""))
+
+        except ValueError:
+            refused.append(f"{line.strip()} (not a percentage)")
+            continue
+
+        if not math.isfinite(value) or not 0.0 <= value <= 100.0:
+            refused.append(f"{line.strip()} (a share must be between 0 and 100)")
+            continue
+
+        targets[label.strip()] = value
+
+    return targets, refused
+
+
+def get_drift_band() -> float:
+    """
+    How far a class may sit from its target before the brief says so.
+
+    In percentage points. Five by default, which is the width most rebalancing
+    rules of thumb use -- and it is a threshold for *mentioning* a gap, never a
+    trigger for acting on one.
+    :return: The band, in points
+    :rtype: float
+    """
+
+    try:
+        band: float = get_config().getfloat(
+            section="ALLOCATION", option="drift_band", fallback=5.0
+        )
+
+    except ValueError:
+        return 5.0
+
+    return band if math.isfinite(band) and band >= 0 else 5.0
+
+
 def get_account_costs() -> tuple[dict[str, float], list[str]]:
     """
     What the operator paid, for accounts whose source will not say.
