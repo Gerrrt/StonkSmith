@@ -41,6 +41,7 @@ from stonksmith.etc.config import (
     get_allocation_targets,
     get_asset_classes,
     get_brief_fund_link,
+    get_expense_ratios,
 )
 from stonksmith.etc.dividends import Dividends, Paid
 from stonksmith.etc.permissions import restrict
@@ -314,6 +315,13 @@ class Position:
     #: etc.dividends for why the two are carried apart rather than merged.
     #: None when the feed has nothing for this symbol, which is not zero.
     indicated_income: float | None = None
+
+    #: What the fund charges to hold it, as a percentage, and what that comes to
+    #: on this position in a year. None where nothing was declared: a fund whose
+    #: fee nobody has looked up is not a free fund, and the difference is the
+    #: whole reason the tile states its coverage.
+    expense_ratio: float | None = None
+    annual_fee: float | None = None
     indicated_yield: float | None = None
     current_yield: float | None = None
     yield_on_cost: float | None = None
@@ -410,6 +418,20 @@ class Performance:
     indicated_yield: float | None = None
     indicated_over: int = 0
     indicated_value: float = 0.0
+
+    #: What the funds charge in a year, in money, and the weighted average rate
+    #: behind it. Weighted by value rather than averaged across symbols, because
+    #: a costly fund held in small size is a small cost and a flat mean would
+    #: report it as a large one.
+    fee_cost: float = 0.0
+    fee_ratio: float | None = None
+
+    #: How many positions that stands on, and what they are worth. The same
+    #: coverage the indicated yield carries, for the same reason: a rate over
+    #: part of a portfolio, presented as the whole, is a real number about
+    #: nothing anybody asked.
+    fee_over: int = 0
+    fee_value: float = 0.0
 
     #: Whether any dividend was found at all.
     #:
@@ -1238,6 +1260,7 @@ def positions(
     palette: Iterable[tuple[str, str]] = (),
     link: str = "",
     paid: dict[str, Paid] | None = None,
+    fees: dict[str, float] | None = None,
 ) -> list[Position]:
     """
     Every holding, with what follows from what the source reported.
@@ -1284,6 +1307,9 @@ def positions(
         # None rather than zero when the feed has nothing for this symbol. A
         # fund that pays nothing and a 401k fund code no quote page has ever
         # heard of both come to 0.0, and only the first is a fact about money.
+        # None rather than zero where nothing was declared. A fund nobody has
+        # looked up is not a free fund, and the two must not render alike.
+        charged: float | None = (fees or {}).get(key[2])
         rate: Paid | None = pays.get(key[2])
         forecast: float | None = (
             None
@@ -1333,6 +1359,12 @@ def positions(
                 div_income=received,
                 current_yield=_ratio(top=received, bottom=value),
                 yield_on_cost=_ratio(top=received, bottom=cost),
+                expense_ratio=charged,
+                annual_fee=(
+                    None
+                    if charged is None or value is None
+                    else round(number=value * charged / 100, ndigits=2)
+                ),
                 indicated_income=forecast,
                 indicated_yield=_ratio(top=forecast, bottom=value),
                 trend=tuple(trend),
@@ -1401,6 +1433,12 @@ def performance(
     # Summed only over the positions the feed answered for, and the count and
     # their value travel with it. A yield divided by the whole portfolio would
     # report six known funds against twelve positions' worth of money.
+    # Weighted by value: a costly fund held in small size is a small cost, and
+    # a flat mean across symbols would report it as a large one.
+    charged: list[Position] = [row for row in rows if row.annual_fee is not None]
+    fee_cost: float = sum(row.annual_fee or 0.0 for row in charged)
+    fee_value: float = sum(row.value or 0.0 for row in charged)
+
     known: list[Position] = [row for row in rows if row.indicated_income is not None]
     forecast: float = sum(row.indicated_income or 0.0 for row in known)
     # Named apart from the "covered" parameter, which is a day count. ty caught
@@ -1425,6 +1463,12 @@ def performance(
         dividend_yield=_ratio(top=earned, bottom=invested),
         dividend_days=covered,
         dividends_seen=bool(income),
+        fee_cost=fee_cost,
+        fee_ratio=(
+            None if not charged or not fee_value else fee_cost / fee_value * 100
+        ),
+        fee_over=len(charged),
+        fee_value=fee_value,
         indicated_income=forecast,
         indicated_yield=_ratio(top=forecast, bottom=covered_value),
         indicated_over=len(known),
@@ -1523,6 +1567,7 @@ def build_brief(
         palette=palette,
         link=link,
         paid=pays,
+        fees=get_expense_ratios()[0],
     )
 
     # Split for display only. `held` stays whole and is what performance()

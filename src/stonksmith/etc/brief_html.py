@@ -623,6 +623,26 @@ def _tiles(brief: Brief) -> str:
         }"
         f"{
             _tile(
+                caption='Fund Fees',
+                # The money, not the rate, as the figure. A rate of 0.08% reads
+                # as nothing; the same fact as an annual sum in dollars is a
+                # number somebody can weigh against what it buys.
+                figure=(
+                    money(value=money_of.fee_cost, currency=money_of.currency)
+                    if money_of.fee_over
+                    else '—'
+                ),
+                sub=(
+                    f'a year at {money_of.fee_ratio:.3f}% of '
+                    + money(value=money_of.fee_value, currency=money_of.currency)
+                    + f', across {money_of.fee_over} of {money_of.holdings} positions'
+                    if money_of.fee_over and money_of.fee_ratio is not None
+                    else 'no holding has a declared expense ratio'
+                ),
+            )
+        }"
+        f"{
+            _tile(
                 caption='Win / Loss',
                 figure=money(value=money_of.total_win, currency=money_of.currency),
                 sub=f'against {

@@ -627,6 +627,58 @@ def get_account_aliases() -> dict[str, str]:
     return aliases
 
 
+def get_expense_ratios() -> tuple[dict[str, float], list[str]]:
+    """
+    What each fund charges to hold it, as a percentage of the money in it.
+
+    Stated rather than fetched, and that is a decision about reliability rather
+    than about effort. The figure lives in Yahoo's ``quoteSummary``, which is
+    gated behind a cookie-and-crumb handshake that answered "Too Many Requests"
+    on every attempt from this machine -- a materially different class of
+    dependency from the chart endpoint the prices and dividends come from, which
+    needs no credential and has never refused. A morning brief that breaks when
+    somebody else's rate limiter is unhappy is not one worth scheduling.
+
+    An expense ratio also barely moves: funds restate them about once a year, in
+    a prospectus. A number that changes annually is a poor reason to make a
+    network call every night.
+
+    Percentages, so "0.02" for two basis points rather than "0.0002". That is
+    how every fund page prints it, and asking somebody to convert on the way in
+    is asking for a factor-of-a-hundred error in a figure nobody re-checks.
+    :return: (symbol to percentage, the lines that were refused)
+    :rtype: tuple[dict[str, float], list[str]]
+    """
+
+    raw: str = get_config().get(section="FEES", option="expense_ratios", fallback="")
+    ratios: dict[str, float] = {}
+    refused: list[str] = []
+
+    for line in raw.splitlines():
+        symbol, sep, ratio = line.rpartition("=")
+
+        if not sep or not symbol.strip() or not ratio.strip():
+            continue
+
+        try:
+            value = float(ratio.strip().rstrip("%").replace(",", ""))
+
+        except ValueError:
+            refused.append(f"{line.strip()} (not a percentage)")
+            continue
+
+        # Ten percent is far above any real fund and well below a plausible
+        # basis-point mix-up, so it catches "2" meant as 0.02 without refusing
+        # anything anybody actually holds.
+        if not math.isfinite(value) or not 0.0 <= value <= 10.0:
+            refused.append(f"{line.strip()} (expected a percentage like 0.02)")
+            continue
+
+        ratios[symbol.strip()] = value
+
+    return ratios, refused
+
+
 def get_allocation_targets() -> tuple[dict[str, float], list[str]]:
     """
     The share of the portfolio each asset class is meant to hold.
