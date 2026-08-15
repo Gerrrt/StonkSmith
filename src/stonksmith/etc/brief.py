@@ -855,7 +855,12 @@ def allocation_breakdown(
                 # None rather than zero when there was no baseline to measure
                 # against, so a class that has always been 4% is not rendered as
                 # one that has just grown from nothing.
-                was=(then[label] / prior) if prior else None,
+                # .get, because `now` carries classes `then` never saw: a
+                # target names a class nobody holds, it is added at zero
+                # above, and a subscript here raises KeyError the moment a
+                # baseline exists. Zero is right rather than merely safe --
+                # a class that was not held was worth nothing.
+                was=(then.get(label, 0.0) / prior) if prior else None,
                 target=aimed.get(label),
                 # Percentage points, on the same reasoning the baseline drift
                 # states: a class at 20% against an 18% target is two points
