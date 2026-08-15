@@ -144,13 +144,27 @@ def tracked() -> list[Path]:
     :rtype: list[Path]
     """
 
-    listed: str = subprocess.run(
-        ["git", "ls-files"],
-        capture_output=True,
-        text=True,
-        check=True,
-        cwd=root(),
-    ).stdout
+    try:
+        listed: str = subprocess.run(
+            ["git", "ls-files"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=root(),
+        ).stdout
+
+    # Raised rather than allowed out as a CalledProcessError from a
+    # subprocess the reader has no reason to know about. This check exists
+    # to stop failing open, so the one case where it cannot check anything
+    # has to say that in the terms of what it guards -- and has to fail
+    # rather than skip, because a skipped scan and a clean scan are the
+    # same green tick.
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+        raise AssertionError(
+            "cannot list tracked files, so nothing was scanned for the "
+            f"operator's own figures: git is unavailable or this is not a "
+            f"checkout ({e})"
+        ) from e
 
     return [
         root() / name
@@ -181,7 +195,7 @@ class TheTreeCarriesNobodysRealFigures(unittest.TestCase):
                 tokens += [m.lower() for m in TOKEN.findall(line)]
 
                 found.extend(
-                    f"{path.relative_to(root()):}:{number} carries {token!r}"
+                    f"{path.relative_to(root())}:{number} carries {token!r}"
                     for token in tokens
                     if digest(token=token) in HASHES
                 )

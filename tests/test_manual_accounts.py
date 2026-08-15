@@ -35,7 +35,7 @@ class TheConfigParsesWhatTheCommentPromises(UserConfigMixin, unittest.TestCase):
     config_body: str = (
         "[MANUAL]\n"
         "accounts =\n"
-        "    Sam Trump | SPYM | 2.000000 | 2026-08-10 | 150.00\n"
+        "    Sam Custodial | SPYM | 2.000000 | 2026-08-10 | 150.00\n"
         "    No Cost Known | VOO | 2.5 | 2026-08-01\n"
     )
 
@@ -46,7 +46,7 @@ class TheConfigParsesWhatTheCommentPromises(UserConfigMixin, unittest.TestCase):
         self.assertEqual(
             accounts[0],
             ManualHolding(
-                name="Sam Trump",
+                name="Sam Custodial",
                 symbol="SPYM",
                 units=2.000000,
                 units_as_of="2026-08-10",
@@ -109,7 +109,7 @@ class OneFileCannotPriceTwoFunds(UserConfigMixin, unittest.TestCase):
     config_body: str = (
         "[MANUAL]\n"
         "accounts =\n"
-        "    Sam Trump | SPYM | 1.65 | 2026-08-10\n"
+        "    Sam Custodial | SPYM | 1.65 | 2026-08-10\n"
         "    Something Else | VOO | 2.5 | 2026-08-01\n"
     )
 
@@ -172,7 +172,7 @@ class OneFileIsFineForOneFund(UserConfigMixin, unittest.TestCase):
     """The flag's actual use, which the refusal must not have taken away."""
 
     config_body: str = (
-        "[MANUAL]\naccounts =\n    Sam Trump | SPYM | 1.65 | 2026-08-10\n"
+        "[MANUAL]\naccounts =\n    Sam Custodial | SPYM | 1.65 | 2026-08-10\n"
     )
 
     def test_a_single_symbol_reads_the_file(self) -> None:
@@ -193,7 +193,7 @@ class OneFileIsFineForOneFund(UserConfigMixin, unittest.TestCase):
 class TheMarkIsACountTimesAPublishedPrice(unittest.TestCase):
     def setUp(self) -> None:
         self.held = ManualHolding(
-            name="Sam Trump",
+            name="Sam Custodial",
             symbol="SPYM",
             units=2.000000,
             units_as_of="2026-08-10",
@@ -275,7 +275,7 @@ class AnAccountWithNoPriceIsSkippedNotZeroed(unittest.TestCase):
         self.connection = MagicMock()
         self.connection.accounts = [
             ManualHolding(
-                name="Sam Trump",
+                name="Sam Custodial",
                 symbol="SPYM",
                 units=1.65,
                 units_as_of="2026-08-10",

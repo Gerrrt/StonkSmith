@@ -292,7 +292,7 @@ publishes:
 ```ini
 [MANUAL]
 accounts =
-    Sam Trump | SPYM | 2.000000 | 2026-08-10 | 150.00
+    Sam Custodial | SPYM | 2.000000 | 2026-08-10 | 150.00
 ```
 
 ```bash
