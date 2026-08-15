@@ -34,18 +34,20 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*As of 2026-08-11: 31 of 42 claims have been settled by a live run — 29 confirmed,
+*As of 2026-08-15: 33 of 42 claims have been settled by a live run — 31 confirmed,
 2 disproved. 0 of those were settled more than six months before that date, and 0
 carry no date at all. The
-remaining 11 rest on evidence no run here has produced: a broker with the transaction
-volume to put the question, a workspace whose brokers genuinely scraped on
-different days, a `verify tabs` run against a real spreadsheet since the
-allocation blocks acquired a check that reads them, a SnapTrade connection that has
+remaining 9 rest on evidence no run here has produced: a broker with the transaction
+volume to put the question, a SnapTrade connection that has
 actually lapsed, an account whose holdings have actually gone stale, a 529 with
 more than one beneficiary on it, and the five rows of the one broker nobody has
 run. Three of those are alike and worth naming as such: a lapsed connection, stale
 holdings and a second beneficiary each need a condition to occur rather than a run
-to be made, and no amount of sitting down at the machine produces one.*
+to be made, and no amount of sitting down at the machine produces one. Two rows left
+this list on 2026-08-15 and are worth telling apart: the allocation blocks only ever
+needed a run made after the check existed, while the carried series needed a
+workspace to become the ordinary state of a real one, which took waiting rather than
+doing.*
 
 **A settled claim does not stay settled, and the dates are why.** This file opens by
 saying green tests cannot tell you the site still looks the way it did. A run has the
@@ -122,11 +124,11 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | Fidelity — the session survives to the next run | `tests/test_fidelity_refused_and_session.py` and `test_fidelity_lifecycle.py`. Ally's equivalent claim is settled the other way, which is the reason this one is worth asking | No | — |
 | Fidelity — database write | `tests/test_module_snapshot_writes.py` and `test_fidelity_module_capture.py` | No | — |
 | The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes | 2026-08-10 |
-| The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting. `verify volume` supplies its own rows instead, and was run against the real spreadsheet on 2026-08-15: both requests landed, all 2,500 rows came back, and the first and last row of each write sat in the cell it was addressed to. That settles the second-chunked-write half and cannot settle this one — the window it would have to find is upstream of the write, and rows the check supplies itself enter below it | No | — |
+| The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first, and on 2026-08-15 it confirmed 18 against 18. Nothing was dropped at either size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting — the count has grown by nine in five days, which is the rate that makes it a wait rather than an afternoon. `verify volume` supplies its own rows instead, and was run against the real spreadsheet on 2026-08-15: both requests landed, all 2,500 rows came back, and the first and last row of each write sat in the cell it was addressed to. That settles the second-chunked-write half and cannot settle this one — the window it would have to find is upstream of the write, and rows the check supplies itself enter below it | No | — |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes | 2026-08-10 |
 | The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes | 2026-08-11 |
-| The sheet — every allocation block adding up to the total it is a share of | Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, which check that a wrong sum and a wrong share are both caught and that a refusal is not mistaken for either. Check 8 below. The row is new because the check is: every block already closed on a `Slices sum to` row and nothing read it, so no run before this one could have settled it, and the 2026-08-10 and 2026-08-11 runs predate the check rather than having passed it | No | — |
-| The sheet — the account series carried across brokers that scraped on different days | Unit tests over literal observations and over two real databases on disk, `tests/test_net_worth_history.py`. The 2026-08-11 run wrote the tab but settles nothing here: checks 6 and 7 are arithmetic across dates and a question about rows that are absent, and a column contract read back reaches neither. Still needs a workspace whose brokers genuinely ran on different days | No | — |
+| The sheet — every allocation block adding up to the total it is a share of | `verify tabs` on 2026-08-15 against the real spreadsheet, the first run since the check was written: all three blocks were drawn and all three read back — account kind, position, and asset class — which is why that run counts thirteen checks where 2026-08-11 counted ten. The asset class line appearing at all is the config half, since it is drawn only when `asset_classes` is set. The refusal state was not seen and cannot be arranged; it needs positions exceeding balances, which check 8 says in advance is the expected outcome. Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, cover the wrong sum, the wrong share, and a refusal not being mistaken for either | Yes | 2026-08-15 |
+| The sheet — the account series carried across brokers that scraped on different days | A run on 2026-08-15 against a workspace whose six brokers entered the series twelve days apart and fell silent for up to six days inside it, quoted below: 78 rows off the real `Net Worth` tab, over nine dates, for twelve accounts. The account count per date ran `1, 7, 7, 9, 9, 11, 11, 11, 12` and never fell, where the observed-only count falls three times — so the carry-forward ran. Every row read `observed` or `carried`, the 17 carried ones dating `Observed On` before their `Date`; the eleven accounts that joined after the first date have no row on any date before they did, and no row is a zero. The thirty-day horizon is untouched by it — the longest silence there is six days — and that half still rests on `tests/test_net_worth_history.py`, alongside `tests/test_portfolio_sheet_workspace.py` over two real databases on disk | Yes | 2026-08-15 |
 | SnapTrade — a personal API key reaches the API | Four runs on 2026-08-11 against a real account, written up below. `verify_access` listed the connections and every run proceeded on the key alone — no userId, no userSecret, no browser | Yes | 2026-08-11 |
 | SnapTrade — accounts and balances reach the database | The same four runs, into a real `snaptrade.db`: snapshots 168–199, eight accounts per run, each carrying an `As Of` of 2026-08-11 | Yes | 2026-08-11 |
 | SnapTrade — positions reach the database | The `Holdings` tab went from 2 rows to 9 between the `--no-positions` run and the full one that followed, both on 2026-08-11 — the seven are SnapTrade's, and the two that survived the first run are other brokers' | Yes | 2026-08-11 |
@@ -1359,8 +1361,10 @@ a sheet written from scratch that morning.
 
 **It settles the tab, and not the series.** Everything above is one read of one tab. Checks 6
 and 7 below are arithmetic across dates and a question about rows that are *absent*, and no
-column contract read back can reach either. Those are still outstanding, and the row in the
-table says so.
+column contract read back can reach either. They stayed outstanding until 2026-08-15, when a
+workspace that had been running unattended for a fortnight finally had brokers entering the
+series twelve days apart and going quiet for up to six days inside it; that run is quoted
+under *Nine dates, twelve accounts* below.
 
 **This run also made the tab, which is the creation half of check 1.** The spreadsheet carried
 four machine-owned tabs on 2026-08-10, no `sheet` run happened between then and this one, and
@@ -1380,7 +1384,7 @@ an empty string come back the same, as `""` or a short row. It stays an eyeball 
 is the reason this section still asks you to look — though not for the reason it used to give.
 See check 4 below.
 
-The seven checks, and which of them `verify tabs` settles:
+The eight checks, and which of them `verify tabs` settles:
 
 1. **The first cell of every tab carries the machine-owned banner** — *settled, 2026-08-10,
    by `verify tabs`, and the creation half separately: the four tabs then defined were
@@ -1540,6 +1544,14 @@ The seven checks, and which of them `verify tabs` settles:
    workspace whose brokers genuinely did not all run on the same day, which is the
    ordinary state of a real one and not of a freshly built one: run `sheet` against a
    workspace where Ally last went a week ago and TSP ran this morning.
+
+   **Run, and it holds: 2026-08-15**, against a workspace of that shape, walked
+   below. Nine dates, and the count went `1, 7, 7, 9, 9, 11, 11, 11, 12` — it grew four
+   times, held four, and never fell. The observed-only count over the same dates is
+   `1, 7, 6, 2, 3, 10, 11, 11, 10`, which falls three times: that gap is the
+   carry-forward, and it is what the check exists to see. **The thirty-day horizon was
+   not exercised** — the longest silence in that workspace is six days, so this settles
+   the carry and not its expiry.
 7. **Carried rows are visibly carried, and no row is a back-filled zero.** *The other
    check no command makes, and for a different reason than check 4: a row that is
    absent cannot be read back, so the thing being checked is what is not there.* Every
@@ -1549,6 +1561,14 @@ The seven checks, and which of them `verify tabs` settles:
    Then look at the earliest dates: an account whose first reading came later must
    have *no row at all* before it, rather than a row worth `0`. A zero there would
    total correctly and be a lie about an account that did not exist yet.
+
+   **Run, and it holds: 2026-08-15**, off the same 78 rows. Every one reads `observed`
+   or `carried` and none is blank; all 17 `carried` rows date `Observed On` before their
+   `Date` and all 61 `observed` rows date it equal. Eleven of the twelve accounts joined
+   after the first date, on four later dates, and the last of them joined on the ninth
+   with eight dates behind it — none has a row before the date it joined on, and none
+   has a zero standing where one would be. The absence is the finding, and it is the
+   half no `verify` can reach.
 
 8. **Every allocation block adds up to the total it is a share of.** *`verify tabs`
    reads this, and until recently nothing did.* Each block ends with a `Slices sum to`
@@ -1567,6 +1587,14 @@ The seven checks, and which of them `verify tabs` settles:
    failing. A refusal cannot be arranged on demand; it needs positions exceeding
    balances, so seeing only the passing state is the expected outcome and worth saying
    so rather than leaving the row ambiguous.
+
+   **Run, and it holds: 2026-08-15**, in the same `verify tabs` quoted below. All three
+   blocks were drawn and all three read back — `The account kind allocation adds up`,
+   `The position allocation adds up`, `The asset class allocation adds up` — which is
+   why that run counts thirteen checks where 2026-08-11 counted ten. The asset class
+   line appearing at all is the config half working: it is drawn only when
+   `asset_classes` is set, and a check that inferred from the tab could not tell that
+   from a block that failed to write. The refusal state was not seen, as expected.
 
 **Then the refusal, which is the point of the whole thing — and it goes last.** A
 refused tab means nothing is synced at all, so doing this first would leave the eight
@@ -1640,7 +1668,7 @@ rather than leaving one tab fresh beside a stale one. To get the sheet back afte
 empty that tab or delete it and run `sheet` once more; an empty tab is adopted, which is
 the third way out the message offers.
 
-**What this settles.** Five rows, and each check belongs to exactly one of them.
+**What this settles.** Six rows, and each check belongs to exactly one of them.
 
 *The sheet — the machine-owned tabs* is checks 1 through 4: the banner on all of them and
 the column contract on the ones that have one, money arriving as a number, the
@@ -1677,13 +1705,23 @@ wrote it, counted five banners and read the eleven-column contract back off it.
 checks 6 and 7, and splitting it off from the row above is the point rather than
 bookkeeping. The tab existing and being shaped right is a read; the series being *true* is
 arithmetic across dates, and the 2026-08-11 run confirmed the first while touching none of
-the second. It is also the one row here that no amount of care with a fresh spreadsheet can
-settle: it needs a workspace whose brokers really did run on different days, because a
-workspace where they all ran this morning produces a one-date series that passes both
-checks by having nothing to carry.
+the second. It was also the one row here that no amount of care with a fresh spreadsheet
+could settle: it needed a workspace whose brokers really did run on different days, because
+a workspace where they all ran this morning produces a one-date series that passes both
+checks by having nothing to carry. **Settled on 2026-08-15**, when one had been running
+unattended long enough to be that — and the reasoning above is why the row could not have
+been ticked before then rather than an excuse for it having taken four days.
+
+*The sheet — every allocation block adding up to the total it is a share of* is check 8,
+and it is the odd one here: the row was outstanding not because the evidence was hard to
+get but because the check reading it was younger than every run on this page. It needed
+nothing but the next `verify tabs`, which is why it settled on 2026-08-15 alongside a row
+that had been waiting on the calendar. Worth telling those two apart when reading the
+count above — a row can be outstanding because nobody has got round to it, and that is a
+different thing from one that cannot be asked yet.
 
 *The sheet — refusing a tab it does not own* is the refusal, and what marks it out is that
-the question can be put today: the two rows still outstanding wait on a workspace nobody
+the question could be put on the day: the row still outstanding waits on a workspace nobody
 here has, and this one only ever waited on somebody willing to deface a tab. It is not the
 only row that could come back settled the other way — a `Transactions` tab found holding
 five hundred of six hundred movements would be that too — but it is the one where asking
@@ -1693,8 +1731,10 @@ which tab. `verify` covers `claim()`'s three answers and not the
 abort, so a clean `verify` and no deface leaves this row where it is.
 
 Then *Recording a result* below, which is where the asymmetry it warns about actually
-bites: one `sheet` run touches all five of these rows, and the refusal is the only one
-that writes itself up.
+bites: one `sheet` run touches all six of these rows, and the refusal is the only one
+that writes itself up. The 2026-08-15 run is that warning working — it was made for the
+carried series and settled the allocation blocks on the way past, and the second row would
+have been easy to leave unrecorded because nothing about it failed.
 
 ### Run twice, on 2026-08-10
 
@@ -1806,15 +1846,125 @@ day; the other two are not laziness.
 - *The whole-sync abort.* Covered above — a workspace whose data has not moved cannot tell a
   rewritten `Accounts` from an untouched one, so it rests on the claim loop preceding every
   write and on `test_nothing_is_written_when_a_tab_is_refused`.
-- *The window at five hundred.* 9 movements. Unchanged, and unchangeable from here.
+- *The window at five hundred.* 9 movements on the day. Unchanged, and unchangeable from here.
 
 The look was taken and the four tabs were deleted and remade, so *four machine-owned tabs* is
-settled too, and **the sheet has one row left**: *the whole transaction history reaching a tab*,
+settled too, and **the sheet had one row left**: *the whole transaction history reaching a tab*,
 waiting on a broker rather than on anybody's afternoon. Nine movements cannot put a question
-about five hundred, and no amount of care here changes that — it needs a workspace with the
+about five hundred, and no amount of care could change that — it needs a workspace with the
 rows, ideally past 2,000 so a second chunked write meets Sheets at all. It has an issue of its
 own, #141, because a row blocked on data volume should not hold a finished investigation open;
 #115 closed on everything above.
+
+**That count has since grown and the row has not moved**, which is worth stating here rather
+than leaving a reader to reconcile 9 against the 18 in the next section. The figures in this
+write-up are the 2026-08-10 run's own and stay as they were recorded; the workspace has kept
+scraping since, and 18 movements is no closer to putting a question about five hundred than 9
+was. `verify volume` settled the second chunked write on 2026-08-15 by sending its own rows,
+and that is a different question from this one — see check 5.
+
+### Nine dates, twelve accounts, on 2026-08-15
+
+Checks 6 and 7 waited on a workspace rather than on an afternoon, and #149 was filed rather
+than done for that reason. The wait ended by itself: a fortnight of unattended runs left one
+where SnapTrade had gone quiet for six days and come back with two accounts more than it left
+with, the 529 had a six-day gap of its own, Ally and the 529 both stopped a day before the
+last date while TSP and the manual broker ran to the end, and Fidelity had never produced a
+snapshot at all. First readings span twelve days; the longest silence in it is six. Nothing
+about it was arranged.
+
+**It is worth being exact about what "different days" turned out to mean here**, because the
+tempting summary is wrong. The brokers' *last* readings are only a day apart — 08-13 against
+08-14 — so a workspace described as "Ally last went a week ago" is not what arrived. What
+makes this one carry is the middle: brokers entering the series twelve days apart, and gaps of
+up to six days inside it where a broker reported nothing while others did. That is enough to
+put both checks, and a run that only stopped one broker for a week would have put less.
+
+```
+$ uv run stonksmithdb sheet
+[*] Refreshed: 12 accounts, 13 holdings, 18 movements from ally, fidelity, manual, schwab529plan, snaptrade, tsp.
+$ uv run stonksmithdb verify tabs
+[*] Reading the tabs back from 'Investment Account Scrapes'.
+[+] All 5 tabs carry the banner in A1
+[+] Accounts row 2 is the column contract, ending at J
+[+] Holdings row 2 is the column contract, ending at P
+[+] Transactions row 2 is the column contract, ending at O
+[+] Net Worth row 2 is the column contract, ending at K
+[+] Transactions holds all 18 movements the databases have
+[+] Every Processed On is YYYY-MM-DD
+[+] Processed On runs newest-first within each account
+[+] Accounts Value is a number, not text
+[+] The dashboard's two totals agree
+[+] The account kind allocation adds up
+[+] The position allocation adds up
+[+] The asset class allocation adds up
+[*] All 13 checks behaved, against real Sheets rather than a stub. One thing it cannot cover is still in docs/live-verification.md: an absent value arriving as an empty cell.
+```
+
+Quoted as it came out, in the scripted form. **Thirteen checks, not ten** — the three
+allocation lines are new since 2026-08-11 and are check 8, which is why that row moves in this
+pass too.
+
+Neither of those thirteen is check 6 or check 7, which is the whole point of the row. Those
+were put to the tab afterwards, by reading all 78 rows back off `Net Worth` and walking them.
+The expectation was computed separately, in SQL over the six broker databases, so that a fault
+in `net_worth_history` could not appear on both sides of the comparison — the count below
+agreed with it on all nine dates, and 78 rows against 78.
+
+**Check 6, the count down the dates.** The two middle columns are the split the `Basis` column
+records; only their sum is the claim.
+
+| Date | `observed` | `carried` | accounts | against the date before |
+| --- | --- | --- | --- | --- |
+| 2026-08-02 | 1 | 0 | 1 | first date |
+| 2026-08-04 | 7 | 0 | 7 | grew |
+| 2026-08-05 | 6 | 1 | 7 | held |
+| 2026-08-07 | 2 | 7 | 9 | grew |
+| 2026-08-10 | 3 | 6 | 9 | held |
+| 2026-08-11 | 10 | 1 | 11 | grew |
+| 2026-08-12 | 11 | 0 | 11 | held |
+| 2026-08-13 | 11 | 0 | 11 | held |
+| 2026-08-14 | 10 | 2 | 12 | grew |
+
+**Read the `observed` column on its own and it falls three times** — 7 to 6, 6 to 2, 11 to 10.
+That column is what the chart would have drawn without the carry-forward, and the fall from
+six to two between 2026-08-05 and 2026-08-07 is most of a portfolio disappearing and coming
+back because two brokers reported that day and the rest did not. The `accounts` column never
+falls: it grew four times, held four, and fell none. That is the failure this design exists to
+prevent, seen not happening against real data, which is the only way it can be seen at all.
+
+Two details worth not skimming. **The axis is the dates something was read on, not a
+calendar** — there is no row for 08-03, 08-06, 08-08 or 08-09, because nothing reported on
+them, and a series that filled them in would be inventing readings. And **the last date is
+2026-08-14, not the day of the run**: every broker's newest reading is dated the day before by
+the source itself, so a series dated 08-15 would be claiming a freshness nothing had.
+
+**Check 7, the basis and the absences.** Of the 78 rows, all 78 read `observed` or `carried`
+and none is blank; the 17 `carried` rows all date `Observed On` before their `Date`, and the
+61 `observed` rows all date it equal. Eleven of the twelve accounts joined the series after
+the first date, and the count of rows standing before each on a date it had not yet reported:
+
+| joined on | accounts | earlier dates | rows on them |
+| --- | --- | --- | --- |
+| 2026-08-02 | 1 | 0 | 0 |
+| 2026-08-04 | 6 | 1 | 0 |
+| 2026-08-07 | 2 | 3 | 0 |
+| 2026-08-11 | 2 | 5 | 0 |
+| 2026-08-14 | 1 | 8 | 0 |
+
+Zero throughout, and no row anywhere on the tab holds a `0` or an empty `Value`. The account
+in the last line is the one that makes this check worth making: it first reported on the ninth
+date, and there are eight dates it could have been back-filled onto with a zero that totalled
+correctly and said an account existed when it did not. Fidelity, which has no snapshots at
+all, contributes no rows rather than a flat line at nothing.
+
+**What this run could not settle.** The thirty-day horizon. The longest silence in this
+workspace is six days, so every gap here is inside the window and nothing was dropped for
+being stale — the carry was exercised and its expiry was not. That half still rests on
+`test_the_horizon_is_exactly_carry_days_and_inclusive`, and a workspace that would put the
+question is one where a broker has been dead for a month, which is a condition to wait for
+rather than a run to make. The row is settled on what the checks ask; this is the part it
+does not reach.
 
 ---
 

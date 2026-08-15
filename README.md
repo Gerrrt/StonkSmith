@@ -187,17 +187,15 @@ template.
 > what it was written to do, which is not the same as saying the site still
 > looks the way it did when the parser was written. Four of the five brokers
 > have been run against the real thing, and the sheet has been read back off a
-> real spreadsheet; eleven claims are still open. Five are the `fidelity`
+> real spreadsheet; nine claims are still open. Five are the `fidelity`
 > broker, which has never been run — the Fidelity accounts SnapTrade reaches
 > are settled, but that is an API answering, not a browser getting past bot
-> detection to scrape a summary page. Three wait on data rather than on
+> detection to scrape a summary page. Two wait on data rather than on
 > effort — whether the `Transactions` tab holds every movement or only the
-> newest five hundred, whether the `Net Worth` series carries across brokers
-> that scraped on different days, and whether a 529 with more than one
+> newest five hundred, and whether a 529 with more than one
 > beneficiary attributes its movements to the right one. Two wait on a
 > condition occurring at all: a SnapTrade connection lapsing, and an account's
-> holdings going stale. One waits only on a run, being whether each allocation
-> block's slices add up on a real tab.
+> holdings going stale.
 > [`docs/live-verification.md`](docs/live-verification.md) is the record of
 > which is which, claim by claim, and this note summarises it rather than being
 > maintained beside it.
@@ -510,9 +508,9 @@ This section summarises it rather than being maintained beside it.
 - [ ] More brokers. Vanguard needs no code at all; link it through SnapTrade
 - [ ] Settle whether the `Transactions` tab windows at five hundred rows
       ([#141][issue-141]) — blocked on a broker with the movement volume
-- [ ] Settle whether the `Net Worth` series carries across brokers
-      ([#149][issue-149]) — blocked on a workspace whose brokers scraped on
-      different days
+- [x] Settle whether the `Net Worth` series carries across brokers
+      ([#149][issue-149]) — walked across nine dates on 2026-08-15. The
+      thirty-day expiry is still unexercised; it needs a broker dead a month
 
 See the [open issues][issues-url] for a full list of proposed features (and
 known issues).

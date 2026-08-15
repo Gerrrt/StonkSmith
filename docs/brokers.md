@@ -743,11 +743,11 @@ one written before the `units_as_of` column existed. The sheet has been run too:
 where a read could not reach, made to refuse a tab it did not own, and rebuilt
 from nothing after the four tabs it then had were deleted. `Net Worth` came after all
 of that, and one run on 2026-08-11 made it, wrote it and read it back, ten checks
-passing. What is left
-there is the claim nine movements cannot put — that a tab holds every movement rather
-than the newest five hundred — which is tracked on its own as #141, and whether the
-`Net Worth` series carries correctly, which one run against a workspace that scraped
-all at once cannot show.
+passing; a run on 2026-08-15 then walked the series itself across nine dates, on a
+workspace whose brokers really had reported on different days, and the account count grew
+or held on every one of them. What is left
+there is the claim eighteen movements cannot put — that a tab holds every movement rather
+than the newest five hundred — which is tracked on its own as #141.
 [`live-verification.md`](live-verification.md) has the
 procedure, those runs written up, and one trap worth knowing about first — a
 statement naming a different fund from your config is refused, but one whose
