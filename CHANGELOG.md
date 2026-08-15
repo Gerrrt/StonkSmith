@@ -16,12 +16,14 @@ the two disagree.
   goes up as more than one request — which no workspace here is long enough to
   put in front of real Sheets. So this sends its own: `CHUNK_ROWS + 500` synthetic
   rows through the same `write_rows()`, to a scratch tab it makes and deletes,
-  read back for the count and for the row on each side of every chunk boundary. A
+  read back for the count and for the first and last row of each write. A
   chunk at the wrong range leaves the right number of rows in the wrong cells, so
   the count alone would agree with it. It has to be asked for by name, and it
-  refuses a size that would fit in one request. It does not settle whether the
-  real tab windows — those rows come from `read_workspace()` and these enter below
-  it; see check 5 in [`docs/live-verification.md`](docs/live-verification.md).
+  refuses a size that would fit in one request. Run against the real spreadsheet
+  on 2026-08-15 and it holds: both requests landed and every row came back. It
+  does not settle whether the real tab windows — those rows come from
+  `read_workspace()` and these enter below it; see check 5 in
+  [`docs/live-verification.md`](docs/live-verification.md).
 - **The morning brief.** `stonksmithdb brief` reads the databases — no login, no
   browser, no network — renders one self-contained HTML page to
   `~/.stonksmith/reports/<date>.html` and opens it. A LaunchAgent at 06:30 on

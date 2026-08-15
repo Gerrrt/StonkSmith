@@ -122,7 +122,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | Fidelity — the session survives to the next run | `tests/test_fidelity_refused_and_session.py` and `test_fidelity_lifecycle.py`. Ally's equivalent claim is settled the other way, which is the reason this one is worth asking | No | — |
 | Fidelity — database write | `tests/test_module_snapshot_writes.py` and `test_fidelity_module_capture.py` | No | — |
 | The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes | 2026-08-10 |
-| The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting | No | — |
+| The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first. Nothing was dropped at this size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting. `verify volume` supplies its own rows instead, and was run against the real spreadsheet on 2026-08-15: both requests landed, all 2,500 rows came back, and the first and last row of each write sat in the cell it was addressed to. That settles the second-chunked-write half and cannot settle this one — the window it would have to find is upstream of the write, and rows the check supplies itself enter below it | No | — |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes | 2026-08-10 |
 | The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes | 2026-08-11 |
 | The sheet — every allocation block adding up to the total it is a share of | Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, which check that a wrong sum and a wrong share are both caught and that a refusal is not mistaken for either. Check 8 below. The row is new because the check is: every block already closed on a `Slices sum to` row and nothing read it, so no run before this one could have settled it, and the 2026-08-10 and 2026-08-11 runs predate the check rather than having passed it | No | — |
@@ -1468,7 +1468,7 @@ The seven checks, and which of them `verify tabs` settles:
    would pass without asking anything.
 
    ```
-   stonksmithdb (default) > verify volume
+   $ uv run stonksmithdb verify volume
    [*] Making the tab 'StonkSmith volume check' in 'Investment Account Scrapes', writing 2500 rows to it as two requests, reading them back, and deleting it again. No other tab is opened.
    [+] All 2500 rows came back off the tab
    [+] The 4 rows at the edges of the 2 writes are the ones sent there
@@ -1476,16 +1476,31 @@ The seven checks, and which of them `verify tabs` settles:
    [*] All 3 checks behaved, against real Sheets rather than a stub. One thing it cannot cover is still in docs/live-verification.md: whether the real Transactions tab windows, which is upstream of the write and needs a broker with the movements.
    ```
 
-   **Not run against Sheets yet, and this block did not come from a session.** It is
-   what the command prints, taken off the test double in
-   `tests/test_portfolio_sheet_volume.py` — so the lines are real output over a fake
-   spreadsheet, which is precisely the thing this page says is not evidence. It is
-   the only block here written that way and it is marked because a plausible
-   transcript nobody produced is the failure this file exists to prevent. Run it,
-   replace this with what came back, and say which it was.
+   **Run, and it holds: 2026-08-15, against the real spreadsheet, quoted as it came
+   out.** Two thousand five hundred rows went up as two requests and two thousand
+   five hundred came back, with the first and last row of each write in the cell it
+   was addressed to. So `write_rows()` past `CHUNK_ROWS` is no longer an assumption
+   about the API.
 
-   What a failure reads like is worth knowing before you need it. A second request
-   landing one row low keeps the count and moves the boundary:
+   **This block replaced one written from the test double, and the two were
+   identical.** That is worth saying plainly rather than quietly deleting, because
+   the tempting reading of it is the wrong one. It does not show the double was
+   evidence — the whole argument of this page is that a double is a replay, and a
+   replay agreeing with itself is not news. What it shows is the ordinary case: the
+   run was needed precisely because agreement could not be known in advance, and had
+   the two disagreed the double would have been the thing that was wrong. Predicting
+   the output correctly is not the same as having observed it, and only the second
+   moved this paragraph.
+
+   It is also the scripted form rather than the shell prompt the other blocks on this
+   page show. `verify` takes words after the command name and exits `1` on a finding,
+   which is the form worth quoting for something a schedule might one day run.
+
+   What a failure reads like is worth knowing before you need it, and this one has
+   not been seen against real Sheets — it is the mutation from
+   `tests/test_portfolio_sheet_volume.py`, and it is labelled because the block above
+   used to carry the same caveat. A second request landing one row low keeps the
+   count and moves the boundary:
 
    ```
    [+] All 2500 rows came back off the tab
@@ -1498,14 +1513,15 @@ The seven checks, and which of them `verify tabs` settles:
    is the point: every row arrived, and a check that only counted would have called
    this clean.
 
-   **What it will and will not settle.** It settles the write: that two requests
-   land, and that the row on each side of the boundary is in the place it was sent
-   to — which a count alone cannot say, since a chunk at the wrong range leaves the
-   right number of rows in the wrong cells. It settles nothing about the real
+   **What it settled and what it did not.** It settled the write: two requests
+   landed, and the first and last row of each was in the place it was sent to
+   — which a count alone cannot say, since a chunk at the wrong range leaves the
+   right number of rows in the wrong cells. It settled nothing about the real
    `Transactions` tab. Those rows come from `read_workspace()`, and synthetic ones
-   enter below it, so a window between the databases and the cells would be
-   untouched by a passing run. That half still needs the movements, and this row
-   stays `No` until it has them.
+   enter below it, so a window between the databases and the cells was untouched by
+   the run passing. **That half still needs the movements, and this row stays `No`
+   until it has them** — a passing volume check is not a partial `Yes` here, because
+   the two halves are not two degrees of the same question.
 
    Check the dates too: the 529 scraper stores `12/30/2025` and SnapTrade
    stores ISO, so the tab is where they must both read `YYYY-MM-DD`, sorted
@@ -1647,12 +1663,11 @@ because that reader stops where the question starts. Counting the database settl
 every row landed; only a workspace past five hundred settles whether there is a window.
 The date half of the check belongs to this row too, and needs no volume at all.
 
-The second chunked write used to be listed here as a third thing needing volume, and it
-has been taken out of that list rather than settled: `verify volume` sends the rows itself,
-so the question no longer waits on a broker. It waits on somebody running the command,
-which is a different kind of outstanding and is recorded as such under check 5. Whichever
-way that run goes, the row stays `No` — the window is upstream of the write, and nothing
-sending its own rows can reach it.
+The second chunked write used to be listed here as a third thing needing volume. It is not
+one: `verify volume` sends the rows itself, and that run happened on 2026-08-15 and passed.
+The row stays `No` all the same, which is the part worth reading rather than skimming past —
+the window is upstream of the write, so nothing sending its own rows can reach it, and a
+check that passed says nothing either way about the question this row asks.
 
 *The sheet — the fifth tab, `Net Worth`, created, written and read back* is what checks 1
 through 3 reach on the fifth tab, and it was settled on 2026-08-11: one run made the tab,
