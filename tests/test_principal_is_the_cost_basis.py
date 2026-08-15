@@ -205,9 +205,9 @@ class ThePlanStatesItsCostAsPrincipal(
         # floating point 2200.00 - 2040.01 - 159.98 is 0.010000000000019, so the
         # float form this replaced *rejected* a row exactly a cent out -- while a
         # different triple, a cent out by the same amount, sailed through. A
-        # boundary that moves with the values is not a boundary, and only a pair
-        # that actually lands the wrong side of it can say so. 200.0000 x 11.00
-        # is 2200.00 exactly, so the row stays internally honest as well.
+        # boundary that moves with the values is not a boundary, and only a
+        # triple that actually lands the wrong side of it can say so. 200.0000
+        # x 11.00 is 2200.00 exactly, so the row stays internally honest too.
         self._write(
             symbol="",
             fund_code="70310",
