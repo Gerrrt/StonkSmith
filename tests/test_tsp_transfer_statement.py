@@ -8,8 +8,8 @@ looks like this -- these four rows are the live ones, everything else in
 tests/tsp_statement_transfer.txt is invented around them:
 
     Fund Name        All Funds Total  L 2050  L 2060
-    Closing Balance  $7,810.84        $0.00   $7,810.84
-    Closing Units    315.789
+    Closing Balance  $8,409.71        $0.00   $8,409.71
+    Closing Units    340.000
     Unit Price (NAV) 24.734400
 
 Two things there had never been seen before, because neither existing fixture
@@ -26,7 +26,7 @@ row.
 one figure sits under a two-fund header and position cannot say whose it is. It
 was paired with funds[0]: the right unit count under the wrong fund's name.
 
-What that produced live was a mark of $7,790.83 where the truth was $7,790.82 --
+What that produced live was a mark of $8,388.14 where the truth was $7,790.82 --
 off by a cent, from units that were right and a label that was not. The fund
 guard then refused it, correctly, and advised setting the configured fund to
 L 2050, which would have priced L 2060's units with L 2050's price and been
@@ -84,7 +84,7 @@ class AggregateColumn(unittest.TestCase):
         self.assertEqual(leading_columns(text=_text(MULTI)), 0)
 
     def test_the_balances_land_on_the_right_funds(self) -> None:
-        # THE inversion. Before this, L 2050 read $7,810.84 and L 2060 $0.00 --
+        # THE inversion. Before this, L 2050 read $8,409.71 and L 2060 $0.00 --
         # the emptied fund holding everything, the held fund holding nothing.
         text = _text(TRANSFER)
         funds = statement_funds(text=text)
@@ -95,7 +95,7 @@ class AggregateColumn(unittest.TestCase):
             dict(zip(funds, balances, strict=True)),
             {
                 "L 2050": 0.0,
-                "L 2060": 7810.84,
+                "L 2060": 8409.71,
             },
         )
 
@@ -120,27 +120,27 @@ class UnalignedRow(_EditedStatement):
 
     #: A percentage after the balances. AMOUNT matches bare numbers, so "100%"
     #: parses as a fourth figure on a three-column row.
-    LONG = "Closing Balance $7,810.84 $0.00 $7,810.84 100%"
+    LONG = "Closing Balance $8,409.71 $0.00 $8,409.71 100%"
 
     def test_the_extra_value_is_not_trimmed_away(self) -> None:
         text = _text(TRANSFER).replace(
-            "Closing Balance $7,810.84 $0.00 $7,810.84", self.LONG
+            "Closing Balance $8,409.71 $0.00 $8,409.71", self.LONG
         )
 
         values = fund_values(text=text, label=CLOSING_BALANCE_LABEL, count=2)
 
-        self.assertEqual(values, [7810.84, 0.0, 7810.84, 100.0])
+        self.assertEqual(values, [8409.71, 0.0, 8409.71, 100.0])
 
     def test_and_the_fund_it_would_have_named_is_refused(self) -> None:
         text = _text(TRANSFER).replace(
-            "Closing Balance $7,810.84 $0.00 $7,810.84", self.LONG
+            "Closing Balance $8,409.71 $0.00 $8,409.71", self.LONG
         )
 
         self.assertIsNone(sole_position(text=text))
 
     def test_so_the_statement_yields_no_units(self) -> None:
         text = _text(TRANSFER).replace(
-            "Closing Balance $7,810.84 $0.00 $7,810.84", self.LONG
+            "Closing Balance $8,409.71 $0.00 $8,409.71", self.LONG
         )
 
         units, fund, _period = read_statement(path=self.written(text=text))
@@ -165,7 +165,7 @@ class PeriodSurvives(_EditedStatement):
         self.assertEqual(str(object=period), "2026-06-30")
 
     def test_and_so_does_one_whose_unit_row_is_missing(self) -> None:
-        text = _text(TRANSFER).replace("Closing Units 315.789", "")
+        text = _text(TRANSFER).replace("Closing Units 340.000", "")
 
         _units, _fund, period = read_statement(path=self.written(text=text))
 
@@ -181,7 +181,7 @@ class SolePosition(unittest.TestCase):
     """Naming the fund a short row belongs to, from the balances."""
 
     def test_the_fund_still_holding_money_is_found(self) -> None:
-        self.assertEqual(sole_position(text=_text(TRANSFER)), ("L 2060", 7810.84))
+        self.assertEqual(sole_position(text=_text(TRANSFER)), ("L 2060", 8409.71))
 
     def test_two_live_funds_are_refused_rather_than_picked_between(self) -> None:
         # Both funds hold money, so a lone figure genuinely is ambiguous and
@@ -198,7 +198,7 @@ class ReadStatement(_EditedStatement):
     def test_the_units_come_back_under_the_fund_that_holds_them(self) -> None:
         units, fund, _period = read_statement(path=str(object=TRANSFER))
 
-        self.assertEqual(units, 315.789)
+        self.assertEqual(units, 340.000)
         self.assertEqual(fund, "L 2060")
 
     def test_not_under_the_fund_that_was_emptied(self) -> None:
@@ -235,7 +235,7 @@ class ReadStatement(_EditedStatement):
         # so the three figures are not describing the same position and the
         # parse cannot be trusted to have found the right rows.
         wrong = _text(TRANSFER).replace(
-            "Closing Units 315.789", "Closing Units 999.999"
+            "Closing Units 340.000", "Closing Units 999.999"
         )
 
         units, fund, _period = read_statement(path=self.written(text=wrong))
@@ -248,17 +248,17 @@ class Reconciliation(unittest.TestCase):
     """The tolerance has to come from the printing, not from a round number."""
 
     def test_the_real_statement_reconciles(self) -> None:
-        # 315.789 x 24.734400 = 7810.8514, printed as 7810.84. Off by 1.1
+        # 340.000 x 24.734400 = 8409.7240, printed as 8409.71. Off by 1.1
         # cents, and right: the unit count is printed to three decimals, so at
         # this price it stands for over a cent of balance either way. A flat
         # cent of tolerance called this broken.
         self.assertTrue(
-            statement_reconciles(text_units=315.789, price=24.7344, closing=7810.84)
+            statement_reconciles(text_units=340.000, price=24.7344, closing=8409.71)
         )
 
     def test_a_genuinely_wrong_row_still_fails(self) -> None:
         self.assertFalse(
-            statement_reconciles(text_units=315.789, price=24.7344, closing=14794.59)
+            statement_reconciles(text_units=340.000, price=24.7344, closing=15000.00)
         )
 
     def test_the_tolerance_scales_with_the_price(self) -> None:

@@ -83,9 +83,9 @@ class AStatedCostFillsInWhatTheSourceOmitted(unittest.TestCase):
     def setUp(self) -> None:
         self.filled = apply_costs(
             portfolio=Portfolio(
-                holdings=(held(account="Ezekiel", symbol="", value=1421.93),)
+                holdings=(held(account="Sam", symbol="", value=2300.00),)
             ),
-            costs={"src / Ezekiel": 1300.0},
+            costs={"src / Sam": 1300.0},
         )
 
     def test_the_holding_carries_the_stated_cost(self) -> None:
@@ -107,27 +107,23 @@ class TheSourceWinsWhereItSpoke(unittest.TestCase):
         filled = apply_costs(
             portfolio=Portfolio(
                 holdings=(
-                    held(
-                        account="Garrett", symbol="SWPPX", value=2986.31, cost=2599.14
-                    ),
+                    held(account="Alex", symbol="SWPPX", value=3500.00, cost=3000.00),
                 )
             ),
-            costs={"src / Garrett": 1000.0},
+            costs={"src / Alex": 1000.0},
         )
 
-        self.assertEqual(filled.holdings[0].cost_basis, 2599.14)
+        self.assertEqual(filled.holdings[0].cost_basis, 3000.00)
 
     def test_and_the_line_says_it_did_nothing(self) -> None:
         # Silence would leave a stale config looking like a working one.
         filled = apply_costs(
             portfolio=Portfolio(
                 holdings=(
-                    held(
-                        account="Garrett", symbol="SWPPX", value=2986.31, cost=2599.14
-                    ),
+                    held(account="Alex", symbol="SWPPX", value=3500.00, cost=3000.00),
                 )
             ),
-            costs={"src / Garrett": 1000.0},
+            costs={"src / Alex": 1000.0},
         )
 
         self.assertEqual(len(filled.unused_costs), 1)
@@ -135,9 +131,7 @@ class TheSourceWinsWhereItSpoke(unittest.TestCase):
 
     def test_a_line_naming_no_account_says_so(self) -> None:
         filled = apply_costs(
-            portfolio=Portfolio(
-                holdings=(held(account="Ezekiel", symbol="", value=1.0),)
-            ),
+            portfolio=Portfolio(holdings=(held(account="Sam", symbol="", value=1.0),)),
             costs={"src / Nobody": 500.0},
         )
 
@@ -191,15 +185,15 @@ class TheTwoComposeInTheRightOrder(unittest.TestCase):
             portfolio=apply_costs(
                 portfolio=Portfolio(
                     holdings=(
-                        held(account="TSP L 2060", symbol="L 2060", value=7917.58),
+                        held(account="TSP L 2060", symbol="L 2060", value=8500.00),
                     )
                 ),
                 costs={"src / TSP L 2060": 6100.0},
             ),
-            aliases={"src / TSP L 2060": "Garrett 401(k)"},
+            aliases={"src / TSP L 2060": "Alex 401(k)"},
         )
 
-        self.assertEqual(portfolio.holdings[0].account, "Garrett 401(k)")
+        self.assertEqual(portfolio.holdings[0].account, "Alex 401(k)")
         self.assertEqual(portfolio.holdings[0].cost_basis, 6100.0)
 
 
@@ -218,17 +212,17 @@ class TheConfigReadsMoneyAsPeopleWriteIt(UserConfigMixin, unittest.TestCase):
         # "$1,300.00" is what a statement says. Refusing it would be pedantry
         # about a value nobody could misread.
         costs, refused = self._reload(
-            "[ACCOUNTS]\ncost_basis =\n\tsrc / Ezekiel = $1,300.00\n"
+            "[ACCOUNTS]\ncost_basis =\n\tsrc / Sam = $1,300.00\n"
         )
 
-        self.assertEqual(costs, {"src / Ezekiel": 1300.0})
+        self.assertEqual(costs, {"src / Sam": 1300.0})
         self.assertEqual(refused, [])
 
     def test_something_that_is_not_an_amount_is_refused_and_named(self) -> None:
         # Not silently dropped, and emphatically not zero: a zero cost reports
         # the position's whole value as profit.
         costs, refused = self._reload(
-            "[ACCOUNTS]\ncost_basis =\n\tsrc / Ezekiel = about a grand\n"
+            "[ACCOUNTS]\ncost_basis =\n\tsrc / Sam = about a grand\n"
         )
 
         self.assertEqual(costs, {})
@@ -243,7 +237,7 @@ class TheConfigReadsMoneyAsPeopleWriteIt(UserConfigMixin, unittest.TestCase):
         for amount in ("nan", "inf", "-inf", "1e400", "Infinity"):
             with self.subTest(amount=amount):
                 costs, refused = self._reload(
-                    f"[ACCOUNTS]\ncost_basis =\n\tsrc / Ezekiel = {amount}\n"
+                    f"[ACCOUNTS]\ncost_basis =\n\tsrc / Sam = {amount}\n"
                 )
 
                 self.assertEqual(costs, {})
@@ -252,9 +246,7 @@ class TheConfigReadsMoneyAsPeopleWriteIt(UserConfigMixin, unittest.TestCase):
     def test_a_negative_cost_is_refused_rather_than_clamped(self) -> None:
         # Clamping to zero would keep a number nobody meant. It would also
         # invert the sign of the growth percentage on the way through.
-        costs, refused = self._reload(
-            "[ACCOUNTS]\ncost_basis =\n\tsrc / Ezekiel = -500\n"
-        )
+        costs, refused = self._reload("[ACCOUNTS]\ncost_basis =\n\tsrc / Sam = -500\n")
 
         self.assertEqual(costs, {})
         self.assertIn("cannot be negative", refused[0])
@@ -297,13 +289,13 @@ class TheReadPathAppliesThemInThatOrder(
             broker="schwab529plan",
         )
         db.save_snapshot(
-            account=AccountIdentity(account_key="529-1", display_name="Ezekiel"),
+            account=AccountIdentity(account_key="529-1", display_name="Sam"),
             scraped_at="2026-08-12 18:30:00",
             as_of="2026-08-12",
-            value=1421.93,
+            value=2300.00,
             currency="USD",
             # No symbol, which is how the 529 actually arrives.
-            holdings=[Holding(symbol="", units=131.0534, value=1421.93)],
+            holdings=[Holding(symbol="", units=200.0000, value=2300.00)],
             transactions=[],
         )
         db.shutdown_db()
@@ -316,17 +308,17 @@ class TheReadPathAppliesThemInThatOrder(
         self.config_body = (
             "[ACCOUNTS]\n"
             "aliases =\n"
-            "\tschwab529plan / Ezekiel = Ezekiel 529\n"
+            "\tschwab529plan / Sam = Sam 529\n"
             "cost_basis =\n"
-            "\tschwab529plan / Ezekiel = 1300.00\n"
+            "\tschwab529plan / Sam = 2100.00\n"
         )
         self.tearDown()
         self.setUp()
 
         portfolio: Portfolio = self._read()
 
-        self.assertEqual(portfolio.holdings[0].account, "Ezekiel 529")
-        self.assertEqual(portfolio.holdings[0].cost_basis, 1300.0)
+        self.assertEqual(portfolio.holdings[0].account, "Sam 529")
+        self.assertEqual(portfolio.holdings[0].cost_basis, 2100.0)
         self.assertEqual(
             portfolio.unused_costs,
             (),
@@ -338,22 +330,20 @@ class TheReadPathAppliesThemInThatOrder(
         # win/loss flag are all computed from cost_basis, so stating the one
         # fills the other four -- and the Gain tile stops saying a position
         # reports no cost.
-        self.config_body = (
-            "[ACCOUNTS]\ncost_basis =\n\tschwab529plan / Ezekiel = 1300.00\n"
-        )
+        self.config_body = "[ACCOUNTS]\ncost_basis =\n\tschwab529plan / Sam = 2100.00\n"
         self.tearDown()
         self.setUp()
 
         row = positions(portfolio=self._read(), classes={}, income={}, history={})[0]
 
-        self.assertEqual(row.cost_basis, 1300.0)
-        self.assertAlmostEqual(row.gain or 0.0, 121.93, places=2)
-        self.assertAlmostEqual(row.growth or 0.0, 0.0938, places=4)
-        self.assertAlmostEqual(row.purchase_price or 0.0, 9.92, places=2)
+        self.assertEqual(row.cost_basis, 2100.0)
+        self.assertAlmostEqual(row.gain or 0.0, 200.00, places=2)
+        self.assertAlmostEqual(row.growth or 0.0, 0.0952, places=4)
+        self.assertAlmostEqual(row.purchase_price or 0.0, 10.50, places=2)
 
     def test_without_the_line_every_one_of_them_is_absent(self) -> None:
         # None rather than zero, all the way down. A zero cost would report
-        # $1,421.93 of pure profit on an account nobody has priced.
+        # $2,300.00 of pure profit on an account nobody has priced.
         row = positions(portfolio=self._read(), classes={}, income={}, history={})[0]
 
         self.assertIsNone(row.cost_basis)

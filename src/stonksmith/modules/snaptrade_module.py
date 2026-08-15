@@ -682,8 +682,8 @@ class SnapTradeModule:
 
         The half of an account no position expresses, and routinely negative: an
         overdraft transfer out or a margin loan is a debt the securities do not
-        mention. An account holding $2,986.31 of a fund against -$744.28 of cash
-        is worth $2,242.03, and summing its positions says $2,986.31.
+        mention. An account holding $3,500.00 of a fund against -$800.00 of cash
+        is worth $2,700.00, and summing its positions says $3,500.00.
 
         None rather than 0.0 when it could not be read, and the difference
         matters: zero cash is a real answer that makes the account worth its
@@ -946,7 +946,7 @@ class SnapTradeModule:
         elif callable(getattr(db, "save_account_data", None)):
             for row in rows:
                 # One brokerage's account names are not unique across all of
-                # them -- two can each hold a "MICROSOFT ESPP PLAN" -- and the
+                # them -- two can each hold a "ACME ESPP PLAN" -- and the
                 # accounts table has no brokerage column to tell them apart.
                 db.save_account_data(
                     account_name=f"{row['Brokerage']} - {row['Account']}",

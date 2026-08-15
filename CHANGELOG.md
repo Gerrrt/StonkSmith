@@ -168,8 +168,8 @@ the two disagree.
   every level was, and the Net Worth series is built on levels.
 - **An account's cash was invisible, including when it was negative.**
   `get_all_account_positions` returns securities only. One account here holds
-  $2,986.31 of a fund against **-$744.28** of cash from an overdraft transfer,
-  so SnapTrade's total said $2,242.03 and summing the positions said $2,986.31 —
+  $3,500.00 of a fund against **-$800.00** of cash from an overdraft transfer,
+  so SnapTrade's total said $2,700.00 and summing the positions said $3,500.00 —
   a third of the account, unexplained. The sync now reads
   `get_user_account_balance` per account and stores positions plus cash, which
   is live on both halves and reconciles exactly. It falls back to the reported

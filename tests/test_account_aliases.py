@@ -1,7 +1,7 @@
 """Calling an account what you call it, without renaming anything stored.
 
 The names a broker chooses are written for the broker's own screens.
-"MICROSOFT CORPORATION SAVINGS PLUS 401(K) PLAN" and "Individual (...0847)" are
+"ACME CORPORATION SAVINGS PLUS 401(K) PLAN" and "Individual (...1234)" are
 both perfectly correct and neither is what their owner calls the account at half
 past six in the morning.
 
@@ -40,7 +40,7 @@ from stonksmith.etc.portfolio import (
     unmatched_aliases,
 )
 
-ALIASES: dict[str, str] = {"tsp / TSP L 2060": "Garrett 401(k)"}
+ALIASES: dict[str, str] = {"tsp / TSP L 2060": "Alex 401(k)"}
 
 
 def _portfolio() -> Portfolio:
@@ -53,7 +53,7 @@ def _portfolio() -> Portfolio:
                 source="tsp",
                 account="TSP L 2060",
                 account_key="TSP-1",
-                value=7917.58,
+                value=8500.00,
             ),
         ),
         holdings=(
@@ -63,7 +63,7 @@ def _portfolio() -> Portfolio:
                 account="TSP L 2060",
                 account_key="TSP-1",
                 symbol="L 2060",
-                value=7917.58,
+                value=8500.00,
             ),
         ),
         transactions=(
@@ -82,7 +82,7 @@ def _portfolio() -> Portfolio:
                 account="TSP L 2060",
                 account_key="TSP-1",
                 date="2026-08-13",
-                value=7917.58,
+                value=8500.00,
             ),
         ),
     )
@@ -93,15 +93,15 @@ class AnAliasRenamesEveryViewAndNothingStored(unittest.TestCase):
         self.renamed = apply_aliases(portfolio=_portfolio(), aliases=ALIASES)
 
     def test_the_account_view_uses_the_new_name(self) -> None:
-        self.assertEqual(self.renamed.accounts[0].account, "Garrett 401(k)")
+        self.assertEqual(self.renamed.accounts[0].account, "Alex 401(k)")
 
     def test_every_other_view_agrees(self) -> None:
         # Holdings and movements repeat the display name, and a holdings table
         # still saying the broker's wording under a renamed account is the same
         # inconsistency one table further down.
-        self.assertEqual(self.renamed.holdings[0].account, "Garrett 401(k)")
-        self.assertEqual(self.renamed.transactions[0].account, "Garrett 401(k)")
-        self.assertEqual(self.renamed.net_worth[0].account, "Garrett 401(k)")
+        self.assertEqual(self.renamed.holdings[0].account, "Alex 401(k)")
+        self.assertEqual(self.renamed.transactions[0].account, "Alex 401(k)")
+        self.assertEqual(self.renamed.net_worth[0].account, "Alex 401(k)")
 
     def test_identity_is_untouched(self) -> None:
         # The whole safety argument. account_key is what joins a snapshot to
@@ -116,7 +116,7 @@ class AnAliasRenamesEveryViewAndNothingStored(unittest.TestCase):
             self.assertEqual(row.account_key, "TSP-1")
 
     def test_the_value_is_untouched(self) -> None:
-        self.assertEqual(self.renamed.accounts[0].value, 7917.58)
+        self.assertEqual(self.renamed.accounts[0].value, 8500.00)
 
     def test_an_account_with_no_alias_keeps_its_name(self) -> None:
         kept = apply_aliases(portfolio=_portfolio(), aliases={"x / y": "z"})
@@ -140,10 +140,10 @@ class TheLabelIsForgivingInTheSameWayExclusionIs(unittest.TestCase):
         ):
             with self.subTest(written=written):
                 renamed = apply_aliases(
-                    portfolio=_portfolio(), aliases={written: "Garrett 401(k)"}
+                    portfolio=_portfolio(), aliases={written: "Alex 401(k)"}
                 )
 
-                self.assertEqual(renamed.accounts[0].account, "Garrett 401(k)")
+                self.assertEqual(renamed.accounts[0].account, "Alex 401(k)")
 
     def test_a_name_containing_a_slash_is_not_a_special_case(self) -> None:
         self.assertEqual(
@@ -155,7 +155,7 @@ class TheLabelIsForgivingInTheSameWayExclusionIs(unittest.TestCase):
 class AnAliasThatMatchesNothingIsReported(unittest.TestCase):
     def test_a_typo_is_named(self) -> None:
         missing = unmatched_aliases(
-            portfolio=_portfolio(), aliases={"tsp / TSP L 2061": "Garrett 401(k)"}
+            portfolio=_portfolio(), aliases={"tsp / TSP L 2061": "Alex 401(k)"}
         )
 
         self.assertEqual(missing, ["tsp / TSP L 2061"])
@@ -163,7 +163,7 @@ class AnAliasThatMatchesNothingIsReported(unittest.TestCase):
     def test_a_working_alias_is_not_reported_after_it_has_been_applied(self) -> None:
         # The bug this file was written after. read_databases applies aliases on
         # the way out, so by the time anything checks, the account is called
-        # "Garrett 401(k)" and the original label matches nothing -- and a naive
+        # "Alex 401(k)" and the original label matches nothing -- and a naive
         # check reports every working alias as broken, every morning.
         applied = apply_aliases(portfolio=_portfolio(), aliases=ALIASES)
 
@@ -212,8 +212,8 @@ class TheConfigParsesWhatTheCommentPromises(UserConfigMixin, unittest.TestCase):
     config_body: str = (
         "[ACCOUNTS]\n"
         "aliases =\n"
-        "    tsp / TSP L 2060 = Garrett 401(k)\n"
-        "    ally / Individual (...0847) = Joint Brokerage (Ally)\n"
+        "    tsp / TSP L 2060 = Alex 401(k)\n"
+        "    ally / Individual (...1234) = Joint Brokerage (Ally)\n"
         "    a line with no separator\n"
     )
 
@@ -221,8 +221,8 @@ class TheConfigParsesWhatTheCommentPromises(UserConfigMixin, unittest.TestCase):
         self.assertEqual(
             get_account_aliases(),
             {
-                "tsp / TSP L 2060": "Garrett 401(k)",
-                "ally / Individual (...0847)": "Joint Brokerage (Ally)",
+                "tsp / TSP L 2060": "Alex 401(k)",
+                "ally / Individual (...1234)": "Joint Brokerage (Ally)",
             },
         )
 
@@ -235,10 +235,10 @@ class TheSplitIsOnTheLastEquals(UserConfigMixin, unittest.TestCase):
     # name apart rather than the pair. The asset class table splits on the first
     # for the mirror-image reason: a class name is far likelier to contain one
     # than a symbol is.
-    config_body: str = "[ACCOUNTS]\naliases =\n    Schwab / A=B Trust = Ezekiel 529\n"
+    config_body: str = "[ACCOUNTS]\naliases =\n    Schwab / A=B Trust = Sam 529\n"
 
     def test_the_left_hand_side_keeps_its_equals_sign(self) -> None:
-        self.assertEqual(get_account_aliases(), {"Schwab / A=B Trust": "Ezekiel 529"})
+        self.assertEqual(get_account_aliases(), {"Schwab / A=B Trust": "Sam 529"})
 
 
 if __name__ == "__main__":

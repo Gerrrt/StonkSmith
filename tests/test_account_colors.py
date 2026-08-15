@@ -1,8 +1,8 @@
 """Whose account a row is, at a glance, without colour carrying the fact.
 
 A household's accounts are not a flat list. Three people and a joint pair own
-twelve accounts between them, and reading "Mekenna Brokerage" against "Mekenna
-IRA" against "Garrett Brokerage" is work the eye should not have to do at half
+twelve accounts between them, and reading "Robin Brokerage" against "Robin
+IRA" against "Alex Brokerage" is work the eye should not have to do at half
 past six in the morning.
 
 So each row carries a dot in the owner's colour. **The colour is redundant with
@@ -14,7 +14,7 @@ be the failure this arrangement exists to avoid.
 
 Two rules do the work and both are pinned here.
 
-**First match wins**, because the match is a substring: "Joint" and "Garrett" can
+**First match wins**, because the match is a substring: "Joint" and "Alex" can
 both be true of one account, so the order in the config is what decides. That is
 why the palette travels as ordered pairs rather than a mapping -- a dict would
 preserve the order in practice and document nothing about depending on it.
@@ -30,9 +30,9 @@ from stonksmith.etc.brief import owner_color
 from stonksmith.etc.config import ACCOUNT_COLORS, get_account_colors
 
 PALETTE: list[tuple[str, str]] = [
-    ("Garrett", "green"),
-    ("Mekenna", "pink"),
-    ("Ezekiel", "blue"),
+    ("Alex", "green"),
+    ("Robin", "pink"),
+    ("Sam", "blue"),
     ("Joint", "yellow"),
 ]
 
@@ -41,16 +41,16 @@ class OneLineCoversEveryAccountAPersonHolds(unittest.TestCase):
     def test_a_substring_matches_every_account_of_that_owner(self) -> None:
         # The reason the match is a substring rather than exact: one line has to
         # cover an IRA, a brokerage and a 401(k) without naming each.
-        for name in ("Garrett 401(k)", "Garrett IRA", "Garrett Brokerage"):
+        for name in ("Alex 401(k)", "Alex IRA", "Alex Brokerage"):
             with self.subTest(name=name):
                 self.assertEqual(owner_color(name=name, palette=PALETTE), "green")
 
     def test_case_does_not_have_to_match(self) -> None:
-        self.assertEqual(owner_color(name="GARRETT IRA", palette=PALETTE), "green")
+        self.assertEqual(owner_color(name="ALEX IRA", palette=PALETTE), "green")
 
     def test_each_owner_gets_their_own(self) -> None:
-        self.assertEqual(owner_color(name="Mekenna IRA", palette=PALETTE), "pink")
-        self.assertEqual(owner_color(name="Ezekiel 529", palette=PALETTE), "blue")
+        self.assertEqual(owner_color(name="Robin IRA", palette=PALETTE), "pink")
+        self.assertEqual(owner_color(name="Sam 529", palette=PALETTE), "blue")
         self.assertEqual(
             owner_color(name="Joint Brokerage (Ally)", palette=PALETTE), "yellow"
         )
@@ -62,17 +62,17 @@ class OneLineCoversEveryAccountAPersonHolds(unittest.TestCase):
         self.assertEqual(owner_color(name="Some Trust", palette=PALETTE), "")
 
     def test_an_empty_palette_colours_nothing(self) -> None:
-        self.assertEqual(owner_color(name="Garrett IRA", palette=[]), "")
+        self.assertEqual(owner_color(name="Alex IRA", palette=[]), "")
 
 
 class TheFirstMatchWins(unittest.TestCase):
     def test_order_decides_when_two_lines_could_both_match(self) -> None:
-        # "Garrett Joint Brokerage" contains both. Whichever line is written
+        # "Alex Joint Brokerage" contains both. Whichever line is written
         # first is the answer, and that is the whole reason the palette is an
         # ordered sequence rather than a mapping.
-        joint_first = [("Joint", "yellow"), ("Garrett", "green")]
-        garrett_first = [("Garrett", "green"), ("Joint", "yellow")]
-        name = "Garrett Joint Brokerage"
+        joint_first = [("Joint", "yellow"), ("Alex", "green")]
+        garrett_first = [("Alex", "green"), ("Joint", "yellow")]
+        name = "Alex Joint Brokerage"
 
         self.assertEqual(owner_color(name=name, palette=joint_first), "yellow")
         self.assertEqual(owner_color(name=name, palette=garrett_first), "green")
@@ -82,9 +82,9 @@ class TheConfigRefusesWhatIsNotAColour(UserConfigMixin, unittest.TestCase):
     config_body: str = (
         "[ACCOUNTS]\n"
         "colors =\n"
-        "    Garrett = green\n"
-        "    Mekenna = PINK\n"
-        "    Ezekiel = chartreuse\n"
+        "    Alex = green\n"
+        "    Robin = PINK\n"
+        "    Sam = chartreuse\n"
         "    Joint = red; } body { display:none\n"
         "    a line with no separator\n"
     )
@@ -94,16 +94,16 @@ class TheConfigRefusesWhatIsNotAColour(UserConfigMixin, unittest.TestCase):
         self.pairs, self.refused = get_account_colors()
 
     def test_the_good_lines_survive_in_order(self) -> None:
-        self.assertEqual(self.pairs, [("Garrett", "green"), ("Mekenna", "pink")])
+        self.assertEqual(self.pairs, [("Alex", "green"), ("Robin", "pink")])
 
     def test_a_colour_name_may_be_written_in_any_case(self) -> None:
-        self.assertEqual(dict(self.pairs)["Mekenna"], "pink")
+        self.assertEqual(dict(self.pairs)["Robin"], "pink")
 
     def test_an_unknown_colour_is_refused_rather_than_passed_through(self) -> None:
         # "chartreuse" is a perfectly good CSS colour and not one of ours. It is
         # refused because the closed set is what makes interpolating the value
         # into a class attribute safe at all.
-        self.assertIn("Ezekiel = chartreuse", self.refused)
+        self.assertIn("Sam = chartreuse", self.refused)
 
     def test_a_line_that_would_inject_markup_is_refused(self) -> None:
         # The reason the set is closed rather than "any word". This value lands
@@ -130,7 +130,7 @@ class TheConfigRefusesWhatIsNotAColour(UserConfigMixin, unittest.TestCase):
 class TheColourReachesBothTables(UserConfigMixin, unittest.TestCase):
     """Movers as well as holdings, which is where this shipped broken."""
 
-    config_body: str = "[ACCOUNTS]\ncolors =\n    Garrett = green\n    Joint = yellow\n"
+    config_body: str = "[ACCOUNTS]\ncolors =\n    Alex = green\n    Joint = yellow\n"
 
     def _brief(self):
         import datetime as dt
@@ -147,7 +147,7 @@ class TheColourReachesBothTables(UserConfigMixin, unittest.TestCase):
             NetWorthRow(
                 broker="b",
                 source="b",
-                account="Garrett IRA",
+                account="Alex IRA",
                 account_key="g1",
                 date=date,
                 value=value,
@@ -164,7 +164,7 @@ class TheColourReachesBothTables(UserConfigMixin, unittest.TestCase):
                     HoldingRow(
                         broker="b",
                         source="b",
-                        account="Garrett IRA",
+                        account="Alex IRA",
                         account_key="g1",
                         symbol="SWYNX",
                         value=1100.0,

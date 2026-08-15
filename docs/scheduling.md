@@ -115,7 +115,7 @@ looks stale.
 So the run says so itself, on every account it values:
 
 ```text
-[*] Individual (...0847): priced at 2026-08-06; units as recorded 2026-08-07 20:40:18. Re-run with --manual-login after a deposit.
+[*] Individual (...1234): priced at 2026-08-06; units as recorded 2026-08-07 20:40:18. Re-run with --manual-login after a deposit.
 ```
 
 That line is not decoration and it is not a warning about a rare case. It is the standing

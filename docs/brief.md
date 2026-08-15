@@ -123,7 +123,7 @@ SnapTrade reports.
 
 **Negative is a debt, not a discrepancy.** A brokerage account worth less than the fund
 inside it has money borrowed against it — an overdraft transfer out, or a margin loan — and
-the tile names it: *"12 holdings, less $744.28 borrowed against them"*. This read "positions
+the tile names it: *"12 holdings, less $800.00 borrowed against them"*. This read "positions
 total $1,036.22 more than the account balances" while the value came from SnapTrade's
 daily-cached total, and back then that wording was the honest one: two numbers genuinely
 did disagree. They no longer can.
@@ -150,7 +150,7 @@ reader has no way to catch.
 So the tile reads:
 
 ```
-Indicated Income   $211.73   a year at today's holdings, across 9 of 13 positions;
+Indicated Income   $240.00   a year at today's holdings, across 9 of 13 positions;
                              nothing received in the log yet
 ```
 
@@ -162,7 +162,7 @@ the reader which they were given. The coverage travels with the figure, on the s
 the priced/unpriced gain split follows:
 
 ```
-Indicated Yield      1.27%   over $16,732.44 of holdings with a published dividend
+Indicated Yield      1.27%   over $18,000.00 of holdings with a published dividend
 ```
 
 Where the feed answered for nothing at all, both tiles show `—` and say **"no holding has
@@ -260,8 +260,8 @@ table. A row removed from a page is a presentation choice; a dollar removed from
 is a lie.
 
 A symbol links to its quote page, where it has one. Only something that looks like a
-public ticker — one to five ASCII letters — is linked, which keeps a link off `O7M8`
-(a 401k fund code), `14002` (a 529 portfolio number) and `L 2060` (a TSP fund). Those are
+public ticker — one to five ASCII letters — is linked, which keeps a link off `Q4R7`
+(a 401k fund code), `70310` (a 529 portfolio number) and `L 2060` (a TSP fund). Those are
 real holdings with nothing public to point at, and **a link that 404s is worse than no
 link**: the reader has to click it to find that out, once a morning, until they stop
 trusting any of them.
@@ -292,7 +292,7 @@ publishes:
 ```ini
 [MANUAL]
 accounts =
-    Ezekiel Trump | SPYM | 1.650717 | 2026-08-10 | 150.00
+    Sam Trump | SPYM | 2.000000 | 2026-08-10 | 150.00
 ```
 
 ```bash
@@ -336,15 +336,15 @@ rides on every mark so a reader can judge how much room that leaves.
 
 ## Calling accounts what you call them
 
-Brokers name accounts for their own screens. "MICROSOFT CORPORATION SAVINGS PLUS 401(K)
-PLAN" and "Individual (...0847)" are both correct and neither is what you call the account
+Brokers name accounts for their own screens. "ACME CORPORATION SAVINGS PLUS 401(K)
+PLAN" and "Individual (...1234)" are both correct and neither is what you call the account
 at half past six in the morning.
 
 ```ini
 [ACCOUNTS]
 aliases =
-    tsp / TSP L 2060 = Garrett 401(k)
-    ally / Individual (...0847) = Joint Brokerage (Ally)
+    tsp / TSP L 2060 = Alex 401(k)
+    ally / Individual (...1234) = Joint Brokerage (Ally)
 ```
 
 The left-hand side is the `Source / Account` label the run prints — the same spelling

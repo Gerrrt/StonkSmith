@@ -343,8 +343,8 @@ class SnapTradeBroker(ApiConnection):
         The half of an account that ``get_all_account_positions`` never returns
         and that no position can express. It is routinely negative: a margin
         loan or an overdraft transfer out shows up here as a debt, and an
-        account whose securities are worth $2,986.31 against cash of -$744.28
-        is worth $2,242.03 -- which is exactly what SnapTrade's own account
+        account whose securities are worth $3,500.00 against cash of -$800.00
+        is worth $2,700.00 -- which is exactly what SnapTrade's own account
         total says, and exactly what summing its positions does not.
 
         Read for the freshness as much as for the cash. ``fetch_accounts``

@@ -1,7 +1,7 @@
 """A symbol links to its quote page, unless there is no page to link to.
 
 Nine of the twelve holdings in a real workspace are public tickers. The other
-three are "O7M8", a Microsoft 401k fund code; "14002", a Schwab 529 portfolio
+three are "Q4R7", a Microsoft 401k fund code; "70310", a Schwab 529 portfolio
 number; and "L 2060", a TSP fund. All three are real positions and none of them
 is findable on a quote site.
 
@@ -49,7 +49,7 @@ class AHoldingWithNoPublicPageGetsNone(unittest.TestCase):
     def test_the_three_this_workspace_actually_holds(self) -> None:
         # A 401k fund code, a 529 portfolio number and a TSP fund. Real
         # positions, no quote page, and each one would 404.
-        for symbol in ("O7M8", "14002", "L 2060"):
+        for symbol in ("Q4R7", "70310", "L 2060"):
             with self.subTest(symbol=symbol):
                 self.assertEqual(fund_url(symbol=symbol, template=TEMPLATE), "")
 
@@ -144,7 +144,7 @@ class ThePageLinksOnlyWhatItCan(UserConfigMixin, unittest.TestCase):
                 symbol=symbol,
                 value=1000.0,
             )
-            for symbol in ("SWPPX", "O7M8")
+            for symbol in ("SWPPX", "Q4R7")
         )
 
         return render(
@@ -165,8 +165,8 @@ class ThePageLinksOnlyWhatItCan(UserConfigMixin, unittest.TestCase):
     def test_the_fund_code_is_plain_text(self) -> None:
         page: str = self._page()
 
-        self.assertIn('<span class="who">O7M8</span>', page)
-        self.assertNotIn("quote/O7M8", page)
+        self.assertIn('<span class="who">Q4R7</span>', page)
+        self.assertNotIn("quote/Q4R7", page)
 
     def test_the_link_does_not_hand_the_page_to_the_opener(self) -> None:
         # target=_blank without rel=noopener lets the opened page reach back

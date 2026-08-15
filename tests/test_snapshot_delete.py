@@ -42,7 +42,7 @@ TSP = AccountIdentity(
 #: The shape of the mark that prompted this: units of one fund, priced with
 #: another fund's price. Nothing about the row says so.
 MISMATCHED = Holding(
-    fund_code="L 2060", name="L 2060", units=315.789, price=24.6710, value=7790.83
+    fund_code="L 2060", name="L 2060", units=340.000, price=24.6710, value=7790.83
 )
 
 

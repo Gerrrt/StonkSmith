@@ -6,8 +6,8 @@
 Found on the first live statement run. The module read a real statement, said
 so, and priced it with the wrong fund:
 
-    [+] Statement: 315.789 units of L 2050 as of 2026-08-05
-    [+] L 2060: 315.789 units x $24.6710 (2026-08-06) = $7,790.83
+    [+] Statement: 340.000 units of L 2050 as of 2026-08-05
+    [+] L 2060: 340.000 units x $24.6710 (2026-08-06) = $8,388.14
 
 The statement was L 2050; the configured fund was L 2060. `read_statement()`
 returns the statement's own fund and the caller unpacked it over the `fund`
@@ -15,7 +15,7 @@ parameter -- so it was printed, then thrown away when the function returned
 only the units. The units were then valued at the configured fund's price.
 
 On the published prices for that day, L 2050 was $46.8496 and L 2060 was
-$24.6710. The run reported $7,790.83 where the statement's own fund gives
+$24.6710. The run reported $8,388.14 where the statement's own fund gives
 $14,794.59: ninety percent wrong, with both fund names printed on adjacent
 lines and nothing said about the difference. No exception, no warning, and a
 total that looks entirely reasonable.
@@ -67,7 +67,7 @@ class MismatchedStatement(unittest.TestCase):
 
         with patch(
             target="stonksmith.modules.tsp_module.read_statement",
-            return_value=(315.789, statement_fund, None),
+            return_value=(340.000, statement_fund, None),
         ):
             return module.units_for(
                 context=context, prices=None, fund=configured
@@ -98,12 +98,12 @@ class MismatchedStatement(unittest.TestCase):
         """The guard must not reject the ordinary case."""
         (units, _as_of, _source), _context = self._units("L 2060", "L 2060")
 
-        self.assertEqual(units, 315.789)
+        self.assertEqual(units, 340.000)
 
     def test_a_statement_naming_no_fund_still_works(self) -> None:
         (units, _as_of, _source), _context = self._units("", "L 2060")
 
-        self.assertEqual(units, 315.789)
+        self.assertEqual(units, 340.000)
 
     def test_an_unnamed_fund_does_not_leave_a_gap_in_the_line(self) -> None:
         """ "units of  as of ..." says nothing about which price was used."""

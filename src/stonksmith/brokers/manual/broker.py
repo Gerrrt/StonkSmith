@@ -73,7 +73,7 @@ PRICE_STALE_DAYS = 5
 SETUP_HINT = (
     "Add a [MANUAL] section to ~/.stonksmith/stonksmith.conf with one "
     '"Name | SYMBOL | units | units_as_of" line per account -- for example '
-    '"Ezekiel Trump | SPYM | 1.650717 | 2026-08-10". A fifth field may carry '
+    '"Sam Custodial | SPYM | 2.000000 | 2026-08-10". A fifth field may carry '
     "what was paid, so the account reports a gain rather than a dash. To turn "
     "a balance into a unit count, divide it by that day's close: a balance is "
     "units x price, so the division inverts it exactly."

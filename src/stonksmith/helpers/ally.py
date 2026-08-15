@@ -437,8 +437,8 @@ def holdings(soup: BeautifulSoup) -> list[Holding]:
     Every position in the holdings table.
 
     ``cost_basis`` is stored as the position's *total* cost, which is what Ally
-    puts in that column: the sample row reads 2237.74 against 123.519 units at
-    an 18.12 average price, and 123.519 x 18.12 is 2238.16. That is the same
+    puts in that column: the sample row reads 2500.00 against 125.000 units at
+    an 18.12 average price, and 125.000 x 18.12 is 2238.16. That is the same
     convention ``Holding.cost_basis`` already carries for SnapTrade positions,
     where the API reports a per-unit figure that the module multiplies out --
     so the two sources agree on what the column means, and a test pins it.

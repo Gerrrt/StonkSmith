@@ -1,7 +1,7 @@
 """A 529 states its cost under another name, and the brief was not reading it.
 
-The Schwab 529 scraper stores ``principal`` and ``earnings`` -- 1,303.68 against
-1,421.93 of value, and 118.25 of earnings, which is the subtraction exactly. It
+The Schwab 529 scraper stores ``principal`` and ``earnings`` -- 2,140.00 against
+2,300.00 of value, and 160.00 of earnings, which is the subtraction exactly. It
 stores no ``cost_basis``, because a plan reports contributions and growth rather
 than an average purchase price: that is the split a 529 is *about*.
 
@@ -72,10 +72,10 @@ class ThePlanStatesItsCostAsPrincipal(
             broker="schwab529plan",
         )
         db.save_snapshot(
-            account=AccountIdentity(account_key="529-1", display_name="Ezekiel"),
+            account=AccountIdentity(account_key="529-1", display_name="Sam"),
             scraped_at="2026-08-12 18:30:00",
             as_of="2026-08-12",
-            value=1421.93,
+            value=2300.00,
             currency="USD",
             holdings=[Holding(**holding)],  # type: ignore[arg-type]
             transactions=[],
@@ -91,36 +91,36 @@ class ThePlanStatesItsCostAsPrincipal(
         # contributions-against-earnings split.
         self._write(
             symbol="",
-            fund_code="14002",
-            name="2042-2043 Enrollment Portfolio",
-            units=131.0534,
+            fund_code="70310",
+            name="2040-2041 Enrollment Portfolio",
+            units=200.0000,
             price=10.85,
-            value=1421.93,
-            principal=1303.68,
-            earnings=118.25,
+            value=2300.00,
+            principal=2140.00,
+            earnings=160.00,
         )
 
         row = self._read().holdings[0]
 
-        self.assertEqual(row.cost_basis, 1303.68)
+        self.assertEqual(row.cost_basis, 2140.00)
 
     def test_both_fields_are_still_carried_out_unchanged(self) -> None:
         # Filled, not moved. The sheet has Principal and Earnings columns of its
         # own, and a 529's split is worth reporting as a split.
         self._write(
             symbol="",
-            fund_code="14002",
-            units=131.0534,
+            fund_code="70310",
+            units=200.0000,
             price=10.85,
-            value=1421.93,
-            principal=1303.68,
-            earnings=118.25,
+            value=2300.00,
+            principal=2140.00,
+            earnings=160.00,
         )
 
         row = self._read().holdings[0]
 
-        self.assertEqual(row.principal, 1303.68)
-        self.assertEqual(row.earnings, 118.25)
+        self.assertEqual(row.principal, 2140.00)
+        self.assertEqual(row.earnings, 160.00)
 
     def test_a_reported_cost_basis_is_not_replaced_by_principal(self) -> None:
         # Never the reverse. A source stating both means them separately, and
@@ -141,7 +141,7 @@ class ThePlanStatesItsCostAsPrincipal(
         # The 401k and TSP case, which this must not touch. None rather than
         # zero, all the way down: a zero cost reports the position's whole value
         # as profit.
-        self._write(symbol="O7M8", units=2722.418, price=19.0881, value=51965.79)
+        self._write(symbol="Q4R7", units=2500.000, price=20.0000, value=50000.00)
 
         row = self._read().holdings[0]
 
@@ -152,9 +152,9 @@ class ThePlanStatesItsCostAsPrincipal(
         # The case an unconditional fallback gets wrong, and the reason the
         # check exists. The parser repeats the account's principal and earnings
         # onto every fund row, so reading either blind gives *each* position the
-        # whole account's cost: 1,303.68 against 500.00 of value on one row and
-        # 921.93 on the other, for a portfolio that has spent 2,607.36 to hold
-        # 1,421.93 and shows a catastrophic loss on money that has made 118.25.
+        # whole account's cost: 2,140.00 against 500.00 of value on one row and
+        # 1500.00 on the other, for a portfolio that has spent 4,280.00 to hold
+        # 2,300.00 and shows a catastrophic loss on money that has made 160.00.
         db = BrokerDatabase(
             db_engine=create_db_engine(
                 db_path=self.root / "default" / "schwab529plan.db"
@@ -165,24 +165,24 @@ class ThePlanStatesItsCostAsPrincipal(
             account=AccountIdentity(account_key="529-2", display_name="Two Funds"),
             scraped_at="2026-08-12 18:30:00",
             as_of="2026-08-12",
-            value=1421.93,
+            value=2300.00,
             currency="USD",
             holdings=[
                 Holding(
-                    fund_code="14002",
-                    units=46.08,
+                    fund_code="70310",
+                    units=69.565,
                     price=10.85,
                     value=500.00,
-                    principal=1303.68,
-                    earnings=118.25,
+                    principal=2140.00,
+                    earnings=160.00,
                 ),
                 Holding(
-                    fund_code="14003",
-                    units=84.97,
+                    fund_code="70311",
+                    units=130.435,
                     price=10.85,
-                    value=921.93,
-                    principal=1303.68,
-                    earnings=118.25,
+                    value=1500.00,
+                    principal=2140.00,
+                    earnings=160.00,
                 ),
             ],
             transactions=[],
@@ -194,7 +194,7 @@ class ThePlanStatesItsCostAsPrincipal(
         self.assertEqual([row.cost_basis for row in rows], [None, None])
         # Still carried, because they are what the source said about the
         # account. It is reading them as a *position's* cost that is refused.
-        self.assertEqual([row.principal for row in rows], [1303.68, 1303.68])
+        self.assertEqual([row.principal for row in rows], [2140.00, 2140.00])
 
     def test_a_row_a_single_cent_out_is_still_read(self) -> None:
         # The page rounds value, principal and earnings independently, so the
@@ -202,32 +202,32 @@ class ThePlanStatesItsCostAsPrincipal(
         # by allowing it -- the case being screened for misses by hundreds.
         #
         # This is also the case the float form got wrong in the direction its
-        # own comment denied: 1421.93 - 1303.68 - 118.24 is 0.010000000000005 in
+        # own comment denied: 2300.00 - 2140.00 - 159.99 is 0.010000000000005 in
         # binary floating point, so `> 0.01` rejected it while another triple a
         # cent out would pass. A boundary that moves with the values is not one.
         self._write(
             symbol="",
-            fund_code="14002",
-            units=131.0534,
+            fund_code="70310",
+            units=200.0000,
             price=10.85,
-            value=1421.93,
-            principal=1303.68,
-            earnings=118.24,
+            value=2300.00,
+            principal=2140.00,
+            earnings=159.99,
         )
 
-        self.assertEqual(self._read().holdings[0].cost_basis, 1303.68)
+        self.assertEqual(self._read().holdings[0].cost_basis, 2140.00)
 
     def test_a_row_two_cents_out_is_not_read(self) -> None:
         # The other side of the same boundary, so "one cent" is a rule rather
         # than a number that happens to work.
         self._write(
             symbol="",
-            fund_code="14002",
-            units=131.0534,
+            fund_code="70310",
+            units=200.0000,
             price=10.85,
-            value=1421.93,
-            principal=1303.68,
-            earnings=118.23,
+            value=2300.00,
+            principal=2140.00,
+            earnings=159.98,
         )
 
         self.assertIsNone(self._read().holdings[0].cost_basis)
@@ -238,7 +238,7 @@ class ThePlanStatesItsCostAsPrincipal(
         # costs nothing real and refuses a source nobody has looked at yet.
         self._write(
             symbol="",
-            fund_code="14002",
+            fund_code="70310",
             units=10.0,
             price=10.0,
             value=100.0,
@@ -252,20 +252,20 @@ class ThePlanStatesItsCostAsPrincipal(
         # while the number sat in the column beside them.
         self._write(
             symbol="",
-            fund_code="14002",
-            units=131.0534,
+            fund_code="70310",
+            units=200.0000,
             price=10.85,
-            value=1421.93,
-            principal=1303.68,
-            earnings=118.25,
+            value=2300.00,
+            principal=2140.00,
+            earnings=160.00,
         )
 
         row = positions(portfolio=self._read(), classes={}, income={}, history={})[0]
 
-        self.assertEqual(row.cost_basis, 1303.68)
-        self.assertAlmostEqual(row.gain or 0.0, 118.25, places=2)
-        self.assertAlmostEqual(row.growth or 0.0, 0.0907, places=4)
-        self.assertAlmostEqual(row.purchase_price or 0.0, 9.9477, places=4)
+        self.assertEqual(row.cost_basis, 2140.00)
+        self.assertAlmostEqual(row.gain or 0.0, 160.00, places=2)
+        self.assertAlmostEqual(row.growth or 0.0, 0.0748, places=4)
+        self.assertAlmostEqual(row.purchase_price or 0.0, 10.7000, places=4)
 
     def test_the_gain_matches_the_earnings_the_plan_reported(self) -> None:
         # The check that says this is a rename rather than a guess. The plan
@@ -273,12 +273,12 @@ class ThePlanStatesItsCostAsPrincipal(
         # reproduce it -- otherwise the two fields do not mean what this assumes.
         self._write(
             symbol="",
-            fund_code="14002",
-            units=131.0534,
+            fund_code="70310",
+            units=200.0000,
             price=10.85,
-            value=1421.93,
-            principal=1303.68,
-            earnings=118.25,
+            value=2300.00,
+            principal=2140.00,
+            earnings=160.00,
         )
 
         row = self._read().holdings[0]

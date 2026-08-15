@@ -126,8 +126,8 @@ uv run stonksmith ally -M ally --from-prices
 
 ```text
 [+] Valuing from published prices; no sign-in needed.
-[+] Individual (...0847): 123.519 SWPPX x $19.88 (2026-08-06) = $2,455.56
-[*] Individual (...0847): priced at 2026-08-06; units as recorded 2026-08-07 20:40:18. Re-run with --manual-login after a deposit.
+[+] Individual (...1234): 125.000 SWPPX x $19.88 (2026-08-06) = $2,455.56
+[*] Individual (...1234): priced at 2026-08-06; units as recorded 2026-08-07 20:40:18. Re-run with --manual-login after a deposit.
 ```
 
 It reads the units out of the database, not out of config, so **a signed-in run
@@ -266,17 +266,17 @@ than a preference. Two facts drove it, both measured against the live API on
 from `list_user_accounts` — which SnapTrade's own documentation describes as
 serving *"Daily data regardless of the customer's plan… cached and refreshed once
 a day"*, and points elsewhere for real-time. The consequence turned out to be
-exact rather than approximate: the live balance for one IRA read `6710.00` and
-for another `674.38`, and those were precisely the position values StonkSmith had
+exact rather than approximate: the live balance for one IRA read `5000.00` and
+for another `900.00`, and those were precisely the position values StonkSmith had
 recorded for them the day before, to the cent. Every balance in the workspace was
 one sync behind. The *delta* survived that untouched, since both ends shifted
 together, but the level did not — and the Net Worth series is built on levels.
 
 **Positions are not the whole account either.** `get_all_account_positions`
 returns securities and never mentions cash, which is routinely negative. One
-brokerage account here holds $2,986.31 of a single fund against cash of
-**-$744.28**, left by an overdraft transfer out to a checking account. SnapTrade's
-own total says $2,242.03; summing its positions says $2,986.31. Both endpoints are
+brokerage account here holds $3,500.00 of a single fund against cash of
+**-$800.00**, left by an overdraft transfer out to a checking account. SnapTrade's
+own total says $2,700.00; summing its positions says $3,500.00. Both endpoints are
 correct and neither is the account.
 
 So the sync fetches `get_user_account_balance` per account and stores positions
@@ -635,11 +635,11 @@ the date it is true for, and never states a unit count — but a balance *is*
 units × that day's price, so the division inverts it exactly:
 
 ```bash
-uv run stonksmith tsp -M tsp --balance 7810.84 --balance-as-of 2026-08-05
+uv run stonksmith tsp -M tsp --balance 8409.71 --balance-as-of 2026-08-05
 ```
 
 ```text
-Balance $7,810.84 on 2026-08-05 at $24.7344 (2026-08-05) = 315.7885 units
+Balance $8,409.71 on 2026-08-05 at $24.7344 (2026-08-05) = 315.7885 units
 Store it: [TSP] units = 315.7885, units_as_of = 2026-08-05
 ```
 

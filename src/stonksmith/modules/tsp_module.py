@@ -348,8 +348,8 @@ def statement_reconciles(text_units: float, price: float, closing: float) -> boo
     The tolerance comes from what the statement prints, not from a round number.
     Units are printed to three decimals, so the count on the page stands for
     anything within half a thousandth of the real one, and at $24.73 a unit that
-    is already more than a cent of balance. A real statement reading 315.789
-    units at $24.734400 against $7,810.84 misses by 1.1 cents -- the arithmetic
+    is already more than a cent of balance. A real statement reading 340.000
+    units at $24.734400 against $8,409.71 misses by 1.4 cents -- the arithmetic
     is right and a cent of tolerance would have called it broken. The fixtures
     never showed this because their figures are round: 100.000 x 20.000000 is
     exactly 2000.00 and reconciles under any tolerance at all.
@@ -427,8 +427,8 @@ class TspModule:
             # Not `fund`: rebinding the parameter here read the statement's own
             # fund, printed it, and threw it away, because only the units are
             # returned. A statement for one fund was then priced with the
-            # configured fund's price -- 315.789 units of L 2050 marked at L
-            # 2060's $24.6710 came to $7,790.83, where the statement's own fund
+            # configured fund's price -- 340.000 units of L 2050 marked at L
+            # 2060's $24.6710 came to $8,388.14, where the statement's own fund
             # gives $14,794.59. Ninety percent wrong, with both names printed
             # on adjacent lines and nothing said about it.
             units, statement_fund, as_of = read_statement(path=self.statement)

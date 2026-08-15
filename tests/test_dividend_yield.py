@@ -47,7 +47,7 @@ HELD: tuple[HoldingRow, ...] = (
     HoldingRow(
         broker="b",
         source="b",
-        account="Garrett Brokerage",
+        account="Alex Brokerage",
         account_key="a1",
         symbol="SWPPX",
         units=100.0,
@@ -56,9 +56,9 @@ HELD: tuple[HoldingRow, ...] = (
     HoldingRow(
         broker="b",
         source="b",
-        account="Mekenna 401(k)",
+        account="Robin 401(k)",
         account_key="a2",
-        symbol="O7M8",
+        symbol="Q4R7",
         units=1000.0,
         value=8000.0,
     ),
@@ -165,8 +165,8 @@ class AForecastIsNotMoneyThatArrived(UserConfigMixin, unittest.TestCase):
         # None rather than zero. A 401k fund code no quote page has heard of and
         # a fund that genuinely pays nothing both come to 0.0, and only the
         # second is a fact about money.
-        self.assertIsNone(self.by_symbol["O7M8"].indicated_income)
-        self.assertIsNone(self.by_symbol["O7M8"].indicated_yield)
+        self.assertIsNone(self.by_symbol["Q4R7"].indicated_income)
+        self.assertIsNone(self.by_symbol["Q4R7"].indicated_yield)
 
     def test_the_received_figure_is_left_alone(self) -> None:
         # The whole reason the two are carried apart. An indicated figure written

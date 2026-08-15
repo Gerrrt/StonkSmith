@@ -235,13 +235,13 @@ class BalanceFlagTests(unittest.TestCase):
 
     def test_a_balance_with_no_date_refuses_and_falls_through(self) -> None:
         # The same dollars buy a different number of units on a different day.
-        context = _context(balance=7810.84, units=50.0, as_of="2026-06-30")
+        context = _context(balance=8409.71, units=50.0, as_of="2026-06-30")
 
         self.assertEqual(self._solve(context=context), (50.0, "2026-06-30", FROM_FLAG))
         self.assertIn("needs --balance-as-of", _said(context.log.fail))
 
     def test_an_unreadable_balance_date_says_what_was_expected(self) -> None:
-        context = _context(balance=7810.84, balance_as_of="August")
+        context = _context(balance=8409.71, balance_as_of="August")
 
         with patch(
             "stonksmith.modules.tsp_module.get_tsp_units", return_value=(None, "")
@@ -254,7 +254,7 @@ class BalanceFlagTests(unittest.TestCase):
         # price_on falls back to the newest price on or before the date, which
         # is right across a weekend and wrong across a stale file: dividing a
         # current balance by an old price invents a unit count.
-        context = _context(balance=7810.84, balance_as_of="2026-08-30")
+        context = _context(balance=8409.71, balance_as_of="2026-08-30")
 
         with patch(
             "stonksmith.modules.tsp_module.get_tsp_units", return_value=(None, "")
@@ -266,7 +266,7 @@ class BalanceFlagTests(unittest.TestCase):
 
     def test_a_balance_with_no_price_file_falls_through(self) -> None:
         context = _context(
-            balance=7810.84, balance_as_of="2026-08-05", units=50.0, as_of="2026-06-30"
+            balance=8409.71, balance_as_of="2026-08-05", units=50.0, as_of="2026-06-30"
         )
 
         self.assertEqual(
@@ -281,7 +281,7 @@ class BalanceFlagTests(unittest.TestCase):
         )
 
         _units, _as_of, source = module.units_for(
-            context=_context(balance=7810.84, balance_as_of="2026-08-05"),
+            context=_context(balance=8409.71, balance_as_of="2026-08-05"),
             prices=_prices(),
             fund="L 2060",
         )
