@@ -91,7 +91,11 @@ body {
   color: var(--ink);
   font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-main { max-width: 60rem; margin: 0 auto; }
+/* Wider than a reading column on purpose. This page is mostly an eleven
+   column money table, and 60rem forced it into its own horizontal
+   scrollbar on a full-size screen -- which hides the rightmost columns
+   behind a gesture at exactly the moment somebody is skimming. */
+main { max-width: 78rem; margin: 0 auto; }
 h1 { font-size: 0.95rem; font-weight: 600; letter-spacing: 0.08em;
      text-transform: uppercase; color: var(--dim); margin: 0 0 1.25rem; }
 h2 { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.08em;
@@ -112,8 +116,8 @@ section { background: var(--card); border: 1px solid var(--line);
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th { text-align: left; font-size: 0.72rem; letter-spacing: 0.07em;
      text-transform: uppercase; color: var(--dim); font-weight: 600;
-     padding: 0 0.55rem 0.5rem; border-bottom: 1px solid var(--line); }
-td { padding: 0.55rem; border-bottom: 1px solid var(--line); }
+     padding: 0 0.45rem 0.5rem; border-bottom: 1px solid var(--line); }
+td { padding: 0.5rem 0.45rem; border-bottom: 1px solid var(--line); }
 /* Horizontal padding on the cells, not only vertical. Without it the numeric
    columns butt against each other and render as one string -- "$26.00$5,845.93"
    reads as a single figure, which on a money table is worse than ugly. The
@@ -139,10 +143,23 @@ td.num, th.num { text-align: right; white-space: nowrap; }
              font-variant-numeric: tabular-nums; margin-top: 0.2rem; }
 .tile .sub { font-size: 0.72rem; color: var(--dim); margin-top: 0.15rem; }
 /* The holdings table is wider than a phone and must scroll inside its own box
-   rather than making the page scroll sideways. */
+   rather than making the page scroll sideways. The box stays: a phone cannot
+   be widened into. What changed is that the desktop no longer needs it. */
 .scroll { overflow-x: auto; }
-.scroll table { min-width: 46rem; }
+.scroll table { min-width: 52rem; }
 .spark { display: block; }
+/* The chart's own axes. A grid so the scale sits beside the plot and the
+   dates under it, without either overlapping the line. */
+.chart { display: grid; grid-template-columns: auto 1fr;
+         column-gap: 0.6rem; margin-top: 0.9rem; }
+.chart svg { grid-column: 2; }
+.scale { grid-column: 1; display: flex; flex-direction: column;
+         justify-content: space-between; font-size: 0.7rem; color: var(--dim);
+         font-variant-numeric: tabular-nums; text-align: right;
+         padding: 0.1rem 0; white-space: nowrap; }
+.dates { grid-column: 2; display: flex; justify-content: space-between;
+         font-size: 0.7rem; color: var(--dim); margin-top: 0.25rem;
+         font-variant-numeric: tabular-nums; }
 .wl { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; }
 /* A linked symbol still reads as the symbol. Underlined only on hover, because
    twelve underlined rows is a page that looks like a link farm rather than a
@@ -242,6 +259,21 @@ def direction(value: float) -> str:
     return "down" if value < 0 else "flat"
 
 
+def _brief_money(value: float) -> str:
+    """
+    An axis label: whole dollars, grouped, no cents.
+
+    Cents on an axis are noise -- the point of the label is the order of
+    magnitude the line is drawn against, and a chart spanning tens of
+    thousands does not become clearer for two more digits.
+    :param value: The amount
+    :return: The label
+    :rtype: str
+    """
+
+    return f"${value:,.0f}"
+
+
 def sparkline(points: Iterable[tuple[str, float, bool]]) -> str:
     """
     The trailing series as an inline SVG, or nothing when there is no shape.
@@ -290,14 +322,36 @@ def sparkline(points: Iterable[tuple[str, float, bool]]) -> str:
         if seen
     )
 
+    # Labelled in HTML around the SVG rather than with <text> inside it. The
+    # chart is drawn with preserveAspectRatio="none" so it can stretch to the
+    # page width, and anything inside it stretches too -- a value label would
+    # come out horizontally smeared by however wide the reader's window is.
+    #
+    # Unlabelled, this was a line with no scale on either axis: it showed that
+    # something rose without saying from what, to what, or over how long, which
+    # is a shape rather than a chart. The four corners now carry the range it is
+    # actually drawn against.
+    first: str = series[0][0]
+    last: str = series[-1][0]
+
     return (
+        f'<div class="chart">'
+        f'<div class="scale">'
+        f"<span>{escape(s=_brief_money(value=high))}</span>"
+        f"<span>{escape(s=_brief_money(value=low))}</span>"
+        f"</div>"
         f'<svg viewBox="0 0 {CHART_WIDTH} {CHART_HEIGHT}" width="100%" '
         f'height="{CHART_HEIGHT}" preserveAspectRatio="none" role="img" '
-        f'aria-label="Portfolio value over the last {len(series)} readings">'
+        f'aria-label="Portfolio value from {escape(s=_brief_money(value=low))} '
+        f"to {escape(s=_brief_money(value=high))} between {escape(s=first)} "
+        f'and {escape(s=last)}, over {len(series)} readings">'
         f'<polygon points="{area}" fill="var(--accent)" opacity="0.12"/>'
         f'<polyline points="{line}" fill="none" stroke="var(--accent)" '
         f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round" '
         f'vector-effect="non-scaling-stroke"/>{dots}</svg>'
+        f'<div class="dates"><span>{escape(s=first)}</span>'
+        f"<span>{escape(s=last)}</span></div>"
+        f"</div>"
     )
 
 
@@ -433,7 +487,17 @@ def _tiles(brief: Brief) -> str:
     # out, or a margin loan -- and naming it as one is the difference between a
     # reader checking their broker and a reader ignoring a caveat.
     cash: float = money_of.value - money_of.invested
+    # Says how many are *shown* when they differ, because they routinely do:
+    # a cash sweep of eight cents is a real holding and is filtered out of the
+    # table by min_position. A reader who counts the rows and finds one fewer
+    # than this number is owed the reconciliation here, next to the figure
+    # that raised it, rather than in a note under the table.
     holds: str = f"{money_of.holdings} holdings"
+
+    shown: int = len(brief.positions)
+
+    if shown and shown != money_of.holdings:
+        holds = f"{money_of.holdings} holdings, {shown} shown below"
 
     if round(cash, 2) > 0:
         holds = f"{holds}, plus {money(value=cash, currency=money_of.currency)} in cash"
