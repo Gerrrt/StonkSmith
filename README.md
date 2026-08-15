@@ -508,9 +508,9 @@ This section summarises it rather than being maintained beside it.
 - [ ] More brokers. Vanguard needs no code at all; link it through SnapTrade
 - [ ] Settle whether the `Transactions` tab windows at five hundred rows
       ([#141][issue-141]) — blocked on a broker with the movement volume
-- [ ] Settle whether the `Net Worth` series carries across brokers
-      ([#149][issue-149]) — blocked on a workspace whose brokers scraped on
-      different days
+- [x] Settle whether the `Net Worth` series carries across brokers
+      ([#149][issue-149]) — walked across nine dates on 2026-08-15. The
+      thirty-day expiry is still unexercised; it needs a broker dead a month
 
 See the [open issues][issues-url] for a full list of proposed features (and
 known issues).
