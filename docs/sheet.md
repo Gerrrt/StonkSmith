@@ -133,8 +133,8 @@ as a good night. Piping into the shell has always worked, but it exits `0`
 however the command went — and a scheduled step that cannot fail is one that
 stops working silently.
 
-`verify`, beside it, checks what a successful sync cannot show. Two halves, and
-either can be run alone:
+`verify`, beside it, checks what a successful sync cannot show. Three checks; bare
+`verify` runs the first two, and any of them can be named alone:
 
 `verify tabs` reads the machine-owned tabs back. A write that returned says the request
 was accepted, not that the values arrived as the kind of thing they were meant to be —
@@ -152,15 +152,25 @@ whether a wholly empty tab is adopted, then deletes the tab again. No tab the sy
 writes is opened, and a tab of that name which already exists stops the run rather
 than being adopted.
 
+`verify volume` writes 2,500 synthetic rows to a scratch tab of its own, through
+the same `write_rows()` the real tabs go through, and reads them back before
+deleting it. `Transactions` is written in full on purpose, and past 2,000 rows
+that write stops fitting in one request — so this is the only thing that puts a
+*second* chunked write in front of Sheets. It has to be asked for by name: it is
+the one check here whose answer does not change between runs, and putting that
+write on every routine verification would be a cost for nothing.
+
 `verify` takes the same scripted form and the same statuses: `1` when a check did
-not behave, and `1` when a half could not be run at all. Not reaching the sheet
+not behave, and `1` when one could not be run at all. Not reaching the sheet
 says nothing about the guard, and "nothing known" must not exit the way "checked
 and clean" does.
 
-Two things neither half covers: that a refusal aborts the *whole* sync, and that an
+Three things none of them covers: that a refusal aborts the *whole* sync; that an
 absent value arrived as an empty cell rather than an empty string — read back, those
-two are the same value, so only a formula's behaviour tells them apart.
-[`live-verification.md`](live-verification.md) has both steps.
+two are the same value, so only a formula's behaviour tells them apart; and whether
+the real `Transactions` tab windows, since the volume check's rows enter below
+`read_workspace()` and so say nothing about what happens above it.
+[`live-verification.md`](live-verification.md) has all three steps.
 
 ## What a tab may promise
 

@@ -11,6 +11,17 @@ the two disagree.
 
 ### Added
 
+- **`verify volume`**, a third check beside `verify tabs` and `verify guard`.
+  `Transactions` is written in full on purpose, and past `CHUNK_ROWS` that write
+  goes up as more than one request — which no workspace here is long enough to
+  put in front of real Sheets. So this sends its own: `CHUNK_ROWS + 500` synthetic
+  rows through the same `write_rows()`, to a scratch tab it makes and deletes,
+  read back for the count and for the row on each side of every chunk boundary. A
+  chunk at the wrong range leaves the right number of rows in the wrong cells, so
+  the count alone would agree with it. It has to be asked for by name, and it
+  refuses a size that would fit in one request. It does not settle whether the
+  real tab windows — those rows come from `read_workspace()` and these enter below
+  it; see check 5 in [`docs/live-verification.md`](docs/live-verification.md).
 - **The morning brief.** `stonksmithdb brief` reads the databases — no login, no
   browser, no network — renders one self-contained HTML page to
   `~/.stonksmith/reports/<date>.html` and opens it. A LaunchAgent at 06:30 on
