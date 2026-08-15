@@ -31,6 +31,7 @@ import unittest
 from config_isolation import UserConfigMixin
 from stonksmith.etc.brief import (
     Allocation,
+    Mark,
     allocation_breakdown,
     build_brief,
     concentration,
@@ -153,6 +154,26 @@ class TheGapIsMeasuredInPoints(unittest.TestCase):
 
         self.assertIsNone(rows[0].target)
         self.assertIsNone(rows[0].off)
+
+    def test_a_target_with_nothing_held_survives_a_baseline(self) -> None:
+        # The case the test below could not reach. It passes `baseline={}`, so
+        # the prior total is zero and the `if prior` short-circuits the lookup
+        # that was the bug -- a class added for its target has no entry in the
+        # baseline totals, and subscripting one raised KeyError as soon as a
+        # baseline existed. Which is every morning after the first, on exactly
+        # the feature the config documents.
+        rows = allocation_breakdown(
+            rows=(_held(symbol="AAA", account="One", key="a1", value=100.0),),
+            classes=CLASSES,
+            baseline={("b", "a1", "AAA"): Mark(value=90.0, units=1.0)},
+            targets={"Growth": 60.0, "Steady": 40.0},
+        )
+        by = {entry.label: entry for entry in rows}
+
+        self.assertEqual(by["Steady"].value, 0.0)
+        # Zero rather than None: a class the baseline did not hold was worth
+        # nothing then, which is a measurement rather than an absence.
+        self.assertEqual(by["Steady"].was, 0.0)
 
     def test_a_target_with_nothing_held_still_appears(self) -> None:
         # The entry most worth seeing, and the one a breakdown built only from

@@ -22,6 +22,7 @@ brief" -- so the inlined copy is stripped to decoration.
 
 import datetime as dt
 import re
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -124,6 +125,18 @@ class ThePageStaysSelfContained(UserConfigMixin, unittest.TestCase):
         )
 
         self.assertEqual(words.strip(), "StonkSmith · morning brief")
+
+    def test_an_undecodable_mark_costs_the_badge_and_not_the_page(self) -> None:
+        # UnicodeDecodeError is a ValueError, not an OSError, so a logo replaced
+        # by a PNG that kept the name -- or truncated mid-write -- escaped the
+        # handler and took the whole brief down for a decorative asset.
+        with tempfile.TemporaryDirectory() as where:
+            (Path(where) / "logo.svg").write_bytes(b"\xff\xfe<svg/>")
+
+            with patch("stonksmith.etc.paths.etc_path", Path(where)):
+                self.assertEqual(logo(), "")
+
+                self.assertIn("StonkSmith · morning brief", self._page())
 
     def test_a_missing_mark_costs_the_badge_and_not_the_page(self) -> None:
         # The brief renders every morning unattended. A logo that could not be

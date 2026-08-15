@@ -303,7 +303,11 @@ def logo() -> str:
     try:
         mark: str = (etc_path / "logo.svg").read_text(encoding="utf-8")
 
-    except OSError:
+    # UnicodeDecodeError as well as OSError. It is a ValueError, not an OSError,
+    # so a logo file that is not valid UTF-8 -- truncated, or replaced with a
+    # PNG that kept the name -- escaped this handler and took the whole morning
+    # brief down for a decorative asset.
+    except OSError, UnicodeDecodeError:
         return ""
 
     # The file carries its own 128x128 so it renders standalone on GitHub. Here
