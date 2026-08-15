@@ -248,7 +248,7 @@ class Reconciliation(unittest.TestCase):
     """The tolerance has to come from the printing, not from a round number."""
 
     def test_the_real_statement_reconciles(self) -> None:
-        # 340.000 x 24.734400 = 8409.7240, printed as 8409.71. Off by 1.1
+        # 340.000 x 24.734400 = 8409.7240, printed as 8409.71. Off by 1.4
         # cents, and right: the unit count is printed to three decimals, so at
         # this price it stands for over a cent of balance either way. A flat
         # cent of tolerance called this broken.

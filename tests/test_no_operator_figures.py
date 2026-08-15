@@ -35,6 +35,7 @@ from pathlib import Path
 HASHES: frozenset[str] = frozenset(
     {
         "01d7a0fbfd9da5f3",
+        "63780c958d017bb1",
         "01e7b98d248b0d8c",
         "08a11c6d4d712884",
         "0aba65d5d096f5f7",
@@ -100,9 +101,15 @@ EXEMPT: frozenset[str] = frozenset(
 
 #: What is worth hashing out of a line. A money-shaped number keeps its
 #: separators stripped, since "1,303.68" and "1303.68" are the same figure
-#: written twice. A word of four letters or more catches a name or an employer.
+#: written twice.
+#:
+#: TOKEN is deliberately broader than "a word": an account suffix is bare
+#: digits with no decimal point and a full account number starts with one, so
+#: a pattern anchored on a letter saw neither. Over-matching costs nothing
+#: here -- everything is hashed and only an exact hit is reported -- while
+#: under-matching is a guard that passes on the thing it was written for.
 NUMBER: re.Pattern[str] = re.compile(pattern=r"\d[\d,]*\.\d+")
-WORD: re.Pattern[str] = re.compile(pattern=r"[A-Za-z][A-Za-z0-9]{3,}")
+TOKEN: re.Pattern[str] = re.compile(pattern=r"[A-Za-z0-9]{4,}")
 
 
 def digest(token: str) -> str:
@@ -114,6 +121,16 @@ def digest(token: str) -> str:
     """
 
     return hashlib.sha256(token.encode()).hexdigest()[:16]
+
+
+def root() -> Path:
+    """
+    The checkout this test lives in.
+    :return: The repository root
+    :rtype: Path
+    """
+
+    return Path(__file__).resolve().parent.parent
 
 
 def tracked() -> list[Path]:
@@ -132,15 +149,14 @@ def tracked() -> list[Path]:
         capture_output=True,
         text=True,
         check=True,
-        cwd=Path(__file__).resolve().parent.parent,
+        cwd=root(),
     ).stdout
 
-    root: Path = Path(__file__).resolve().parent.parent
-
     return [
-        root / name
-        for name in listed.split()
-        if name not in EXEMPT
+        root() / name
+        for name in listed.splitlines()
+        if name
+        and name not in EXEMPT
         and name.endswith(
             (".py", ".md", ".txt", ".conf", ".sh", ".plist", ".cron", ".toml")
         )
@@ -162,10 +178,10 @@ class TheTreeCarriesNobodysRealFigures(unittest.TestCase):
 
             for number, line in enumerate(text.splitlines(), start=1):
                 tokens = [m.replace(",", "") for m in NUMBER.findall(line)]
-                tokens += [m.lower() for m in WORD.findall(line)]
+                tokens += [m.lower() for m in TOKEN.findall(line)]
 
                 found.extend(
-                    f"{path.name}:{number} carries {token!r}"
+                    f"{path.relative_to(root()):}:{number} carries {token!r}"
                     for token in tokens
                     if digest(token=token) in HASHES
                 )
