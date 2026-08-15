@@ -5,7 +5,7 @@ does not: the headline answers "what moved since you last looked" and these
 numbers answer "what have I made since I bought it". Different question, and it
 depends on a field most of this workspace's sources do not report.
 
-**Cost basis is the fault line.** SnapTrade states one; TSP, a Microsoft 401k and
+**Cost basis is the fault line.** SnapTrade states one; TSP, an employer 401k and
 a scraped 529 do not. Every figure that divides by it -- purchase price, gain,
 growth, yield on cost, the win/loss flag -- is therefore absent for those
 positions, and the single most tempting bug in this file is to let an absent cost
@@ -74,7 +74,7 @@ class ACostNobodyReportedStaysAbsent(UserConfigMixin, unittest.TestCase):
                         cost_basis=800.0,
                     ),
                     # The 401k shape: a value and a unit count, no cost.
-                    _held(symbol="O7M8", units=50.0, price=20.0, value=1000.0),
+                    _held(symbol="Q4R7", units=50.0, price=20.0, value=1000.0),
                 )
             ),
             classes={},
@@ -95,7 +95,7 @@ class ACostNobodyReportedStaysAbsent(UserConfigMixin, unittest.TestCase):
     def test_an_unpriced_position_gets_none_of_them(self) -> None:
         # The whole file in one case. Any of these coming back 0.0 is a claim
         # that somebody checked and the position had made nothing.
-        held = self.by_symbol["O7M8"]
+        held = self.by_symbol["Q4R7"]
 
         self.assertIsNone(held.cost_basis)
         self.assertIsNone(held.purchase_price)
@@ -106,13 +106,13 @@ class ACostNobodyReportedStaysAbsent(UserConfigMixin, unittest.TestCase):
     def test_it_is_neither_a_win_nor_a_loss(self) -> None:
         # Three-valued rather than two. Defaulting to False would flag every TSP
         # and 401k holding as losing money.
-        self.assertIsNone(self.by_symbol["O7M8"].winning)
+        self.assertIsNone(self.by_symbol["Q4R7"].winning)
 
     def test_the_page_shows_dashes_rather_than_zeros(self) -> None:
         page: str = render(
             brief=build_brief(
                 portfolio=Portfolio(
-                    holdings=(_held(symbol="O7M8", units=50.0, value=1000.0),)
+                    holdings=(_held(symbol="Q4R7", units=50.0, value=1000.0),)
                 ),
                 baseline=None,
                 today=TODAY,
@@ -120,7 +120,7 @@ class ACostNobodyReportedStaysAbsent(UserConfigMixin, unittest.TestCase):
             now=NOW,
         )
 
-        self.assertIn("O7M8", page)
+        self.assertIn("Q4R7", page)
         self.assertNotIn("$0.00", page.split("<h2>Holdings</h2>")[1])
 
 
@@ -138,7 +138,7 @@ class TheTotalsSayWhatTheyStandOn(UserConfigMixin, unittest.TestCase):
                 holdings=(
                     _held(symbol="VTI", units=10.0, value=1000.0, cost_basis=800.0),
                     _held(symbol="BND", units=10.0, value=500.0, cost_basis=600.0),
-                    _held(symbol="O7M8", units=50.0, value=2000.0),
+                    _held(symbol="Q4R7", units=50.0, value=2000.0),
                 )
             ),
             classes={},
@@ -185,7 +185,7 @@ class TheTotalsSayWhatTheyStandOn(UserConfigMixin, unittest.TestCase):
                 portfolio=Portfolio(
                     holdings=(
                         _held(symbol="VTI", units=10.0, value=1000.0, cost_basis=800.0),
-                        _held(symbol="O7M8", units=50.0, value=2000.0),
+                        _held(symbol="Q4R7", units=50.0, value=2000.0),
                     )
                 ),
                 baseline=None,
@@ -487,7 +487,7 @@ class TheValueTileMatchesTheHeadline(UserConfigMixin, unittest.TestCase):
                     as_of="2026-08-13",
                 ),
             ),
-            holdings=(_held(symbol="SWPPX", units=148.499, value=2986.31),),
+            holdings=(_held(symbol="SWPPX", units=175.000, value=3500.00),),
             net_worth=(
                 NetWorthRow(
                     broker="snaptrade",
@@ -506,7 +506,7 @@ class TheValueTileMatchesTheHeadline(UserConfigMixin, unittest.TestCase):
             now=NOW,
         )
 
-        self.assertIn("$763.58 borrowed against them", page)
+        self.assertIn("$1,277.27 borrowed against them", page)
         self.assertNotIn("in cash", page)
         self.assertNotIn("$-", page)
 

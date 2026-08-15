@@ -202,8 +202,8 @@ def position_holding(position: dict[str, Any]) -> Holding:
     against any payload still using the old names, which is worse than the error
     that shape mismatch used to raise: an empty row is written and looks real.
 
-    ``cost_basis`` is per unit despite the name -- 8.93 units of FSKAX report
-    213.32 as ``price`` and 181.91 as ``cost_basis`` -- so what the position cost
+    ``cost_basis`` is per unit despite the name -- 10.00 units of FSKAX report
+    200.00 as ``price`` and 170.00 as ``cost_basis`` -- so what the position cost
     is still that times the units. Missing either leaves it None rather than
     guessing a zero.
     :param position: One position as returned by SnapTrade
@@ -682,8 +682,8 @@ class SnapTradeModule:
 
         The half of an account no position expresses, and routinely negative: an
         overdraft transfer out or a margin loan is a debt the securities do not
-        mention. An account holding $2,986.31 of a fund against -$744.28 of cash
-        is worth $2,242.03, and summing its positions says $2,986.31.
+        mention. An account holding $3,500.00 of a fund against -$800.00 of cash
+        is worth $2,700.00, and summing its positions says $3,500.00.
 
         None rather than 0.0 when it could not be read, and the difference
         matters: zero cash is a real answer that makes the account worth its
@@ -946,7 +946,7 @@ class SnapTradeModule:
         elif callable(getattr(db, "save_account_data", None)):
             for row in rows:
                 # One brokerage's account names are not unique across all of
-                # them -- two can each hold a "MICROSOFT ESPP PLAN" -- and the
+                # them -- two can each hold a "ACME ESPP PLAN" -- and the
                 # accounts table has no brokerage column to tell them apart.
                 db.save_account_data(
                     account_name=f"{row['Brokerage']} - {row['Account']}",

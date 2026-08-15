@@ -605,9 +605,9 @@ class ErrorShape(unittest.TestCase):
         """Uppercase-looking values must not smuggle account data through."""
         conn = _connection()
         conn.watch_responses()
-        _emit(conn, _refused(payload=b'{"acct": "3LD20847"}'))
+        _emit(conn, _refused(payload=b'{"acct": "3LD21234"}'))
 
-        self.assertNotIn("3LD20847", conn.failed_responses[0])
+        self.assertNotIn("3LD21234", conn.failed_responses[0])
 
     def test_a_successful_response_is_never_opened(self) -> None:
         """Only refusals. A 200 body is the payload, not an explanation."""

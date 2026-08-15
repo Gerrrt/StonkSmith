@@ -318,12 +318,12 @@ class SnapTradeBrokerTests(unittest.TestCase):
 
     def test_fetch_accounts_returns_plain_dictionaries(self) -> None:
         client = _FakeClient(connections=[_connection("aaa")])
-        client.accounts = [{"id": "1", "name": "Garrett IRA"}]
+        client.accounts = [{"id": "1", "name": "Alex IRA"}]
         self.broker.client = client
 
         accounts = self.broker.fetch_accounts()
 
-        self.assertEqual(accounts, [{"id": "1", "name": "Garrett IRA"}])
+        self.assertEqual(accounts, [{"id": "1", "name": "Alex IRA"}])
         self.assertIsInstance(accounts[0], dict)
 
 
@@ -404,8 +404,8 @@ class FetchPositionsTests(unittest.TestCase):
 
     POSITION: ClassVar[dict[str, Any]] = {
         "instrument": {"symbol": "FSKAX"},
-        "units": "8.93",
-        "price": "213.32",
+        "units": "10.00",
+        "price": "200.00",
     }
 
     def test_the_positions_envelope_is_unwrapped(self) -> None:

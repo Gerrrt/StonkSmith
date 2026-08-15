@@ -1001,7 +1001,7 @@ def _cost_from_principal(value: Any, principal: Any, earnings: Any) -> float | N
         # Compared as whole cents, and allowed to be one out.
         #
         # Both halves of that are deliberate. Cents because the float form was
-        # not the check its own comment described: 1421.93 - 1303.68 - 118.24 is
+        # not the check its own comment described: 2300.00 - 2140.00 - 159.99 is
         # 0.010000000000005 in binary floating point, so `> 0.01` *rejected* a
         # row exactly a cent out, while a different triple a cent out would pass.
         # A boundary that moves with the values is not a boundary.
@@ -1432,7 +1432,7 @@ def apply_aliases(portfolio: Portfolio, aliases: dict[str, str]) -> Portfolio:
 
     Applied once here, on the way out of the databases, rather than at each
     consumer. The sheet and the brief are two views of one read, and an account
-    that is "Mekenna 401(k)" on one and "MICROSOFT CORPORATION SAVINGS PLUS
+    that is "Robin 401(k)" on one and "ACME CORPORATION SAVINGS PLUS
     401(K) PLAN" on the other is two accounts to anybody comparing them.
 
     Every row shape carries the name, not just the account view -- holdings and

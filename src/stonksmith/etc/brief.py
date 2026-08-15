@@ -71,7 +71,7 @@ BASELINE_VERSION: int = 1
 #: this tightly, there is nothing left to inject with.
 #:
 #: It is also what keeps a link off the holdings that have no public page.
-#: "O7M8" is a 401k fund code, "14002" a 529 portfolio number and "L 2060" a TSP
+#: "Q4R7" is a 401k fund code, "70310" a 529 portfolio number and "L 2060" a TSP
 #: fund -- real positions, none of them findable on a quote site, and a link that
 #: 404s is worse than no link because the reader has to click to learn that.
 _TICKER: re.Pattern[str] = re.compile(pattern=r"^[A-Za-z]{1,5}$")
@@ -1085,7 +1085,7 @@ def owner_color(name: str, palette: Iterable[tuple[str, str]]) -> str:
 
     First match wins, which is why the palette arrives as ordered pairs rather
     than a mapping: the match is a substring of the display name, so "Joint"
-    and "Garrett" can both be true of one account and the order in the config
+    and "Alex" can both be true of one account and the order in the config
     is what decides. A dict would preserve that order in practice and document
     nothing about depending on it.
 

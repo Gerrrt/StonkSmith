@@ -716,12 +716,12 @@ def get_account_colors() -> tuple[list[tuple[str, str]], list[str]]:
 
     A list of pairs rather than a dict, because the order is part of the rule:
     the match is a substring of the display name and the first line that matches
-    wins, so "Joint = yellow" written above "Garrett = green" would colour a
-    joint account Garrett holds. A dict would keep the order in practice and say
+    wins, so "Joint = yellow" written above "Alex = green" would colour a
+    joint account Alex holds. A dict would keep the order in practice and say
     nothing about depending on it.
 
     Substring rather than exact, so one line covers every account a person
-    holds -- "Garrett" catches the IRA, the brokerage and the 401(k) without
+    holds -- "Alex" catches the IRA, the brokerage and the 401(k) without
     naming each. Matched against the display name *after* aliases are applied,
     which is the name a reader sees and therefore the one they would write here.
     :return: (the (match, colour) pairs in order, the lines that were refused)

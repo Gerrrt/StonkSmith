@@ -35,7 +35,7 @@ class TheConfigParsesWhatTheCommentPromises(UserConfigMixin, unittest.TestCase):
     config_body: str = (
         "[MANUAL]\n"
         "accounts =\n"
-        "    Ezekiel Trump | SPYM | 1.650717 | 2026-08-10 | 150.00\n"
+        "    Sam Custodial | SPYM | 2.000000 | 2026-08-10 | 150.00\n"
         "    No Cost Known | VOO | 2.5 | 2026-08-01\n"
     )
 
@@ -46,9 +46,9 @@ class TheConfigParsesWhatTheCommentPromises(UserConfigMixin, unittest.TestCase):
         self.assertEqual(
             accounts[0],
             ManualHolding(
-                name="Ezekiel Trump",
+                name="Sam Custodial",
                 symbol="SPYM",
-                units=1.650717,
+                units=2.000000,
                 units_as_of="2026-08-10",
                 cost_basis=150.00,
             ),
@@ -109,7 +109,7 @@ class OneFileCannotPriceTwoFunds(UserConfigMixin, unittest.TestCase):
     config_body: str = (
         "[MANUAL]\n"
         "accounts =\n"
-        "    Ezekiel Trump | SPYM | 1.65 | 2026-08-10\n"
+        "    Sam Custodial | SPYM | 1.65 | 2026-08-10\n"
         "    Something Else | VOO | 2.5 | 2026-08-01\n"
     )
 
@@ -172,7 +172,7 @@ class OneFileIsFineForOneFund(UserConfigMixin, unittest.TestCase):
     """The flag's actual use, which the refusal must not have taken away."""
 
     config_body: str = (
-        "[MANUAL]\naccounts =\n    Ezekiel Trump | SPYM | 1.65 | 2026-08-10\n"
+        "[MANUAL]\naccounts =\n    Sam Custodial | SPYM | 1.65 | 2026-08-10\n"
     )
 
     def test_a_single_symbol_reads_the_file(self) -> None:
@@ -193,9 +193,9 @@ class OneFileIsFineForOneFund(UserConfigMixin, unittest.TestCase):
 class TheMarkIsACountTimesAPublishedPrice(unittest.TestCase):
     def setUp(self) -> None:
         self.held = ManualHolding(
-            name="Ezekiel Trump",
+            name="Sam Custodial",
             symbol="SPYM",
-            units=1.650717,
+            units=2.000000,
             units_as_of="2026-08-10",
             cost_basis=150.00,
         )
@@ -226,7 +226,7 @@ class TheMarkIsACountTimesAPublishedPrice(unittest.TestCase):
 
         written = self.db.save_snapshot.call_args.kwargs
 
-        self.assertAlmostEqual(written["value"], 150.82, places=2)
+        self.assertAlmostEqual(written["value"], 182.73, places=2)
 
     def test_the_as_of_is_the_price_date_not_the_clock(self) -> None:
         # The same answer every other view gives to "what date is this value
@@ -275,7 +275,7 @@ class AnAccountWithNoPriceIsSkippedNotZeroed(unittest.TestCase):
         self.connection = MagicMock()
         self.connection.accounts = [
             ManualHolding(
-                name="Ezekiel Trump",
+                name="Sam Custodial",
                 symbol="SPYM",
                 units=1.65,
                 units_as_of="2026-08-10",

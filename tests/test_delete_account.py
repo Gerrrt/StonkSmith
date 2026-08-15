@@ -52,8 +52,8 @@ class DeletingAnAccountTakesItsHistory(MemoryKeyringMixin, unittest.TestCase):
         # the shape that prompted the command: one real account and one an
         # aggregator reported that another broker already covers.
         for key, name, when in (
-            ("Schwab - Ezekiel 529 Plan", "Ezekiel 529 Plan", "2026-08-05 18:30:00"),
-            ("Schwab - Garrett IRA", "Garrett IRA", "2026-08-13 18:30:00"),
+            ("Schwab - Sam 529 Plan", "Sam 529 Plan", "2026-08-05 18:30:00"),
+            ("Schwab - Alex IRA", "Alex IRA", "2026-08-13 18:30:00"),
         ):
             for stamp in (when, when.replace("18:30", "06:35")):
                 self.db.save_snapshot(
@@ -80,40 +80,40 @@ class DeletingAnAccountTakesItsHistory(MemoryKeyringMixin, unittest.TestCase):
     def test_it_reports_the_name_and_how_much_history_it_took(self) -> None:
         # Named rather than numbered, because there is no undo and this line is
         # the only check on having typed the right id.
-        removed = self.db.delete_account(account_id=self.ids["Ezekiel 529 Plan"])
+        removed = self.db.delete_account(account_id=self.ids["Sam 529 Plan"])
 
-        self.assertEqual(removed, ("Ezekiel 529 Plan", 2))
+        self.assertEqual(removed, ("Sam 529 Plan", 2))
 
     def test_the_account_is_gone(self) -> None:
-        self.db.delete_account(account_id=self.ids["Ezekiel 529 Plan"])
+        self.db.delete_account(account_id=self.ids["Sam 529 Plan"])
 
-        self.assertEqual([row[2] for row in self.db.get_accounts()], ["Garrett IRA"])
+        self.assertEqual([row[2] for row in self.db.get_accounts()], ["Alex IRA"])
 
     def test_its_snapshots_and_holdings_go_with_it(self) -> None:
         # Through ON DELETE CASCADE, which SQLite honours only because
         # create_db_engine() turns foreign keys on. Without that the rows are
         # orphaned rather than removed and the account view still finds them.
-        self.db.delete_account(account_id=self.ids["Ezekiel 529 Plan"])
+        self.db.delete_account(account_id=self.ids["Sam 529 Plan"])
 
         remaining = {row[0] for row in self.db.get_current_accounts()}
 
-        self.assertEqual(remaining, {"Schwab - Garrett IRA"})
+        self.assertEqual(remaining, {"Schwab - Alex IRA"})
 
         # get_holdings() leads with the *display name* while get_current_accounts
         # leads with the key -- two reads, two shapes, and asserting the key here
         # fails against a perfectly good cascade. Worth the comment: the columns
         # are documented per method precisely because they differ.
         self.assertTrue(
-            all(row[0] == "Garrett IRA" for row in self.db.get_holdings()),
+            all(row[0] == "Alex IRA" for row in self.db.get_holdings()),
             "a holding survived the account it hung from",
         )
 
     def test_its_transactions_go_with_it(self) -> None:
-        self.db.delete_account(account_id=self.ids["Ezekiel 529 Plan"])
+        self.db.delete_account(account_id=self.ids["Sam 529 Plan"])
 
         self.assertTrue(
             all(
-                row[0] == "Schwab - Garrett IRA"
+                row[0] == "Schwab - Alex IRA"
                 for row in self.db.get_current_transactions()
             ),
             "a movement survived the account it was recorded against",
@@ -123,7 +123,7 @@ class DeletingAnAccountTakesItsHistory(MemoryKeyringMixin, unittest.TestCase):
         # The whole point of cascading on account_id rather than anything
         # broader. A deletion that took a neighbour's history with it would be
         # discovered a month later and never explained.
-        self.db.delete_account(account_id=self.ids["Ezekiel 529 Plan"])
+        self.db.delete_account(account_id=self.ids["Sam 529 Plan"])
 
         kept = self.db.get_current_accounts()
 

@@ -193,7 +193,7 @@ class TheBriefCommand(UserConfigMixin, MemoryKeyringMixin, unittest.TestCase):
 
         with patch(
             "stonksmith.etc.config.get_account_colors",
-            return_value=([], ["Ezekiel = chartreuse"]),
+            return_value=([], ["Sam = chartreuse"]),
         ):
             _failed, output = self._run()
 

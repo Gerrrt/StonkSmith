@@ -110,7 +110,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | Ally — session survives to the next run | Nine runs, both browsers, both persistence models | **Run, and it cannot** — see below | 2026-08-07 |
 | TSP — statement parser | Real statements, read as issued through `-o STATEMENT=`. The run itself was never dated; the date below is bounded by the commits either side of it — the reader landed in `4f1b2b1` on 2026-08-06 and the claim was recorded settled in `123af7e` on 2026-08-07, so the earlier bound is taken | Yes, against real files | 2026-08-06 |
 | TSP — share price parser | The published file as fetched on 2026-08-07 (#48); `tests/tsp_prices.csv` is a slice of it kept as a fixture | Yes, against real files | 2026-08-07 |
-| TSP — the mark, and the balance inversion | Checked against what the site itself reports: `0bc6668` carries a balance and date read off it, `--balance 7810.84 --balance-as-of 2026-08-05`. Bounded the same way as the row above — inversion landed 2026-08-06, recorded settled 2026-08-07 | Yes | 2026-08-06 |
+| TSP — the mark, and the balance inversion | Checked against what the site itself reports: `0bc6668` carries a balance and date read off it, `--balance 8409.71 --balance-as-of 2026-08-05`. Bounded the same way as the row above — inversion landed 2026-08-06, recorded settled 2026-08-07 | Yes | 2026-08-06 |
 | TSP — share price download | A real request on 2026-08-07 written up in #48, and again unattended on 2026-08-10 (#116): 200 and 555,142 bytes, fetched by the run itself rather than by hand | Yes | 2026-08-10 |
 | TSP — DFAS pay table parse | All four published pages, parsed as served: the enlisted one on 2026-08-10 (#116) into all nine grades, and the officer, prior-service and warrant pages on 2026-08-11 (#118) into O-1..O-10, O-1E..O-3E and W-1..W-5. Every fixture in `tests/` is now a served page; the enlisted reconstruction read **zero** grades off the real one, and the prior-service reconstruction's rates were invented outright | Yes | 2026-08-11 |
 | TSP — DFAS pay table download | Real requests through `fetch_pay_table`: the enlisted page unattended on 2026-08-10 (#116), 200 and 116,257 bytes, and the other three on 2026-08-11 (#118), 200 each. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes | 2026-08-11 |
@@ -310,8 +310,8 @@ above.
 
 ### 3. The masked number reconciles against a real account
 
-Any successful run exercises this. The sidebar says `...0847`; the page heading says
-something like `3LD20847`. Confirm the run reports one row per account and did not
+Any successful run exercises this. The sidebar says `...1234`; the page heading says
+something like `3LD21234`. Confirm the run reports one row per account and did not
 invent an extra:
 
 ```
@@ -326,7 +326,7 @@ broker ally
 show accounts
 ```
 
-The `Account` column should read `<nickname> (...0847)` — the *masked* form — and the
+The `Account` column should read `<nickname> (...1234)` — the *masked* form — and the
 full number should be alongside it. Both routes into a row, sidebar and heading, are
 supposed to agree on that one identity; if a single account shows up twice, once with
 a balance and once with positions, they did not.
@@ -452,8 +452,8 @@ uv run stonksmith ally -M ally --from-prices
 ```text
 Broker:  Ally    [+] Valuing from published prices; no sign-in needed.
 Module:  Ally    [!] Starting Ally sync for: published prices
-Module:  Ally    [+] Individual (...0847): 123.519 SWPPX x $20.00 (2026-08-07) = $2,470.38
-Module:  Ally         [*] Individual (...0847): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26. Re-run with --manual-login after a deposit.
+Module:  Ally    [+] Individual (...1234): 125.000 SWPPX x $20.00 (2026-08-07) = $2,500.00
+Module:  Ally         [*] Individual (...1234): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26. Re-run with --manual-login after a deposit.
 Module:  Ally    [+] Ally valued from published prices.
 ```
 
@@ -461,9 +461,9 @@ Module:  Ally    [+] Ally valued from published prices.
 at all** — the twenty-eight scraped snapshots preceding it leave that column empty:
 
 ```text
-| 29 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
-| 28 | Individual (...0847) |            | 2026-08-10 22:03:26 | $2,470.38 | USD |
-| 27 | Individual (...0847) |            | 2026-08-10 21:57:58 | $2,470.38 | USD |
+| 29 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:04:27 | $2,500.00 | USD |
+| 28 | Individual (...1234) |            | 2026-08-10 22:03:26 | $2,500.00 | USD |
+| 27 | Individual (...1234) |            | 2026-08-10 21:57:58 | $2,500.00 | USD |
 ```
 
 That is the check: the value is dated by the source it came from, 2026-08-07, and not
@@ -473,19 +473,19 @@ have meant the price date never reached the column.
 `show holdings 29` carries step 1's unit count and step 1's stamp:
 
 ```text
-| Individual (...0847) | SWPPX | Schwab S&P 500 Index | 123.519 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
+| Individual (...1234) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,500.00 | ... | 2026-08-10 22:03:26 |
 ```
 
-The 123.519 is step 1's count by construction rather than by comparison — the price
+The 125.000 is step 1's count by construction rather than by comparison — the price
 path reads units from the database and has no way to fetch them — so what this row
 shows is that repricing carried them through without disturbing them. `Units As Of`
 reads `22:03:26`, the sign-in's stamp, not the price run's `22:04:27`. Three dates, all
 different and each meaning what it says: the price is Friday's, the units were read at
 22:03:26, the row was written at 22:04:27.
 
-**The value is corroborated, which was not something this step asked for.** 123.519 ×
-$20.00 = $2,470.38, and the two signed-in runs minutes earlier had independently
-recorded $2,470.38 from Ally's own page. The published-price arithmetic and the
+**The value is corroborated, which was not something this step asked for.** 125.000 ×
+$20.00 = $2,500.00, and the two signed-in runs minutes earlier had independently
+recorded $2,500.00 from Ally's own page. The published-price arithmetic and the
 broker's own number agree to the cent, on the same units, by two paths that share no
 code. Worth recording because a valuing path can be perfectly self-consistent and still
 be wrong about the world.
@@ -510,16 +510,16 @@ snapshot that the units never had. Two more price runs followed, **30 and 31** �
 shown with them because it is what they each read, not because it is one of the two:
 
 ```text
-| 31 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:29:44 | $2,470.38 | USD |
-| 30 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:27:17 | $2,470.38 | USD |
-| 29 | Individual (...0847) | 2026-08-07 | 2026-08-10 22:04:27 | $2,470.38 | USD |
+| 31 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:29:44 | $2,500.00 | USD |
+| 30 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:27:17 | $2,500.00 | USD |
+| 29 | Individual (...1234) | 2026-08-07 | 2026-08-10 22:04:27 | $2,500.00 | USD |
 ```
 
 Each of the two ran with a newest snapshot whose `scraped_at` was **not** `22:03:26` —
 29's `22:04:27` for the first, 30's `22:27:17` for the second — and each printed:
 
 ```text
-[*] Individual (...0847): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26.
+[*] Individual (...1234): priced at 2026-08-07; units as recorded 2026-08-10 22:03:26.
 ```
 
 `22:03:26`, not the newest snapshot's time. That is the discriminator firing: a run
@@ -530,7 +530,7 @@ And the stamp survived being written, which is the half that would start the dri
 `show holdings 30`:
 
 ```text
-| Individual (...0847) | SWPPX | Schwab S&P 500 Index | 123.519 | $20.00 | $2,470.38 | ... | 2026-08-10 22:03:26 |
+| Individual (...1234) | SWPPX | Schwab S&P 500 Index | 125.000 | $20.00 | $2,500.00 | ... | 2026-08-10 22:03:26 |
 ```
 
 So the stamp passed through three consecutive price snapshots — 29, 30, 31 — without
@@ -721,7 +721,7 @@ and no `--pay-table`.
 $ uv run stonksmith tsp -M tsp
 [+] L 2060 at $24.8659 as of 2026-08-07
 [+] E-7 at Over 12: $5,591.70 basic pay per month
-[+] L 2060: 315.789 anchored + 142.173804 estimated = 457.962804 units
+[+] L 2060: 340.000 anchored + 142.173804 estimated = 482.173804 units
     x $24.8659 (2026-08-07) = $11,387.66
 ```
 
@@ -745,7 +745,7 @@ Friday the 7th.
 
 ```
 | Name                                              | Units      | Units As Of |
-| L 2060                                            | 315.789    | 2026-01-31  |
+| L 2060                                            | 340.000    | 2026-01-31  |
 | L 2060 (estimated contributions since 2026-01-31) | 142.173804 | 2026-07-31  |
 ```
 
@@ -1013,7 +1013,7 @@ The rates' own effective date is read rather than assumed, and an accrual reachi
 past it says so:
 
 ```
-$ uv run stonksmith tsp -M tsp --units 315.789 --units-as-of 2025-11-30
+$ uv run stonksmith tsp -M tsp --units 340.000 --units-as-of 2025-11-30
 [!] 1 of 8 contribution(s) posted before the pay table took effect on 2026-01-01,
     so they are priced at rates that came in after them.
 ```
@@ -1775,7 +1775,7 @@ clear of the same-second trap by a margin that leaves nothing to argue about.
 `show accounts` after both: one row, the same row.
 
 ```text
-| 1 | | Individual (...0847) | | INVESTMENT | 2026-08-10 22:03:26 |
+| 1 | | Individual (...1234) | | INVESTMENT | 2026-08-10 22:03:26 |
 ```
 
 Its `Last Seen` moved 21:57:58 → 22:03:26, which is the upsert being visible rather
@@ -1787,7 +1787,7 @@ two timestamps. So the two keys behave differently on the same pair of runs — 
 updated in place, snapshots appended — which is the whole of the claim.
 
 Both runs read one investment account and skipped the same Ally Bank savings account,
-and both wrote $2,470.38.
+and both wrote $2,500.00.
 
 **This does not make anything plural true.** One account, one holding, one deposit
 account skipped — the same single state the nine earlier runs saw. That the row count

@@ -42,7 +42,7 @@ TSP = AccountIdentity(
 #: The shape of the mark that prompted this: units of one fund, priced with
 #: another fund's price. Nothing about the row says so.
 MISMATCHED = Holding(
-    fund_code="L 2060", name="L 2060", units=315.789, price=24.6710, value=7790.83
+    fund_code="L 2060", name="L 2060", units=340.000, price=24.6710, value=8388.14
 )
 
 
@@ -70,7 +70,7 @@ class _DbCase(MemoryKeyringMixin, unittest.TestCase):
             "account": TSP,
             "scraped_at": "2026-08-07 12:00:00",
             "as_of": "2026-08-06",
-            "value": 7790.83,
+            "value": 8388.14,
             "holdings": [MISMATCHED],
         }
         kwargs.update(overrides)
@@ -108,7 +108,7 @@ class DeleteSnapshot(_DbCase):
 
     def test_the_other_marks_stay(self) -> None:
         bad = self.save()
-        good = self.save(scraped_at="2026-08-07 13:00:00", value=14794.59)
+        good = self.save(scraped_at="2026-08-07 13:00:00", value=15928.86)
 
         self.db.delete_snapshot(snapshot_id=bad)
 

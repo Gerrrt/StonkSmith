@@ -24,7 +24,7 @@ from unittest.mock import MagicMock
 
 from stonksmith.modules.ally_module import AllyModule
 
-_ACCOUNT = "Individual (...0847)"
+_ACCOUNT = "Individual (...1234)"
 
 #: The real position, as the database holds it after a signed-in run.
 #: Eleven columns, because get_holdings() selects eleven. It was ten here for as
@@ -35,12 +35,12 @@ _HOLDING_ROW: tuple[Any, ...] = (
     _ACCOUNT,
     "SWPPX",
     "Schwab S&P 500 Index",
-    123.519,
+    125.000,
     19.88,
-    2455.56,
+    2485.00,
     None,
     None,
-    2237.74,
+    2500.00,
     "USD",
     None,
 )
@@ -51,7 +51,7 @@ _SNAPSHOT_ROW: tuple[Any, ...] = (
     _ACCOUNT,
     None,
     "2026-08-07 20:40:18",
-    2455.56,
+    2485.00,
     "USD",
 )
 
@@ -150,10 +150,10 @@ class TheOrdinaryRun(unittest.TestCase):
         connection.page.goto.assert_not_called()
 
     def test_it_agrees_with_the_brokers_own_total(self) -> None:
-        """123.519 x $19.88 is what Ally itself recorded: $2,455.56."""
+        """125.000 x $19.88 is what Ally itself recorded: $2,485.00."""
         _ok, context, _connection = _run()
 
-        self.assertEqual(context.db.saved[0]["value"], 2455.56)
+        self.assertEqual(context.db.saved[0]["value"], 2485.00)
 
     def test_as_of_carries_the_price_date_not_the_run_date(self) -> None:
         """as_of is "the date the source says the value is for"."""
@@ -165,14 +165,14 @@ class TheOrdinaryRun(unittest.TestCase):
         _ok, context, _connection = _run()
         held = context.db.saved[0]["holdings"][0]
 
-        self.assertEqual(held.units, 123.519)
+        self.assertEqual(held.units, 125.000)
         self.assertEqual(held.symbol, "SWPPX")
 
     def test_the_cost_basis_survives(self) -> None:
         """It was not recomputed, but it must not be dropped either."""
         _ok, context, _connection = _run()
 
-        self.assertEqual(context.db.saved[0]["holdings"][0].cost_basis, 2237.74)
+        self.assertEqual(context.db.saved[0]["holdings"][0].cost_basis, 2500.00)
 
     def test_the_account_keeps_its_identity(self) -> None:
         """A second row for the same account is the failure to avoid."""
@@ -234,10 +234,10 @@ class TwoHoldings(unittest.TestCase):
         self.assertEqual(len(context.db.saved[0]["holdings"]), 2)
 
     def test_the_total_adds_them_up(self) -> None:
-        """123.519 x 19.88 plus 10 x 5.00."""
+        """125.000 x 19.88 plus 10 x 5.00."""
         context = self._both()
 
-        self.assertEqual(context.db.saved[0]["value"], 2505.56)
+        self.assertEqual(context.db.saved[0]["value"], 2535.00)
 
 
 class SayingHowOld(unittest.TestCase):

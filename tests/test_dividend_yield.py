@@ -19,7 +19,7 @@ was bought.
 **It must not blend the known with the unknown.** Two thirds of this portfolio
 sits in a 401k, a TSP fund and a 529, none of which has a public ticker. Dividing
 the income of nine known funds by the value of all thirteen positions reports
-0.27% where the real answer for what is known is 1.27%, and the reader has no way
+0.29% where the real answer for what is known is 1.33%, and the reader has no way
 to see which they were given. The coverage travels with the figure, on the rule
 the priced/unpriced gain split already follows.
 """
@@ -47,7 +47,7 @@ HELD: tuple[HoldingRow, ...] = (
     HoldingRow(
         broker="b",
         source="b",
-        account="Garrett Brokerage",
+        account="Alex Brokerage",
         account_key="a1",
         symbol="SWPPX",
         units=100.0,
@@ -56,9 +56,9 @@ HELD: tuple[HoldingRow, ...] = (
     HoldingRow(
         broker="b",
         source="b",
-        account="Mekenna 401(k)",
+        account="Robin 401(k)",
         account_key="a2",
-        symbol="O7M8",
+        symbol="Q4R7",
         units=1000.0,
         value=8000.0,
     ),
@@ -165,8 +165,8 @@ class AForecastIsNotMoneyThatArrived(UserConfigMixin, unittest.TestCase):
         # None rather than zero. A 401k fund code no quote page has heard of and
         # a fund that genuinely pays nothing both come to 0.0, and only the
         # second is a fact about money.
-        self.assertIsNone(self.by_symbol["O7M8"].indicated_income)
-        self.assertIsNone(self.by_symbol["O7M8"].indicated_yield)
+        self.assertIsNone(self.by_symbol["Q4R7"].indicated_income)
+        self.assertIsNone(self.by_symbol["Q4R7"].indicated_yield)
 
     def test_the_received_figure_is_left_alone(self) -> None:
         # The whole reason the two are carried apart. An indicated figure written

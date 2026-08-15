@@ -81,7 +81,7 @@ def account(**overrides: Any) -> dict[str, Any]:
 
     base: dict[str, Any] = {
         "id": "acct-1",
-        "name": "Garrett IRA",
+        "name": "Alex IRA",
         "institution_name": "Schwab",
         "brokerage_authorization": LIVE_CONNECTION,
         "account_category": "INVESTMENT",
@@ -152,7 +152,7 @@ class SelectAccountsTests(unittest.TestCase):
             },
             {
                 "Brokerage": "Schwab",
-                "Account": "Garrett IRA",
+                "Account": "Alex IRA",
                 "Balance": "$6,539.67",
                 "Category": "INVESTMENT",
                 "Synced": healthy["sync_status"]["holdings"]["last_successful_sync"],
@@ -621,12 +621,12 @@ class ExcludedAccountTests(unittest.TestCase):
         rows, _ = select(
             [
                 self.account_at("Schwab", "Beneficiary A 529 Plan"),
-                self.account_at("Schwab", "Garrett IRA"),
+                self.account_at("Schwab", "Alex IRA"),
             ],
             excluded=frozenset({"schwab / beneficiary a 529 plan"}),
         )
 
-        self.assertEqual([row["Account"] for row in rows], ["Garrett IRA"])
+        self.assertEqual([row["Account"] for row in rows], ["Alex IRA"])
 
     def test_exclusion_is_reported_before_any_other_reason(self) -> None:
         # An excluded account is not broken, it belongs to somebody else.
@@ -700,7 +700,7 @@ class ExcludedAccountTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
 
     def test_nothing_excluded_changes_nothing(self) -> None:
-        rows, skipped = select([self.account_at("Schwab", "Garrett IRA")])
+        rows, skipped = select([self.account_at("Schwab", "Alex IRA")])
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(skipped, [])
@@ -977,14 +977,14 @@ class OnLoginTests(unittest.TestCase):
         self.assertEqual(self.db.saved[0]["balance"], "$6,539.67")
 
     def test_the_database_label_carries_the_brokerage(self) -> None:
-        # Two brokerages can each hold a "MICROSOFT ESPP PLAN" and the accounts
+        # Two brokerages can each hold a "ACME ESPP PLAN" and the accounts
         # table has no brokerage column to tell them apart.
         context = _StubContext(self.db)
 
         with patch("stonksmith.modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
-        self.assertEqual(self.db.saved[0]["account_name"], "Schwab - Garrett IRA")
+        self.assertEqual(self.db.saved[0]["account_name"], "Schwab - Alex IRA")
 
     def test_both_brokerages_reach_the_database_with_distinct_labels(self) -> None:
         accounts = [
@@ -1257,9 +1257,9 @@ class InstrumentPositionTests(unittest.TestCase):
             "currency": "USD",
             "exchange": "XNAS",
         },
-        "units": "8.93",
-        "price": "213.32",
-        "cost_basis": "181.91",
+        "units": "10.00",
+        "price": "200.00",
+        "cost_basis": "170.00",
         "currency": "USD",
         "cash_equivalent": False,
     }
@@ -1288,16 +1288,16 @@ class InstrumentPositionTests(unittest.TestCase):
         # Units and price arrive as strings from this endpoint.
         holding = position_holding(position=self.FSKAX)
 
-        self.assertEqual(holding.units, 8.93)
-        self.assertEqual(holding.price, 213.32)
-        self.assertAlmostEqual(holding.value or 0, 1904.95, places=2)
+        self.assertEqual(holding.units, 10.00)
+        self.assertEqual(holding.price, 200.00)
+        self.assertAlmostEqual(holding.value or 0, 2000.00, places=2)
 
     def test_cost_basis_is_per_unit_despite_the_name(self) -> None:
-        # 181.91 against a 213.32 price is an average purchase price, not what
+        # 170.00 against a 200.00 price is an average purchase price, not what
         # the whole position cost. Storing it as-is would understate the basis
         # by a factor of the unit count.
         self.assertAlmostEqual(
-            position_holding(position=self.FSKAX).cost_basis or 0, 1624.46, places=2
+            position_holding(position=self.FSKAX).cost_basis or 0, 1700.00, places=2
         )
 
     def test_a_cash_like_instrument_maps_the_same_way(self) -> None:

@@ -250,18 +250,18 @@ class Repricing(unittest.TestCase):
 
     Ally will not reuse a session, but a unit count does not change between
     deposits and a published price does not need a login. The real position is
-    123.519 units of SWPPX, which Ally itself marked at $19.88 for $2,455.56 --
+    125.000 units of SWPPX, which Ally itself marked at $19.88 for $2,485.00 --
     the same close the feed publishes, to the cent.
     """
 
-    def _swppx(self, units: float | None = 123.519) -> Holding:
+    def _swppx(self, units: float | None = 125.000) -> Holding:
         return Holding(
             symbol="SWPPX",
             name="Schwab S&P 500 Index",
             units=units,
             price=19.88,
-            value=2455.56,
-            cost_basis=2237.74,
+            value=2485.00,
+            cost_basis=2500.00,
         )
 
     def test_it_agrees_with_the_broker_on_the_broker_s_own_numbers(self) -> None:
@@ -270,7 +270,7 @@ class Repricing(unittest.TestCase):
         found = repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 7))
 
         self.assertIsNotNone(found)
-        self.assertEqual(found[0].value, 2455.56)
+        self.assertEqual(found[0].value, 2485.00)
 
     def test_the_price_date_comes_back_with_it(self) -> None:
         """Both halves age separately, so both have to be reportable."""
@@ -284,7 +284,7 @@ class Repricing(unittest.TestCase):
         prices = daily_closes(payload=_payload())
         found = repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 7))
 
-        self.assertEqual(found[0].units, 123.519)
+        self.assertEqual(found[0].units, 125.000)
 
     def test_everything_else_survives(self) -> None:
         """A reprice must not quietly drop the cost basis it did not compute."""
@@ -292,14 +292,14 @@ class Repricing(unittest.TestCase):
         found = repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 7))
 
         self.assertEqual(found[0].symbol, "SWPPX")
-        self.assertEqual(found[0].cost_basis, 2237.74)
+        self.assertEqual(found[0].cost_basis, 2500.00)
 
     def test_a_new_price_moves_the_value(self) -> None:
         prices = daily_closes(payload=_payload())
         found = repriced(holding=self._swppx(), prices=prices, day=dt.date(2026, 8, 5))
 
         self.assertEqual(found[0].price, 19.91)
-        self.assertEqual(found[0].value, 2459.26)
+        self.assertEqual(found[0].value, 2488.75)
 
     def test_the_original_is_untouched(self) -> None:
         """Holding is frozen; repricing returns a new one."""
