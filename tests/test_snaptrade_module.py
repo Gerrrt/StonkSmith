@@ -1257,9 +1257,9 @@ class InstrumentPositionTests(unittest.TestCase):
             "currency": "USD",
             "exchange": "XNAS",
         },
-        "units": "8.93",
-        "price": "213.32",
-        "cost_basis": "181.91",
+        "units": "10.00",
+        "price": "200.00",
+        "cost_basis": "170.00",
         "currency": "USD",
         "cash_equivalent": False,
     }
@@ -1288,16 +1288,16 @@ class InstrumentPositionTests(unittest.TestCase):
         # Units and price arrive as strings from this endpoint.
         holding = position_holding(position=self.FSKAX)
 
-        self.assertEqual(holding.units, 8.93)
-        self.assertEqual(holding.price, 213.32)
-        self.assertAlmostEqual(holding.value or 0, 1904.95, places=2)
+        self.assertEqual(holding.units, 10.00)
+        self.assertEqual(holding.price, 200.00)
+        self.assertAlmostEqual(holding.value or 0, 2000.00, places=2)
 
     def test_cost_basis_is_per_unit_despite_the_name(self) -> None:
-        # 181.91 against a 213.32 price is an average purchase price, not what
+        # 170.00 against a 200.00 price is an average purchase price, not what
         # the whole position cost. Storing it as-is would understate the basis
         # by a factor of the unit count.
         self.assertAlmostEqual(
-            position_holding(position=self.FSKAX).cost_basis or 0, 1624.46, places=2
+            position_holding(position=self.FSKAX).cost_basis or 0, 1700.00, places=2
         )
 
     def test_a_cash_like_instrument_maps_the_same_way(self) -> None:

@@ -32,10 +32,13 @@ from pathlib import Path
 #: amounts, unit counts, family names, employer and account number that were
 #: removed from the tree. Numbers are hashed as written without separators;
 #: words are hashed lower-cased.
+#: sha256, first sixteen hex characters, of each scrubbed literal: the real
+#: amounts, unit counts, family names, employer and account number that were
+#: removed from the tree. Numbers are hashed as written without separators;
+#: words are hashed lower-cased.
 HASHES: frozenset[str] = frozenset(
     {
         "01d7a0fbfd9da5f3",
-        "63780c958d017bb1",
         "01e7b98d248b0d8c",
         "08a11c6d4d712884",
         "0aba65d5d096f5f7",
@@ -44,11 +47,14 @@ HASHES: frozenset[str] = frozenset(
         "1971aa6509c97535",
         "28eed3f355b0cddc",
         "2bc1cda22d25f0cc",
+        "30674e39cbffa062",
         "337f0f77bfab0cee",
         "3de6875640b5fe3e",
+        "4430775eac6b7f78",
         "45f9f30ab2ab1262",
         "530eab41e8ba99ce",
         "554c6ead0415077d",
+        "63780c958d017bb1",
         "6d3c1dedfe523392",
         "7257f4e6aae6f389",
         "77b5a3b4f8d68ebc",
@@ -59,6 +65,7 @@ HASHES: frozenset[str] = frozenset(
         "8e3c09d810b191e2",
         "8fa5cfee5873bba5",
         "986231da67a5a276",
+        "986e17fa4d364206",
         "9962a89c72cd01a7",
         "9d8f1cef12f0d058",
         "9e1793a75f7dbb31",
@@ -70,6 +77,7 @@ HASHES: frozenset[str] = frozenset(
         "b96aa2766ed1a84d",
         "be79b22979691c91",
         "c06333245c366d22",
+        "c08435a895d93a97",
         "c3148e853205e511",
         "ca3b05eb6af1293a",
         "cdcdba4575077f6e",
@@ -79,8 +87,44 @@ HASHES: frozenset[str] = frozenset(
         "ed086d23252b60d9",
         "f2ab3d1d1f22e208",
         "f7f33e9b6d966936",
+        "f995a1cee69919f0",
         "fabb00107f5e2482",
         "fde6b16e142f259c",
+    }
+)
+
+#: The same amounts written without cents, checked only against figures the
+#: text groups with separators. A bare digit run cannot be trusted for these:
+#: "24.6710" is a published fund price and contains "6710", which is also an
+#: account balance that was scrubbed. One is a leak and one is a coincidence,
+#: and only the comma tells them apart.
+AMOUNTS: frozenset[str] = frozenset(
+    {
+        "0adf361d5464132e",
+        "0bab82e57d7d4333",
+        "1f87635aff05d8cf",
+        "267dab634f08cce7",
+        "2c1f3f5f6523af84",
+        "3ea77fc339263dd3",
+        "41b241da37235677",
+        "42b4fb473bacce2d",
+        "4458fdbe322e2b97",
+        "49fdfc988e29f9ff",
+        "525cfd02ce6f836c",
+        "530f967e2a24e5ab",
+        "533099ac357e5586",
+        "58070c528ac8e387",
+        "66bcc9be3a5a1be4",
+        "726ec906a90da1f1",
+        "7a98c22ae38c33c9",
+        "7e62ce15499878ca",
+        "7f6876b4d50d8f82",
+        "857770863b781856",
+        "8e2937f1645ff833",
+        "90bbc9533a02213f",
+        "c68a66c5c914b0c5",
+        "dd94edf8b08f16a4",
+        "e8ff748e5a934745",
     }
 )
 
@@ -109,6 +153,13 @@ EXEMPT: frozenset[str] = frozenset(
 #: here -- everything is hashed and only an exact hit is reported -- while
 #: under-matching is a guard that passes on the thing it was written for.
 NUMBER: re.Pattern[str] = re.compile(pattern=r"\d[\d,]*\.\d+")
+
+#: A whole-dollar amount written with separators. TOKEN cannot see one --
+#: the commas break "45,000" into runs too short to match -- and NUMBER wants
+#: a decimal point, so a figure quoted without cents fell between them. That
+#: is how amounts are written in prose, which is where they get pasted.
+GROUPED: re.Pattern[str] = re.compile(pattern=r"\d{1,3}(?:,\d{3})+")
+
 TOKEN: re.Pattern[str] = re.compile(pattern=r"[A-Za-z0-9]{4,}")
 
 
@@ -194,10 +245,17 @@ class TheTreeCarriesNobodysRealFigures(unittest.TestCase):
                 tokens = [m.replace(",", "") for m in NUMBER.findall(line)]
                 tokens += [m.lower() for m in TOKEN.findall(line)]
 
+                grouped = [m.replace(",", "") for m in GROUPED.findall(line)]
+
                 found.extend(
                     f"{path.relative_to(root())}:{number} carries {token!r}"
                     for token in tokens
                     if digest(token=token) in HASHES
+                )
+                found.extend(
+                    f"{path.relative_to(root())}:{number} carries {token!r}"
+                    for token in grouped
+                    if digest(token=token) in AMOUNTS
                 )
 
         self.assertEqual(

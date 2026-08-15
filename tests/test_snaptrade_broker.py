@@ -404,8 +404,8 @@ class FetchPositionsTests(unittest.TestCase):
 
     POSITION: ClassVar[dict[str, Any]] = {
         "instrument": {"symbol": "FSKAX"},
-        "units": "8.93",
-        "price": "213.32",
+        "units": "10.00",
+        "price": "200.00",
     }
 
     def test_the_positions_envelope_is_unwrapped(self) -> None:

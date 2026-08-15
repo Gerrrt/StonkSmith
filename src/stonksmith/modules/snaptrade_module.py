@@ -202,8 +202,8 @@ def position_holding(position: dict[str, Any]) -> Holding:
     against any payload still using the old names, which is worse than the error
     that shape mismatch used to raise: an empty row is written and looks real.
 
-    ``cost_basis`` is per unit despite the name -- 8.93 units of FSKAX report
-    213.32 as ``price`` and 181.91 as ``cost_basis`` -- so what the position cost
+    ``cost_basis`` is per unit despite the name -- 10.00 units of FSKAX report
+    200.00 as ``price`` and 170.00 as ``cost_basis`` -- so what the position cost
     is still that times the units. Missing either leaves it None rather than
     guessing a zero.
     :param position: One position as returned by SnapTrade
