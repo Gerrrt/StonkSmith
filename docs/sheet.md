@@ -5,12 +5,13 @@ to be constructed rather than read.
 
 **This is a reference chapter, not a record.** It describes the sheet as it is
 today. [`live-verification.md`](live-verification.md) is the record of which of
-these tabs a live run has read back against a real spreadsheet, and which three
-claims *about the sheet* are still open — a broker with the transaction volume to
-put the question, a workspace whose brokers scraped on different days, and a run
-of `verify tabs` since the allocation blocks acquired a check that reads them.
-That file also carries a gap that is not about the sheet: the `fidelity` broker
-has never been run against the real thing at all.
+these tabs a live run has read back against a real spreadsheet, and one claim
+*about the sheet* is still open — a broker with the transaction volume to put the
+question of whether the `Transactions` tab windows. The other two closed on
+2026-08-15: the allocation blocks were read back by `verify tabs`, and the
+carried series was walked across nine dates on a workspace whose brokers really
+had reported on different days. That file also carries a gap that is not about the
+sheet: the `fidelity` broker has never been run against the real thing at all.
 
 Every row here is rendered from the databases described in
 [`database.md`](database.md). The sheet holds nothing the databases do not.
