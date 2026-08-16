@@ -33,6 +33,14 @@ class DatabaseNavigator(BrokerNavigator):
         super().__init__(main_menu, database, broker_name)
 
         # The inherited intro advertises `add creds`, which does nothing here.
+        #
+        # Replacing it wholesale rather than editing one line is what dropped
+        # both delete commands from this broker, which inherits do_delete and
+        # runs them perfectly well. They are listed below. `delete creds` is the
+        # one deliberately left out: the line above it already says there are no
+        # credentials here, so offering to delete one advertises a no-op.
+        # tests/test_shell_advertises_what_it_runs.py holds this list to
+        # DELETERS, and names that omission as the single exception.
         self.intro = (
             f"\n[*] {broker_name}:\n"
             "    show accounts            the accounts across every connection\n"
@@ -45,6 +53,8 @@ class DatabaseNavigator(BrokerNavigator):
             "    export <category> <file> also accounts, snapshots, holdings,\n"
             "                             transactions or deltas -- the whole\n"
             "                             table, however long, unlike show\n"
+            "    delete snapshot <id>     remove one wrong mark and its holdings\n"
+            "    delete account <id>      remove an account and all its history\n"
             "    broker <name>            switch straight to another broker\n"
             "    brokers                  leave and list the available brokers\n"
             "    back                     return to the broker list\n"
