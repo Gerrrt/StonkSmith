@@ -56,11 +56,22 @@ and the getter is `get_account_costs()` for an option called `cost_basis` — a
 grep for a name that does not exist returns the same silence as a setting that
 is genuinely absent, which is how the mistake above compounds.
 
-## The config holds secrets, so do not print it wholesale
+## The config holds account data, so do not print it wholesale
 
-`[SNAPTRADE] clientId` is in there, and the file is owner-only for that reason.
-When answering a question about one setting, print that setting — not the
-section, and never the file.
+Not credentials — `get_snaptrade_client_id()` says outright that the client id is
+**not** a secret, and the consumer key it pairs with lives in the OS keyring
+rather than here.
+
+What the file carries is the portfolio: `[ACCOUNTS] cost_basis` states dollar
+figures, `[ACCOUNTS] aliases` and `[SNAPTRADE] exclude_accounts` carry account
+and beneficiary names, `[MANUAL] accounts` and `[TSP] units` carry holdings. It
+is `-rw-------` for that reason, on the same reasoning as the databases and the
+rendered brief.
+
+Note where that lands: it is the same list-valued options the section above sends
+you to read. So read one option and print that option — not the section, and
+never the file. `test_no_operator_figures.py` exists because these values reached
+a public repository once already.
 
 ## `0 accounts` in a database is not always a failure
 
