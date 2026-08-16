@@ -1975,6 +1975,33 @@ question is one where a broker has been dead for a month, which is a condition t
 rather than a run to make. The row is settled on what the checks ask; this is the part it
 does not reach.
 
+**Checked again on 2026-08-16, and it still cannot be put.**
+
+```bash
+uv run stonksmithdb stale 30
+```
+
+```
+[*] Freshness in 'default': 12 accounts, nothing older than 2026-07-17 (30 days).
+[+] 0 of 12 accounts are stale.
+```
+
+Twelve accounts and none past thirty days — nor past seven, which is the dashboard's own
+question and the tighter one: bare `stale` reports the same zero against a 2026-08-09
+cutoff. The six brokers' newest readings are two and three days old, and the oldest reading
+anywhere in the workspace is 2026-08-02, so the whole history is fourteen days long. (`stale`
+reads databases and nothing else — no login, no Sheets, no network — though opening one
+applies any pending migrations, so even this read can upgrade a file on disk.)
+
+**The arithmetic is worth writing down rather than re-deriving.** An expiry needs both
+halves: a broker silent for thirty-one days *and* an axis that reaches past it. The axis
+holds only dates something was read on, so a broker that stops takes the second half with it
+unless the others keep running. The earliest date this workspace could therefore show an
+expiry is 2026-09-13 — and only if a broker stops today while the rest carry on. All six ran
+within the last three days, so the real date is later than that. Fidelity is still not the
+candidate it looks like: no snapshots at all, so it never enters the series and has nothing
+to expire.
+
 ---
 
 ## Every broker: two runs, two snapshots, one account
