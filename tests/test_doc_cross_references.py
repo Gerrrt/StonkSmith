@@ -39,11 +39,17 @@ REPO = Path(__file__).resolve().parent.parent
 #: SECURITY.md and CONTRIBUTING.md are in for the same reason: both cite src/
 #: paths and README sections heavily, and a security document pointing at a file
 #: that has moved is worse than one that says less.
+#:
+#: CLAUDE.md too, and it is the one most exposed to this: it exists to correct
+#: mistakes made while reading the tree, so it names getters, options and doc
+#: sections rather than describing them. A pointer that has gone stale there
+#: sends the next reader back to the mistake the file was written to prevent.
 SOURCES: tuple[Path, ...] = (
     REPO / "README.md",
     REPO / "SECURITY.md",
     REPO / "CONTRIBUTING.md",
     REPO / "CHANGELOG.md",
+    REPO / "CLAUDE.md",
     *sorted((REPO / "docs").glob("*.md")),
 )
 
