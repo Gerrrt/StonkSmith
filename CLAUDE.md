@@ -36,19 +36,25 @@ c.read(pathlib.Path.home() / '.stonksmith/stonksmith.conf')
 print(repr(c.get('SNAPTRADE', 'exclude_accounts', fallback='')))"
 ```
 
-Better still, call the getter in `stonksmith.etc.config` — each returns the
-parsed list, already stripped of blank lines:
+Better still, call the getter in `stonksmith.etc.config`. Each splits the value
+on newlines and drops blank lines for you, but they do **not** share a return
+type — read the annotation rather than assuming a list:
 
-| Option | Getter |
-| --- | --- |
-| `[SNAPTRADE] exclude_accounts` | `get_snaptrade_excluded_accounts()` |
-| `[ACCOUNTS] aliases` | `get_account_aliases()` |
-| `[ACCOUNTS] cost_basis` | `get_account_costs()` |
-| `[ACCOUNTS] colors` | `get_account_colors()` |
-| `[ALLOCATION] asset_classes` | `get_asset_classes()` |
-| `[ALLOCATION] targets` | `get_allocation_targets()` |
-| `[FEES] expense_ratios` | `get_expense_ratios()` |
-| `[MANUAL] accounts` | `get_manual_accounts()` |
+| Option | Getter | Returns |
+| --- | --- | --- |
+| `[SNAPTRADE] exclude_accounts` | `get_snaptrade_excluded_accounts()` | `list[str]` |
+| `[ACCOUNTS] aliases` | `get_account_aliases()` | `dict[str, str]` |
+| `[ACCOUNTS] cost_basis` | `get_account_costs()` | `tuple[dict[str, float], list[str]]` |
+| `[ACCOUNTS] colors` | `get_account_colors()` | `tuple[list[tuple[str, str]], list[str]]` |
+| `[ALLOCATION] asset_classes` | `get_asset_classes()` | `dict[str, str]` |
+| `[ALLOCATION] targets` | `get_allocation_targets()` | `tuple[dict[str, float], list[str]]` |
+| `[FEES] expense_ratios` | `get_expense_ratios()` | `tuple[dict[str, float], list[str]]` |
+| `[MANUAL] accounts` | `get_manual_accounts()` | `tuple[list[ManualHolding], list[str]]` |
+
+Only one of the eight returns a plain list. Five return a pair, and **the second
+element is the lines that would not parse** — refusals are returned rather than
+raised, so a caller that unpacks only the first half silently discards the
+report of what the operator got wrong.
 
 Option and getter names are worth reading off the source rather than guessing.
 The aliases setting is `[ACCOUNTS] aliases`, not `[SNAPTRADE] account_aliases`,
