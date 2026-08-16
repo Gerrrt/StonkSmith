@@ -28,10 +28,11 @@ check on having typed the id from the right row.
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from keyring_isolation import MemoryKeyringMixin
 from stonksmith.etc.broker_db import BrokerDatabase
-from stonksmith.etc.broker_nav import DELETERS
+from stonksmith.etc.broker_nav import DELETERS, BrokerNavigator
 from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.etc.records import AccountIdentity, Holding, Transaction
 
@@ -151,6 +152,90 @@ class TheShellOffersIt(unittest.TestCase):
         # there, and neither substitutes for the other.
         self.assertIn("snapshot", DELETERS)
         self.assertIn("creds", DELETERS)
+
+
+class TheShellSaysWhatItTook(unittest.TestCase):
+    """The command, driven the way an operator drives it.
+
+    Everything above tests the database. The branch that turns its return value
+    into words -- the two-tuple unpack, the name and count, and the reminder
+    that this deletion is only half an operation -- had nothing on it at all, so
+    the entire safety story rested on code no test ran.
+    """
+
+    def setUp(self) -> None:
+        self.db = MagicMock()
+
+        # A bare MagicMock is truthy and unpacks to nothing, so the branch would
+        # raise ValueError rather than report. Stating the return here is also
+        # what lets the assertions below be about the words rather than the id.
+        self.db.delete_account.return_value = ("Sam 529 Plan", 4)
+
+        self.nav = BrokerNavigator(
+            main_menu=MagicMock(), database=self.db, broker_name="snaptrade"
+        )
+
+    def _said(self, line: str) -> tuple[str, str]:
+        """(what it reported, what it warned) for one `delete`."""
+
+        with patch("stonksmith.etc.broker_nav.stonksmith_logger") as log:
+            self.nav.do_delete(line)
+
+        return str(object=log.success.call_args), str(object=log.highlight.call_args)
+
+    def test_an_account_id_reaches_the_database(self) -> None:
+        self.nav.do_delete("account 7")
+
+        self.db.delete_account.assert_called_once_with(account_id=7)
+
+    def test_it_is_not_routed_to_either_narrow_deletion(self) -> None:
+        # The three live in one command and take the same-looking argument.
+        # Deleting credential 7, or snapshot 7, because the operator asked to
+        # delete account 7 is unrecoverable in the same way the account is.
+        self.nav.do_delete("account 7")
+
+        self.db.delete_snapshot.assert_not_called()
+        self.db.delete_credential.assert_not_called()
+
+    def test_it_reports_the_name_and_the_count_not_just_the_id(self) -> None:
+        # An operator who typed the id from the wrong row of `show accounts`
+        # finds out here or not at all: it cascades and there is no undo.
+        reported, _ = self._said("account 7")
+
+        self.assertIn("Sam 529 Plan", reported)
+        self.assertIn("4", reported)
+
+    def test_it_warns_that_the_account_comes_back(self) -> None:
+        # The deletion sticks only if the source has been made to stop reporting
+        # the account. Printed every time rather than documented once, because
+        # the failure mode is a row that looks removed and is back by morning.
+        _, warned = self._said("account 7")
+
+        self.assertIn("coming back", warned)
+        self.assertIn("exclude_accounts", warned)
+
+    def test_a_snapshot_deletion_carries_no_such_warning(self) -> None:
+        # `delete snapshot` does not have that failure mode -- the next sync
+        # writes a row beside the removed one, it does not restore it. A warning
+        # printed on both would stop being read on either.
+        self.db.delete_snapshot.return_value = True
+
+        with patch("stonksmith.etc.broker_nav.stonksmith_logger") as log:
+            self.nav.do_delete("snapshot 12")
+
+        log.highlight.assert_not_called()
+
+    def test_an_unknown_id_is_reported_rather_than_unpacked(self) -> None:
+        # None, not a tuple. Unpacking it would raise out of a cmd loop that
+        # catches nothing, so the miss has to be caught before the name is read.
+        self.db.delete_account.return_value = None
+
+        with patch("stonksmith.etc.broker_nav.stonksmith_logger") as log:
+            self.nav.do_delete("account 9999")
+
+        self.assertIn("No account with id 9999", str(object=log.fail.call_args))
+        log.success.assert_not_called()
+        log.highlight.assert_not_called()
 
 
 if __name__ == "__main__":

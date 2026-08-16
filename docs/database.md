@@ -21,9 +21,11 @@ uv run stonksmithdb
 
 Inside that shell: `broker schwab529plan`, then `add creds <username>`,
 `show creds`, `show accounts`, `export creds <file>`, `delete creds <id>`,
-`delete snapshot <id>`, `back`, `exit`.
+`delete snapshot <id>`, `delete account <id>`, `back`, `exit`.
 SnapTrade stores no credentials there; its keys live in the config file and the
-keyring, so `add creds` points at the setup script instead.
+keyring, so `add creds` points at the setup script instead — and its own shell
+lists `delete snapshot` and `delete account` but not `delete creds`, for the
+same reason.
 
 At the top level, three commands read the workspace rather than a broker:
 `sheet` rewrites the Google Sheet from these databases, `verify [tabs|guard]`
@@ -68,6 +70,7 @@ show transactions [<account>]  recorded movements
 show deltas                    the change between consecutive snapshots
 export <category> <file>       any of the above, as CSV — all of it
 delete snapshot <snapshot id>  remove one wrong mark and its holdings
+delete account <account id>    remove an account and everything under it
 ```
 
 **`show` is a screenful; `export` is the whole table.** `show` prints the newest
@@ -116,6 +119,23 @@ computed from mismatched inputs, stays a data point in every chart until it is
 removed. It takes one id at a time, and it leaves the account alone: deleting
 that would cascade away the real history and let the next run recreate the
 account beside itself.
+
+**`delete account` is the other question, and a broader answer.** A wrong mark
+is a good account's bad row; this is for an account that should not be in the
+database at all — the case that arises when two brokers reach the same money and
+one of them is the wrong one to be counting it. Everything under it goes:
+snapshots, the holdings behind them, and the account's transactions, through
+`ON DELETE CASCADE`. There is no undo, so it reports the account by name and
+says how many snapshots it took, which is the only check on having typed the id
+from the right row of `show accounts`.
+
+It is also only ever half of an operation. **The next sync recreates any account
+its broker still returns**, so the source has to be made to stop reporting it
+first — for SnapTrade that is `[SNAPTRADE] exclude_accounts`. Delete first and
+the account is back by morning, which is why the shell prints that caveat on
+every deletion rather than leaving it here. See
+[*Neither remedy touches what is already on disk*](brokers.md#neither-remedy-touches-what-is-already-on-disk)
+for the procedure and when to reach for it.
 
 Google Sheets is a view of this, not the other way round. Each tab is cleared
 and rewritten from what the database holds, so what you see there is what

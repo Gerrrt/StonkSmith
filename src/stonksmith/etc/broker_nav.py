@@ -276,6 +276,7 @@ class BrokerNavigator(cmd.Cmd):
             "                             table, however long, unlike show\n"
             "    delete creds <id>        remove a credential\n"
             "    delete snapshot <id>     remove one wrong mark and its holdings\n"
+            "    delete account <id>      remove an account and all its history\n"
             "    broker <name>            switch straight to another broker\n"
             "    brokers                  leave and list the available brokers\n"
             "    back                     return to the broker list\n"
@@ -442,9 +443,12 @@ class BrokerNavigator(cmd.Cmd):
         stonksmith_logger.success(
             msg=f"Deleted account {row_id} ({name}) and {marks} snapshot(s)"
         )
+        # No leading indent on the message: highlight() renders its own, so the
+        # four spaces this used to carry were a second one, and the wrapped
+        # continuation returned to column zero regardless.
         stonksmith_logger.highlight(
             msg=(
-                "    This does not stop the account coming back. The next sync "
+                "This does not stop the account coming back. The next sync "
                 "recreates whatever its broker still reports -- for SnapTrade, "
                 "add it to [SNAPTRADE] exclude_accounts first."
             )

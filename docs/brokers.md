@@ -432,7 +432,8 @@ So both halves of the advice above have a second step:
 - **`exclude_accounts` is not retroactive.** An account SnapTrade synced before
   the line was added keeps the rows from those runs. The exclusion is honoured
   from then on, which reads exactly like the problem being solved while the old
-  rows go on being counted.
+  rows go on being counted. `delete account <id>` is the second half of that,
+  and the order matters — see below.
 
 Retiring a broker properly means taking its database out of the workspace. Move
 it rather than deleting it — it is the only copy of that history:
@@ -498,10 +499,37 @@ they were the same five: nothing had refreshed them since the broker stopped
 running, which is what retiring a broker without retiring its data looks like
 from the outside.
 
-There is no equivalent for a single stranded account, because nothing removes an
-account and its snapshots from a database that is otherwise still in use;
-`delete snapshot <id>` takes one mark at a time. An account excluded after it was
-already synced is the case with no clean answer today.
+**A single stranded account is a smaller move, and it takes two steps.** Moving
+the database out is right when a whole broker is being retired; it is the wrong
+shape for one account inside a file whose other accounts are all still syncing
+into it correctly. For that:
+
+1. **Stop the source reporting it** — for SnapTrade, the `exclude_accounts` line
+   above. This is what makes the second step stick.
+2. **Remove what the earlier runs wrote**, in `stonksmithdb` under
+   `broker <name>`, with the id read off `show accounts`:
+
+```text
+stonksmithdb (snaptrade) > delete account 1
+    [+] Deleted account 1 (Schwab - Beneficiary A 529 Plan) and 31 snapshot(s)
+    [!] This does not stop the account coming back. The next sync recreates
+whatever its broker still reports -- for SnapTrade, add it to [SNAPTRADE]
+exclude_accounts first.
+```
+
+(Representative figures, not a real account.)
+
+**The order is the whole of it.** Delete without excluding first and the next
+sync returns the account under a fresh id, so the deletion has cost you its
+history and changed nothing. That is why the command prints the warning on every
+run rather than trusting this page to have been read — and it is why accounts
+were not deletable for so long. The original refusal was that the next run would
+recreate them, which is still true of every account a broker is still returning.
+`exclude_accounts` is what makes one account an exception to it.
+
+It reports by name and counts what it took because it cascades: the account's
+snapshots, the holdings behind them and its transactions all go, and there is no
+undo. Read the name back before believing you typed the right id.
 
 **This setting is permanent, not a workaround.** The reasonable-sounding hope is
 that a single reader over all the databases would make it unnecessary — that it

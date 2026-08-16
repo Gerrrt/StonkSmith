@@ -1190,8 +1190,17 @@ no reach into what a previous sync wrote, and nothing at the portfolio layer fil
 anything, because `load_workspace()` reads every database in the workspace. So an
 overlap resolved after the fact stays double-counted, and reads exactly like an overlap
 that was resolved. [`brokers.md`](brokers.md#neither-remedy-touches-what-is-already-on-disk)
-carries the consequence and what to do instead; there is no clean fix for a single
-stranded account today.
+carries the consequence and what to do instead.
+
+The row stays settled the other way, because it is a claim about `exclude_accounts`
+and that has not changed. What has is that the stranded rows are now removable:
+`delete account <id>` in the broker sub-shell takes the account and cascades its
+snapshots, holdings and transactions away. It is the second half of an operation
+whose first half is the exclusion — the deletion only sticks because the source
+has been made to stop reporting the account — so it settles the consequence
+rather than this row. Nothing here has been run against the real `snaptrade.db`,
+so no claim is opened for it; the command's own behaviour is covered by
+`tests/test_delete_account.py` against a real SQLite file.
 
 Two rows stay `No`, and neither is waiting on effort. A disabled connection needs a
 connection to actually lapse — SnapTrade goes on serving its last cached balance rather
