@@ -213,6 +213,16 @@ the two disagree.
   `pyproject.toml` and fails if either the bullet or the comment above the
   setting disagrees with it. The instruction to keep them in step was the only
   thing holding them together, and an instruction is not a mechanism.
+- **The coverage floor raised from 87 to 89**, the measured baseline of 89.57%
+  rounded down. `CONTRIBUTING.md` has always said to raise it when the real
+  number moves; the baseline had climbed 1.9 points since the floor was set, so
+  the ratchet had two and a half points of slack in it and coverage could have
+  fallen that far without a red build. The floor is stated in four files — both
+  workflows run it, and `CONTRIBUTING.md` and `README.md` quote the gates for a
+  contributor to paste — so `tests/test_the_coverage_floor_is_one_number.py`
+  now reads all four and fails if they disagree, and checks the baseline in
+  `ci.yml`'s comment against the floor derived from it. The markdown copies are
+  the ones worth a mechanism: they look executable, and nothing ran them.
 
 ## [0.1.1] - 2026-08-12
 
