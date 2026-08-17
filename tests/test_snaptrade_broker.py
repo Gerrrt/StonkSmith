@@ -15,7 +15,7 @@ import datetime
 import importlib.util
 import logging
 import unittest
-from argparse import Namespace
+from argparse import ArgumentTypeError, Namespace
 from typing import Any, ClassVar
 
 import keyring
@@ -95,6 +95,7 @@ class _FakeClient:
         self.activities: list[dict[str, Any]] = []
         self.activity_calls: list[dict[str, Any]] = []
         self.page_size = 2
+        self.omit_pagination = False
         self.connections = self._Connections(self)
         self.account_information = self._Accounts(self)
 
@@ -135,7 +136,17 @@ class _FakeClient:
             # and the envelope says how many there are in total.
             self.outer.activity_calls.append(dict(kwargs))
             offset = int(kwargs.get("offset") or 0)
-            page = self.outer.activities[offset : offset + self.outer.page_size]
+            # The real endpoint honours limit, so the fake has to: a page size
+            # the server ignored would make the caller's own arithmetic agree
+            # with itself while the wire disagreed.
+            size = int(kwargs["limit"]) if kwargs.get("limit") else self.outer.page_size
+            page = self.outer.activities[offset : offset + size]
+
+            if self.outer.omit_pagination:
+                # Some SDK versions unwrap the envelope, which as_page_rows
+                # tolerates and which leaves the loop with no total to read.
+                return {"data": page}
+
             return {
                 "data": page,
                 "pagination": {"offset": offset, "total": len(self.outer.activities)},
@@ -500,11 +511,22 @@ class FetchActivitiesTests(unittest.TestCase):
         self.client = _FakeClient()
         self.broker.client = self.client
 
-    def _fetch(self) -> list[dict[str, Any]]:
+        self.capture = _CaptureHandler()
+        self.logger = logging.getLogger("stonksmith")
+        self.logger.addHandler(self.capture)
+        self.previous_level = self.logger.level
+        self.logger.setLevel(logging.ERROR)
+
+    def tearDown(self) -> None:
+        self.logger.removeHandler(self.capture)
+        self.logger.setLevel(self.previous_level)
+
+    def _fetch(self, **kwargs: Any) -> list[dict[str, Any]]:
         return self.broker.fetch_activities(
             account_id="acct-1",
             start_date=datetime.date(2025, 10, 1),
             end_date=datetime.date(2025, 12, 31),
+            **kwargs,
         )
 
     def test_every_page_is_followed(self) -> None:
@@ -560,6 +582,172 @@ class FetchActivitiesTests(unittest.TestCase):
         )
 
         self.assertEqual(len(rows), 3)
+
+    def test_the_cap_says_it_stopped_short(self) -> None:
+        # "An infinite loop against a paid API is worse than a short read that
+        # says so" -- said by the docstring, and for a while by nothing else.
+        # A capped read and a complete one are identical from the return value.
+        self.client.activities = [{"id": str(object=n)} for n in range(10)]
+        self.client.page_size = 1
+
+        self._fetch(page_limit=3)
+
+        self.assertTrue(
+            any("3-page cap" in message for message in self.capture.messages),
+            f"the capped read said nothing: {self.capture.messages}",
+        )
+
+    def test_a_complete_read_says_nothing(self) -> None:
+        self.client.activities = [{"id": str(object=n)} for n in range(3)]
+        self.client.page_size = 1
+
+        self._fetch(page_limit=20)
+
+        self.assertEqual(self.capture.messages, [])
+
+
+class ActivityPageSizeTests(unittest.TestCase):
+    """The page size is what makes the loop above it reachable at all.
+
+    SnapTrade serves a thousand transactions to a request. No account in this
+    workspace holds a thousand, so `fetch_activities` had exactly one page to
+    follow on every real run it has ever made, and the follow-to-exhaustion loop
+    was exercised only against the fake client above -- which is the evidence
+    docs/live-verification.md opens by saying does not count.
+
+    Asking for small pages is what lets the real loop run. These pin the two
+    halves of that: the size has to reach the wire, and it must not be sent when
+    nobody asked, so an ordinary run keeps making the request it always made.
+
+    The third test here is the one that found something. With a page size asked
+    for, the old termination condition -- break as soon as no `total` comes back
+    -- stops on a *full* page and drops everything after it. That shape is real:
+    as_page_rows exists because some SDK versions unwrap the envelope, and an
+    unwrapped envelope carries no total.
+    """
+
+    def setUp(self) -> None:
+        module = _load_broker_module()
+        self.broker = module.SnapTradeBroker()
+        self.client = _FakeClient()
+        self.broker.client = self.client
+
+    def _fetch(self, **kwargs: Any) -> list[dict[str, Any]]:
+        return self.broker.fetch_activities(
+            account_id="acct-1",
+            start_date=datetime.date(2025, 10, 1),
+            end_date=datetime.date(2025, 12, 31),
+            **kwargs,
+        )
+
+    def test_the_page_size_reaches_the_wire(self) -> None:
+        self.client.activities = [{"id": str(object=n)} for n in range(6)]
+
+        self._fetch(page_size=2)
+
+        self.assertEqual(
+            [call["limit"] for call in self.client.activity_calls], [2, 2, 2]
+        )
+
+    def test_no_page_size_sends_no_limit(self) -> None:
+        # Omitted, not defaulted: the server's own default is a thousand, and
+        # naming a number here would quietly become this project's opinion.
+        self.client.activities = [{"id": "0"}]
+
+        self._fetch()
+
+        self.assertNotIn("limit", self.client.activity_calls[0])
+
+    def test_the_page_size_is_what_pages_the_read(self) -> None:
+        self.client.activities = [{"id": str(object=n)} for n in range(5)]
+        # Deliberately unlike the fake's own page size, so a read that ignored
+        # the argument would page differently and be caught.
+        self.client.page_size = 5
+
+        rows = self._fetch(page_size=1)
+
+        self.assertEqual([row["id"] for row in rows], ["0", "1", "2", "3", "4"])
+        self.assertEqual(len(self.client.activity_calls), 5)
+
+    def test_a_full_page_with_no_total_keeps_going(self) -> None:
+        self.client.activities = [{"id": str(object=n)} for n in range(5)]
+        self.client.omit_pagination = True
+
+        rows = self._fetch(page_size=2)
+
+        self.assertEqual([row["id"] for row in rows], ["0", "1", "2", "3", "4"])
+
+    def test_a_short_page_with_no_total_stops(self) -> None:
+        self.client.activities = [{"id": str(object=n)} for n in range(3)]
+        self.client.omit_pagination = True
+
+        self._fetch(page_size=2)
+
+        # Two full rows, then one short page. A third request would be asking
+        # for rows the server has already said it has run out of.
+        self.assertEqual(len(self.client.activity_calls), 2)
+
+    def test_no_total_and_no_page_size_still_stops_at_one_page(self) -> None:
+        # Unchanged from before the page size existed. With no size asked for,
+        # one response is the whole answer and there is no full-page signal to
+        # read, so a second request would loop to the cap on every run.
+        self.client.activities = [{"id": str(object=n)} for n in range(5)]
+        self.client.omit_pagination = True
+
+        self._fetch()
+
+        self.assertEqual(len(self.client.activity_calls), 1)
+
+
+class PageSizeValidationTests(unittest.TestCase):
+    """A page size below 1 is refused where the operator can still read it.
+
+    Zero is the case that made this worth a guard rather than a docstring. It
+    does not fail loudly: it passes `page_size is not None`, so `limit=0` goes to
+    the wire, and the short-page test that ends a read carrying no total --
+    `len(rows) < page_size` -- can never be true against it, so that read follows
+    pages until the cap stops it. The operator sees a run that took twenty
+    requests and returned a truncated answer, with nothing naming the cause.
+
+    Rejected at the parser rather than inside fetch_activities on purpose. The
+    module wraps that call in `except Exception` and reports "Could not read
+    transactions ... Its balance is still recorded", which is the right posture
+    for a brokerage that failed and the wrong one for a flag that was typed
+    wrong: the run would carry on, having quietly skipped the transactions it
+    was asked to fetch.
+    """
+
+    def setUp(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "snaptrade_broker_args",
+            PACKAGE / "brokers" / "snaptrade" / "broker_args.py",
+        )
+        assert spec is not None and spec.loader is not None
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+
+    def test_a_usable_size_is_accepted(self) -> None:
+        self.assertEqual(self.module.positive_page_size("5"), 5)
+
+    def test_one_is_usable(self) -> None:
+        # The API's stated minimum, and the size that pages hardest.
+        self.assertEqual(self.module.positive_page_size("1"), 1)
+
+    def test_zero_is_refused(self) -> None:
+        with self.assertRaises(ArgumentTypeError) as caught:
+            self.module.positive_page_size("0")
+
+        self.assertIn("at least 1", str(object=caught.exception))
+
+    def test_a_negative_size_is_refused(self) -> None:
+        with self.assertRaises(ArgumentTypeError):
+            self.module.positive_page_size("-5")
+
+    def test_something_that_is_not_a_number_is_refused(self) -> None:
+        with self.assertRaises(ArgumentTypeError) as caught:
+            self.module.positive_page_size("lots")
+
+        self.assertIn("whole number", str(object=caught.exception))
 
 
 if __name__ == "__main__":

@@ -1349,6 +1349,56 @@ class InstrumentPositionTests(unittest.TestCase):
         self.assertEqual(holding.cost_basis, 0.0)
 
 
+class ActivityPageSizeTests(unittest.TestCase):
+    """--page-size has to be read here or it does nothing at all.
+
+    The argument group in broker_args.py says outright that only flags which are
+    actually consumed belong in it, because a declared-but-unread flag parses,
+    prints in --help, and silently changes nothing. This module is the only
+    consumer: the broker's fetch_activities() grew the parameter, and nobody
+    passes it unless activities() does.
+
+    It is read with getattr and a None default for the same reason history_days
+    is: a context assembled without the SnapTrade parser -- which is every other
+    broker's, and several tests' -- has no such attribute.
+    """
+
+    class _RecordingBroker:
+        broker = "SnapTrade"
+
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        def fetch_activities(self, **kwargs: Any) -> list[dict[str, Any]]:
+            self.calls.append(dict(kwargs))
+            return []
+
+    ROW: ClassVar[dict[str, str]] = {"Id": "acct-1", "Account": "Brokerage"}
+
+    def _activities(self, **args: Any) -> dict[str, Any]:
+        broker = self._RecordingBroker()
+        context = _StubContext(db=_StubDb(), history_days=90, **args)
+
+        SnapTradeModule().activities(
+            connection=broker,  # type: ignore[arg-type]
+            row=self.ROW,
+            context=context,  # type: ignore[arg-type]
+        )
+
+        return broker.calls[0]
+
+    def test_the_page_size_reaches_the_broker(self) -> None:
+        self.assertEqual(self._activities(page_size=5)["page_size"], 5)
+
+    def test_an_unset_page_size_is_passed_as_none(self) -> None:
+        self.assertIsNone(self._activities(page_size=None)["page_size"])
+
+    def test_a_context_without_the_flag_does_not_raise(self) -> None:
+        # Namespace has no page_size at all here, which is what a run through
+        # another broker's parser looks like.
+        self.assertIsNone(self._activities()["page_size"])
+
+
 class ActivityMappingTests(unittest.TestCase):
     """A SnapTrade activity becomes a transaction row."""
 

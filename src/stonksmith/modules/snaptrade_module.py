@@ -826,11 +826,16 @@ class SnapTradeModule:
 
         end: datetime.date = datetime.datetime.now(tz=datetime.UTC).date()
 
+        # None rather than a number of our own: the server's default is the one
+        # every ordinary run wants, and this flag exists to be lowered by hand.
+        page_size: int | None = getattr(context.args, "page_size", None)
+
         try:
             activities: list[dict[str, Any]] = fetch(
                 account_id=row["Id"],
                 start_date=end - datetime.timedelta(days=days),
                 end_date=end,
+                page_size=page_size,
             )
 
         except Exception as e:

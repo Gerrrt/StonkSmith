@@ -374,6 +374,7 @@ class SnapTradeBroker(ApiConnection):
         start_date: datetime.date,
         end_date: datetime.date,
         page_limit: int = 20,
+        page_size: int | None = None,
     ) -> list[dict[str, Any]]:
         """
         Transactions for one account over a bounded window.
@@ -381,13 +382,27 @@ class SnapTradeBroker(ApiConnection):
         Paginated, and followed to the end: stopping at the first page would
         silently record whichever movements happened to sort first and drop the
         rest, which is the failure mode this broker's whole module is written to
-        avoid. ``page_limit`` is a backstop against a pagination block that never
-        reports itself exhausted -- an infinite loop against a paid API is worse
-        than a short read that says so.
+        avoid.
+
+        **Two numbers here, and they are easy to read as one.** ``page_size`` is
+        how many rows to ask for per request; left unset, SnapTrade decides, and
+        its default is a thousand. ``page_limit`` is how many requests to make at
+        most -- a backstop against a pagination block that never reports itself
+        exhausted, because an infinite loop against a paid API is worse than a
+        short read that says so. The short read now says so.
+
+        ``page_size`` exists because the loop around it is otherwise unreachable.
+        A thousand rows to a request means no workspace here fills a second page,
+        so following pages to exhaustion could only ever be exercised against a
+        fake client -- which is the evidence docs/live-verification.md opens by
+        saying does not count. Asking the real API for small pages is what lets
+        the real loop run, the same move ``verify volume`` makes for the sheet.
         :param account_id: The SnapTrade account id
         :param start_date: Oldest date to ask for
         :param end_date: Newest date to ask for
         :param page_limit: How many pages to follow at most
+        :param page_size: How many rows to ask for per page, or None for the
+            server's own default
         :return: One dictionary per activity
         :rtype: list[dict[str, Any]]
         """
@@ -396,13 +411,20 @@ class SnapTradeBroker(ApiConnection):
         offset: int = 0
 
         for _ in range(page_limit):
+            request: dict[str, Any] = {
+                "account_id": account_id,
+                "start_date": start_date,
+                "end_date": end_date,
+                "offset": offset,
+            }
+
+            if page_size is not None:
+                # Omitted rather than defaulted, so an ordinary run sends the
+                # request it sent before this argument existed.
+                request["limit"] = page_size
+
             rows, pagination = as_page_rows(
-                self.client.account_information.get_account_activities(
-                    account_id=account_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    offset=offset,
-                )
+                self.client.account_information.get_account_activities(**request)
             )
 
             collected.extend(rows)
@@ -413,8 +435,28 @@ class SnapTradeBroker(ApiConnection):
             total: Any = pagination.get("total")
             offset += len(rows)
 
-            if total is None or offset >= int(total):
+            if total is not None:
+                if offset >= int(total):
+                    break
+
+            # No pagination block came back -- some SDK versions unwrap it, as
+            # as_page_rows says. With no page size asked for, one response is the
+            # whole answer and stopping is right. With one asked for, it is not:
+            # a *full* page and no total is the shape of there being more, and
+            # breaking here would drop the rest silently, which is the failure
+            # this pagination exists to prevent. A short page ends it either way.
+            elif page_size is None or len(rows) < page_size:
                 break
+
+        else:
+            self.logger.fail(
+                msg=(
+                    f"Stopped reading transactions for account {account_id} at "
+                    f"the {page_limit}-page cap. Some movements were not read; "
+                    "narrow the window with --history-days, or raise the page "
+                    "size, and run again."
+                ),
+            )
 
         return collected
 
