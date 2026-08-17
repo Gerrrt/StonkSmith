@@ -53,7 +53,7 @@ What no amount of that settles is which brokers can run with nobody watching.
 | `snaptrade` | Yes, until the connection expires | An API key, and a browser step every few weeks to renew it |
 | `schwab529plan` | Yes | Posts a form with a stored credential. No browser, no bot detection, no session to keep |
 | `ally` | `--from-prices` only, and it is not a scrape | Ally honours no restored session, so a scrape needs a human every time |
-| `fidelity` | No — replace it with SnapTrade | Browser-backed behind bot detection and 2FA |
+| `fidelity` | No — deprecated, removed in 1.0. Replace it with SnapTrade | Browser-backed behind bot detection and 2FA |
 | `manual` | Yes | Nothing to log in to. A configured unit count times a published close |
 
 The first three are the uninteresting rows, and they are uninteresting on purpose: put
