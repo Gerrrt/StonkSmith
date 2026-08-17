@@ -9,6 +9,46 @@ the two disagree.
 
 ## [Unreleased]
 
+### Added
+
+- **`--page-size` on the `snaptrade` broker**, which exists to make the
+  pagination above it reachable. `fetch_activities()` follows pages to
+  exhaustion, and SnapTrade serves a thousand transactions to a request — so no
+  account in this workspace has ever filled a second page, and that loop has
+  only ever run against the fake client in `tests/test_snaptrade_broker.py`.
+  That is precisely the evidence [`docs/live-verification.md`](docs/live-verification.md)
+  opens by saying does not count, and its own SnapTrade row says so in bold: the
+  transactions claim is settled *at one movement*, with the 20-page backstop and
+  the follow-to-exhaustion loop unexercised. Asking the real API for small pages
+  is what lets the real loop run — the same move `verify volume` makes for the
+  sheet, one release earlier, for the same reason.
+- The flag is omitted from the request rather than defaulted, so an ordinary run
+  sends the request it sent before the argument existed and the server's own
+  default keeps deciding.
+
+### Fixed
+
+- **A page size would have truncated a read that came back without a pagination
+  block.** `as_page_rows()` tolerates two shapes because some SDK versions unwrap
+  the envelope, and an unwrapped one carries no `total` — on which the loop
+  broke. That is right at the default page size, where one response is the whole
+  answer, and wrong the moment a size is asked for: a *full* page and no total is
+  the shape of there being more, so breaking there would drop the rest silently,
+  which is the exact failure the pagination exists to prevent. With a page size
+  asked for, the loop now continues on a full page and stops on a short one.
+  Verified against the live API on 2026-08-17 that the real endpoint does return
+  the envelope, `{"data": [...], "pagination": {"offset", "limit", "total"}}`, so
+  this is the defensive path rather than the ordinary one.
+- **The backstop now says it stopped short.** `page_limit` exists because "an
+  infinite loop against a paid API is worse than a short read that says so" —
+  said by the docstring, and until now by nothing else. A capped read and a
+  complete read are indistinguishable from the return value, so hitting the cap
+  logs the account and the cap and tells the operator to narrow the window.
+
+> The live run this was written for has **not** been made. The flag makes the
+> claim settleable; it does not settle it, and the row in
+> `docs/live-verification.md` is unchanged until a run happens.
+
 ## [0.3.0] - 2026-08-17
 
 ### Deprecated

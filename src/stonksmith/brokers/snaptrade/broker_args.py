@@ -80,6 +80,17 @@ def broker_args(
     )
 
     group.add_argument(
+        "--page-size",
+        type=int,
+        default=None,
+        help=(
+            "How many transactions to ask for per request (default: the "
+            "server's own, which is 1000). Lower it to make the pagination "
+            "follow real pages -- at the default no account here fills a second"
+        ),
+    )
+
+    group.add_argument(
         "--no-positions",
         action="store_true",
         help=(
