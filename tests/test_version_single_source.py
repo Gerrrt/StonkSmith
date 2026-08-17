@@ -18,6 +18,13 @@ that "the version is an identifier, not a claim about the build, and does not
 need to track releases". Wiring those to the release version would contradict a
 measured decision and make a live-verified string vary with the build -- so this
 file checks the reported version and pointedly does not check those.
+
+**A third copy lives in README.md and is not left alone.** The README quotes the
+`--help` banner, which prints both the version and the codename, so those two
+lines restate what pyproject.toml and `CODENAME` already say. Nothing compared
+them, and the comment beside `CODENAME` admitted the copy "goes stale silently";
+the transcript around them has drifted before. `BannerTests` holds those two
+lines and nothing else in that block.
 """
 
 import ast
@@ -32,6 +39,7 @@ from package_tree import PACKAGE, REPO
 from stonksmith.etc.cli import CODENAME, UNKNOWN_VERSION, get_version
 
 PYPROJECT = REPO / "pyproject.toml"
+README = REPO / "README.md"
 
 
 def declared() -> str:
@@ -95,6 +103,72 @@ class SingleSourceTests(unittest.TestCase):
         # thing left to keep in step by hand.
         self.assertTrue(CODENAME)
         self.assertNotIn(declared(), CODENAME)
+
+
+class BannerTests(unittest.TestCase):
+    """The README quotes the banner, so it holds a second copy of both facts.
+
+    Only these two lines are checked, and not the transcript around them. The
+    banner interpolates ANSI colour through ``highlight()``, so comparing what
+    the package renders would spend most of itself on escape-stripping and would
+    end up testing ``highlight`` rather than the duplication. What is duplicated
+    is two values; those are what this pins.
+
+    Read against pyproject.toml rather than ``get_version()`` deliberately. The
+    README documents the release being prepared, which is what the file declares;
+    the installed distribution can be a bump behind it locally, and failing for
+    that reason would be reporting a stale venv as a stale README.
+    """
+
+    #: The banner's two labels, spelled as README.md has to spell them. `Version`
+    #: carries a trailing space so its colon lines up with the one below -- that
+    #: alignment is in the f-strings in etc/cli.py, and is part of the string.
+    LABELS: tuple[str, ...] = ("Version :", "Codename:")
+
+    def setUp(self) -> None:
+        self.lines: list[str] = README.read_text(encoding="utf-8").splitlines()
+
+    def test_the_quoted_version_is_the_declared_one(self) -> None:
+        # The number a reader takes the README to be describing. It is the first
+        # thing that goes stale on a release, because bumping pyproject.toml is
+        # the step everyone remembers and this block is three files away.
+        self.assertIn(
+            f"Version : {declared()}",
+            self.lines,
+            f"README.md's banner does not quote version {declared()}. Bump the "
+            "line rather than the file -- pyproject.toml is the single source.",
+        )
+
+    def test_the_quoted_codename_is_the_one_the_package_holds(self) -> None:
+        # The codename is the one part of the banner nothing can derive, so it is
+        # the part most likely to be left behind: a minor bump moves it, and
+        # until now the only thing that noticed was a person re-reading the file.
+        self.assertIn(
+            f"Codename: {CODENAME}",
+            self.lines,
+            f"README.md's banner does not quote the codename {CODENAME!r} that "
+            "etc/cli.py holds. The codename moves with the minor version.",
+        )
+
+    def test_neither_label_appears_on_a_second_line(self) -> None:
+        # The two tests above ask only whether the right line exists, so a stale
+        # duplicate further down satisfies both of them -- the correct line is
+        # still there, and neither ever asks whether something contradicts it.
+        # A second banner pasted into the README is exactly the drift this class
+        # is for, so it has to be asked separately rather than assumed away.
+        for label in self.LABELS:
+            with self.subTest(label=label):
+                carrying: list[str] = [
+                    line for line in self.lines if line.startswith(label)
+                ]
+
+                self.assertEqual(
+                    len(carrying),
+                    1,
+                    f"README.md has {len(carrying)} lines starting {label!r} and "
+                    f"should have exactly one: {carrying}. Two of them means the "
+                    "checks above can pass while a reader is shown the wrong one.",
+                )
 
 
 def assigned_literal(module: Path, name: str) -> object:

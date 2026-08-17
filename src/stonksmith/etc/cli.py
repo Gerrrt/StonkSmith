@@ -28,11 +28,15 @@ UNKNOWN_VERSION: str = "unknown"
 #: A codename is not derivable from anything -- there is nothing to read it out
 #: of -- so it stays here, where it is the only thing to keep in step.
 #:
-#: It moves with the minor version, which 0.2.0 is the first release to do:
-#: "Forrest Gump" stood through 0.1.0 and 0.1.1 while this comment already called
-#: it the release's name, so the line described a convention that had not started
-#: yet. The banner quoted in README.md states it too, and goes stale silently.
-CODENAME: str = "Ferris Bueller"
+#: It moves with the minor version. 0.2.0 was the first release to set a name
+#: under that rule and 0.3.0 the first to move one -- "Forrest Gump" stood through
+#: 0.1.0 and 0.1.1 while this comment already called it the release's name, so the
+#: line described a convention that had not started yet.
+#:
+#: README.md quotes the banner and so states this name a second time. That copy
+#: used to go stale silently; tests/test_version_single_source.py now holds it to
+#: this one, which is the only reason it is safe to keep both.
+CODENAME: str = "Fox Mulder"
 
 
 def get_version() -> str:
