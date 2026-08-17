@@ -206,7 +206,13 @@ the two disagree.
   `broker.py` is complete; what it may lack is a database in the current
   workspace, which is a different thing and the one an operator can act on.
 - `max-complexity` lowered from 16 to 12, splitting `error_shape`, `to_amount`,
-  `main` and Ally's `on_login`.
+  `main` and Ally's `on_login`. `CONTRIBUTING.md` went on saying 16 through that
+  change — under *Things that are settled*, the heading whose purpose is to be
+  trusted without re-derivation — so it now says 12, and
+  `tests/test_the_complexity_ceiling_is_one_number.py` reads the ceiling off
+  `pyproject.toml` and fails if either the bullet or the comment above the
+  setting disagrees with it. The instruction to keep them in step was the only
+  thing holding them together, and an instruction is not a mechanism.
 
 ## [0.1.1] - 2026-08-12
 

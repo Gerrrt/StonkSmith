@@ -122,8 +122,10 @@ arguing with the comment, which is fine — reopening it without reading it is n
   one.
 - **A new ruff rule group has to be already clean on `src/` before it is
   adopted.** The ratchet is rules that cost nothing to keep, not a backlog.
-- **`max-complexity = 16` is a ceiling at the worst function that exists**, not a
+- **`max-complexity = 12` is a ceiling at the worst function that exists**, not a
   target. It cannot be met by accident and stops anything new being worse.
+  `tests/test_the_complexity_ceiling_is_one_number.py` fails if this number and
+  `pyproject.toml` part company, which they had.
 - **Docstrings are Sphinx**: `:param:`, `:return:`, `:rtype:`, `:raises:`. Not
   Google-style `Args:` blocks. `tests/test_docstring_style.py` enforces the
   distinction. Ruff's `D` and `ANN` rules are deliberately off — see the comment
