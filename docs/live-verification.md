@@ -34,20 +34,20 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*As of 2026-08-15: 33 of 42 claims have been settled by a live run — 31 confirmed,
+*As of 2026-08-17: 33 of 37 claims have been settled by a live run — 31 confirmed,
 2 disproved. 0 of those were settled more than six months before that date, and 0
-carry no date at all. The
-remaining 9 rest on evidence no run here has produced: a broker with the transaction
-volume to put the question, a SnapTrade connection that has
-actually lapsed, an account whose holdings have actually gone stale, a 529 with
-more than one beneficiary on it, and the five rows of the one broker nobody has
-run. Three of those are alike and worth naming as such: a lapsed connection, stale
-holdings and a second beneficiary each need a condition to occur rather than a run
-to be made, and no amount of sitting down at the machine produces one. Two rows left
-this list on 2026-08-15 and are worth telling apart: the allocation blocks only ever
-needed a run made after the check existed, while the carried series needed a
-workspace to become the ordinary state of a real one, which took waiting rather than
-doing.*
+carry no date at all. The remaining 4 rest on evidence no run here has produced: a
+broker with the transaction volume to put the question, a SnapTrade connection that
+has actually lapsed, an account whose holdings have actually gone stale, and a 529
+with more than one beneficiary on it. Three of those are alike and worth naming as
+such: a lapsed connection, stale holdings and a second beneficiary each need a
+condition to occur rather than a run to be made, and no amount of sitting down at the
+machine produces one. Two rows left this list on 2026-08-15 and are worth telling
+apart: the allocation blocks only ever needed a run made after the check existed,
+while the carried series needed a workspace to become the ordinary state of a real
+one, which took waiting rather than doing. Five more left it on 2026-08-17 by being
+withdrawn rather than settled, which is a third way off this list and is explained
+below.*
 
 **A settled claim does not stay settled, and the dates are why.** This file opens by
 saying green tests cannot tell you the site still looks the way it did. A run has the
@@ -82,19 +82,33 @@ project has already written down what muting costs — see
 [`scheduling.md`](scheduling.md). Bump the date when you record a result, and the
 count comes with it.
 
-**Four of the five brokers have been run. `fidelity` has not.** Its five rows were
-added rather than left absent, because an absent row reads as nothing to say instead
-of nothing observed — which is how this file came to imply otherwise. The Fidelity
-*accounts* SnapTrade reaches are settled, and they are a different claim: SnapTrade
-asks an API for a balance, while the `fidelity` broker drives a browser past Akamai
-Bot Manager and ThreatMetrix to scrape a summary page. Nothing about the first says
-the second still works.
+**Five `fidelity` rows were withdrawn on 2026-08-17, and withdrawn is not settled.**
+They asked whether the `fidelity` broker's sign-in, scrape, session and database
+write still work against the real site. Nobody ever ran it, and now nobody will: the
+broker was deprecated that day for removal in 1.0, because Fidelity reaches the
+workspace through SnapTrade and nothing here recommends the scraper. A row is a
+question somebody intends to answer, and these stopped being that.
 
-Unlike the six above, none of the five is blocked on a condition or on data. Each
-needs a Fidelity login and a sitting, which makes them the most tractable block of
-open claims in this table.
+**The broker still ships.** `stonksmith fidelity` runs until 1.0 and prints a notice
+saying so, and its ten test files are still in the suite. So this is not a case of
+the rows describing code that is gone — it is the narrower and more awkward one of
+code that is still here and deliberately unverified. Anyone who runs it is running
+something no live check stands behind, which is the whole reason the deprecation
+names a replacement rather than just a date.
 
-`tests/test_live_verification_tally.py` derives those five numbers from the table below
+That is stated here rather than left to an absence, on the same reasoning that put
+the five rows in to begin with: an absent row reads as nothing to say instead of
+nothing observed, and this file has already implied otherwise once by leaving a gap
+where a claim belonged. When the broker goes at 1.0, this paragraph goes with it.
+
+The Fidelity *accounts* SnapTrade reaches are settled, and they always were a
+different claim: SnapTrade asks an API for a balance, while the `fidelity` broker
+drove a browser past Akamai Bot Manager and ThreatMetrix to scrape a summary page.
+Nothing about the first ever said the second worked — which is why removing the
+scraper costs this table no coverage it had.
+
+`tests/test_live_verification_tally.py` derives the five numbers in the count above
+from the table below
 and fails if this sentence disagrees with them. It exists because this paragraph said
 nineteen for four commits after the table reached twenty rows: the instruction to update
 it lives under *Recording a result*, and an instruction is not a mechanism.
@@ -118,11 +132,6 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | TSP — DFAS pay table download | Real requests through `fetch_pay_table`: the enlisted page unattended on 2026-08-10 (#116), 200 and 116,257 bytes, and the other three on 2026-08-11 (#118), 200 each. The 2026-08-07 and 2026-08-09 refusals were real but were never about the User-Agent — see below | Yes | 2026-08-11 |
 | TSP — the contribution accrual | A live run on 2026-08-10 (#116) over the published price file and the DFAS page, both fetched by the run; all six months recomputed independently and matched on every field | Yes | 2026-08-10 |
 | TSP — database write | Five runs on 2026-08-10 (#116) into a real `tsp.db`, four dates on one snapshot and the holdings summing to its value exactly; plus a genuine pre-migration database, migrated on open | Yes | 2026-08-10 |
-| Fidelity — the manual sign-in hands off and the summary is reached | `tests/test_fidelity_manual_login.py`, `test_fidelity_summary_detection.py` and `test_fidelity_no_navigate_before_signin.py`. No run of the `fidelity` broker against the real site is recorded — the Fidelity *accounts* reached through SnapTrade are a different claim, settled under SnapTrade below | No | — |
-| Fidelity — attaching to a browser you started yourself (`--browser cdp`) | `tests/test_fidelity_cdp_attach.py` and `test_fidelity_browser_choice.py`, over a stubbed endpoint | No | — |
-| Fidelity — account names, numbers and balances parse off the summary | `tests/test_fidelity_account_scrape.py`, over markup captured once rather than served. `ACCOUNT_BALANCE_SELECTORS` is a one-entry tuple, so a class rename is the whole failure | No | — |
-| Fidelity — the session survives to the next run | `tests/test_fidelity_refused_and_session.py` and `test_fidelity_lifecycle.py`. Ally's equivalent claim is settled the other way, which is the reason this one is worth asking | No | — |
-| Fidelity — database write | `tests/test_module_snapshot_writes.py` and `test_fidelity_module_capture.py` | No | — |
 | The sheet — the machine-owned tabs | All four checks, against the four tabs then defined, against the real spreadsheet on 2026-08-10 and written up below. `verify tabs` settled the first three: the banner on all four tabs, row 2 against all three column contracts with `Holdings` ending at `P`, money back as a number, and the dashboard's two totals equal. Check 4 was then done by eye — of 16 accounts, 7 had a blank `As Of` and all 7 appeared in the staleness panel, so an undated account is surfaced rather than counted at face value. The creation half followed: the four tabs were deleted and `sheet` run again, which had `ensure_worksheet` make all four and `claim()` adopt them empty before writing — reported as working rather than transcribed, so there is no output quoted for it | Yes | 2026-08-10 |
 | The sheet — the whole transaction history reaching a tab | `verify tabs` on 2026-08-10 confirmed the tab's 9 movements against the 9 the databases hold, every date normalized and each account newest-first, and on 2026-08-15 it confirmed 18 against 18. Nothing was dropped at either size; five hundred is where the question starts, so this row needs a workspace with the rows rather than a longer sitting — the count has grown by nine in five days, which is the rate that makes it a wait rather than an afternoon. `verify volume` supplies its own rows instead, and was run against the real spreadsheet on 2026-08-15: both requests landed, all 2,500 rows came back, and the first and last row of each write sat in the cell it was addressed to. That settles the second-chunked-write half and cannot settle this one — the window it would have to find is upstream of the write, and rows the check supplies itself enter below it | No | — |
 | The sheet — refusing a tab it does not own | Run on 2026-08-10 against the real `Holdings` tab: a defaced first cell refused, then text below a blank first cell refused, then a restoring sync. `verify guard` got all three of `claim()`'s answers, empty-tab adoption included. One part is not observable this way — that a refusal leaves no tab freshly written beside a stale one rests on claim-before-write and its unit test, since a run whose data is unchanged cannot tell a rewritten tab from an untouched one | Yes | 2026-08-10 |

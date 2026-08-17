@@ -35,8 +35,9 @@
 
 ```console
 $ uv run stonksmith --help
-usage: stonksmith [-h] [--verbose] [--debug] [--quiet] [--version]
-                  {ally,fidelity,schwab529plan,snaptrade,tsp} ...
+usage: stonksmith [-h] [--verbose] [--debug] [--quiet] [--no-sheet]
+                  [--version]
+                  {ally,fidelity,manual,schwab529plan,snaptrade,tsp} ...
 
 ==================================================
 __ _               _     __           _ _   _
@@ -55,9 +56,10 @@ Codename: Ferris Bueller
 Brokers:
   Available Brokers
 
-  {ally,fidelity,schwab529plan,snaptrade,tsp}
+  {ally,fidelity,manual,schwab529plan,snaptrade,tsp}
     ally                Brokerage accounts at https://live.invest.ally.com
-    fidelity            Brokerage and retirement accounts at https://www.fidelity.com
+    fidelity            (deprecated) Brokerage and retirement accounts at https://www.fidelity.com
+    manual              Accounts you can see but cannot scrape, valued from published prices
     schwab529plan       College Savings Account at https://www.schwab529plan.com
     snaptrade           Every brokerage connected through https://snaptrade.com
     tsp                 Thrift Savings Plan, valued from published share prices
@@ -185,17 +187,21 @@ template.
 > [!NOTE]
 > **Not every claim here rests on a live run.** Green tests say the code does
 > what it was written to do, which is not the same as saying the site still
-> looks the way it did when the parser was written. Four of the five brokers
-> have been run against the real thing, and the sheet has been read back off a
-> real spreadsheet; nine claims are still open. Five are the `fidelity`
-> broker, which has never been run — the Fidelity accounts SnapTrade reaches
-> are settled, but that is an API answering, not a browser getting past bot
-> detection to scrape a summary page. Two wait on data rather than on
-> effort — whether the `Transactions` tab holds every movement or only the
-> newest five hundred, and whether a 529 with more than one
+> looks the way it did when the parser was written. Every broker that is not
+> deprecated has been run against the real thing, and the sheet has been read
+> back off a real spreadsheet; four claims are still open. Two wait on data
+> rather than on effort — whether the `Transactions` tab holds every movement or
+> only the newest five hundred, and whether a 529 with more than one
 > beneficiary attributes its movements to the right one. Two wait on a
 > condition occurring at all: a SnapTrade connection lapsing, and an account's
 > holdings going stale.
+>
+> **The `fidelity` broker is the exception, and it is deprecated.** It was never
+> run against the real site, and its five claims were withdrawn rather than
+> settled when it was scheduled for removal in 1.0. It still ships and still
+> works as far as anyone knows; nothing live stands behind it. Link Fidelity
+> through SnapTrade instead — those accounts *are* settled, but that is an API
+> answering, not a browser getting past bot detection to scrape a summary page.
 > [`docs/live-verification.md`](docs/live-verification.md) is the record of
 > which is which, claim by claim, and this note summarises it rather than being
 > maintained beside it.
@@ -285,7 +291,7 @@ does is [`docs/brokers.md`](docs/brokers.md); this table is the index into it.
 
 | Broker | Shape | What it needs from you |
 | --- | --- | --- |
-| [Fidelity](docs/brokers.md#fidelity) | Browser | A manual sign-in once; the session is reused until it expires. Or link it through SnapTrade and skip the browser |
+| [Fidelity](docs/brokers.md#fidelity) | Browser | **Deprecated, removed in 1.0.** Link it through SnapTrade instead |
 | [Ally Invest](docs/brokers.md#ally-invest) | Browser | A manual sign-in **every** scrape — Ally honours no restored session. `--from-prices` revalues between scrapes with no browser at all |
 | [SnapTrade](docs/brokers.md#snaptrade) | API | A free Personal API key, and one browser step per brokerage every few weeks. Covers Schwab, Fidelity, Vanguard and the rest through one key |
 | [Schwab 529](docs/brokers.md#schwab-529) | Scraper | A stored credential. A form post and two page reads — no browser, nothing to expire |
@@ -440,7 +446,7 @@ after that the portfolio has stopped updating with nothing to say so.
 | `snaptrade` | Yes, until the connection expires — a browser step every few weeks |
 | `schwab529plan` | Yes. A form post with a stored credential |
 | `ally` | `--from-prices` only, which reprices a stale unit count rather than scraping |
-| `fidelity` | No. Link it through SnapTrade instead |
+| `fidelity` | No. Deprecated, removed in 1.0 — link it through SnapTrade instead |
 | `manual` | Yes. Nothing to log in to — a configured unit count at a published price |
 
 Weekdays after the close, one process per broker — `broker` is a positional
@@ -504,7 +510,7 @@ This section summarises it rather than being maintained beside it.
       absent: nothing states them and nothing here guesses
 - [x] Scheduling (cron), for the brokers that run unattended — three of five,
       plus Ally in a reduced mode. Fidelity is replaced by SnapTrade, not
-      scheduled
+      scheduled — and now deprecated outright, removed in 1.0
 - [x] A morning brief that turns up on its own — one self-contained page
       rendered from the databases alone, no login, browser or network, opened by
       a LaunchAgent at 06:30 on weekdays. It compares against the last brief you

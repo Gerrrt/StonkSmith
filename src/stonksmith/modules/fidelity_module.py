@@ -1,7 +1,14 @@
 # Copyright (c) 2026 Gerrrt
 # Licensed under the MIT License
 
-"""Module to scrape account balances from the Fidelity portfolio summary."""
+"""Module to scrape account balances from the Fidelity portfolio summary.
+
+Deprecated. Fidelity reaches the workspace through SnapTrade, which takes it from
+attended to unattended, and nothing here recommends running this scraper --
+``scripts/stonksmith.cron`` ships with no ``fidelity`` line and the README's
+scheduling table answers "No". The broker still works and is still tested; it is
+removed in 1.0.
+"""
 
 import datetime
 import re

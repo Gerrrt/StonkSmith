@@ -23,9 +23,15 @@ def broker_args(
     :rtype: _SubParsersAction[ArgumentParser]
     """
 
+    # "(deprecated)" leads, because the help column truncates and a reader
+    # scanning `stonksmith --help` has to see it without running anything. The
+    # removal version is in the module's notice and in the docs rather than here
+    # -- one line of help cannot carry it and stay readable.
     fidelity_parser: ArgumentParser = subparsers.add_parser(
         name="fidelity",
-        help="Brokerage and retirement accounts at https://www.fidelity.com",
+        help=(
+            "(deprecated) Brokerage and retirement accounts at https://www.fidelity.com"
+        ),
         parents=[std_parser, module_parser],
     )
 

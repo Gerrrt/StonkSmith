@@ -9,6 +9,41 @@ the two disagree.
 
 ## [Unreleased]
 
+### Deprecated
+
+- **The `fidelity` broker, removed in 1.0.** Fidelity reaches the workspace
+  through SnapTrade — one API key, no browser, no bot detection, and it runs
+  unattended, which the scraper never has. Nothing here recommended the scraper
+  already: `scripts/stonksmith.cron` ships with no `fidelity` line, the
+  scheduling tables answer "No", and `docs/scheduling.md` has a section titled
+  *Fidelity is not scheduled, it is replaced*. It still runs and its ten test
+  files are still in the suite; every run now prints a notice naming the removal
+  version and the replacement, and `stonksmith --help` leads its line with
+  `(deprecated)`.
+- The notice is emitted as a `DeprecationWarning` **and** logged at ERROR level,
+  for the reason `loaders/_legacy_names.py` gives about the other deprecation
+  this project carries: `DeprecationWarning` is invisible under Python's default
+  filters outside `__main__`, so a run from cron would otherwise get no signal at
+  all. The warning is raised inside `suppress(DeprecationWarning)` — under
+  `-W error` an unsuppressed one is caught by the blanket `except Exception`
+  around module execution and reported as the broker having failed to load,
+  which would make the notice break the thing it describes.
+- **Five claims withdrawn from [`docs/live-verification.md`](docs/live-verification.md),
+  which is not the same as settling them.** The `fidelity` broker was never once
+  run against the real site, and a broker on a removal path will never get the
+  sitting, so its rows were removed rather than left reading `No` forever. The
+  table goes from 42 claims to 37 and from 9 outstanding to 4; the settled count
+  is unchanged at 33, because none of the five ever was. The paragraph above the
+  table says all of this, including that the broker still ships — a reader who
+  found a working subcommand with no rows would otherwise conclude the table was
+  merely incomplete.
+
+### Fixed
+
+- The `stonksmith --help` transcript in the README had drifted from what the
+  package prints: it was missing `--no-sheet` and the `manual` broker. Corrected
+  in the same pass, since the deprecation edits that block anyway.
+
 ## [0.2.0] - 2026-08-16
 
 ### Added

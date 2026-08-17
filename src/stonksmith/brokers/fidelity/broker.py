@@ -12,6 +12,9 @@ absolute: the module is executed under the synthetic name "broker" with no packa
 so relative imports would fail.
 """
 
+import warnings
+from argparse import Namespace
+from contextlib import suppress
 from typing import ClassVar
 from urllib.parse import urlparse
 
@@ -22,7 +25,47 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api._generated import Locator
 
 from stonksmith.etc.browser_connection import BrowserConnection, browser_was_closed
-from stonksmith.etc.logger import StonkSmithAdapter
+from stonksmith.etc.context import BrokerDbProtocol
+from stonksmith.etc.logger import StonkSmithAdapter, stonksmith_logger
+
+#: The release this broker is removed in. Stated once because CHANGELOG.md,
+#: docs/brokers.md and the subparser help all name it, and a notice promising a
+#: different version than the docs is worse than no notice.
+REMOVED_IN = "1.0"
+
+#: Said once at the start of every run. Names the thing, the version and the
+#: replacement, in that order -- the shape ``_legacy_names._announce`` uses for
+#: the other deprecation this project is carrying.
+DEPRECATION_NOTICE = (
+    f"The fidelity broker is deprecated and will be removed in StonkSmith "
+    f"{REMOVED_IN}. Link Fidelity through SnapTrade instead, which also takes it "
+    f"from attended to unattended; see docs/brokers.md#snaptrade."
+)
+
+
+def announce_deprecation() -> None:
+    """
+    Say that this broker is going away, before anything can stop the run saying it.
+
+    Emitted two ways on purpose, for the reasons ``_legacy_names._announce`` gives
+    at length: a ``DeprecationWarning`` so a `-W` filter and the tests can see it,
+    and an ERROR-level log line because that warning is invisible under Python's
+    default filters outside ``__main__`` -- an operator running this from cron
+    would otherwise get no signal at all, and ERROR is the level ``--quiet``
+    leaves showing.
+    """
+
+    # Suppressed, not skipped. Under `-W error` -- and under the suite's own
+    # `filterwarnings = ["error"]` -- an unsuppressed warning here raises inside
+    # a thread-pool target whose whole contract is to report rather than raise,
+    # and the run is reported as having failed. A notice that breaks the thing it
+    # describes is worse than no notice. catch_warnings(record=True) still sees
+    # it, which is what the tests assert on.
+    with suppress(DeprecationWarning):
+        warnings.warn(DEPRECATION_NOTICE, DeprecationWarning, stacklevel=2)
+
+    stonksmith_logger.fail(msg=DEPRECATION_NOTICE)
+
 
 #: Playwright's default is 30s. These steps are optional or fast-failing, so a
 #: shorter wait keeps a broken selector from stalling the whole login.
@@ -100,6 +143,33 @@ class Fidelity(BrowserConnection):
         self.summary_url = "https://digital.fidelity.com/ftgw/digital/portfolio/summary"
         self.account_dict: dict[str, str] = {}
         self.source_account: str = ""
+
+    def __call__(
+        self, args: Namespace, db: BrokerDbProtocol, host: str | None = None
+    ) -> bool:
+        """
+        Announce the deprecation, then run exactly as the base class does.
+
+        Here rather than in the module's ``on_login``, which is only reached once
+        a login has succeeded -- and this broker's login is the part most likely
+        to fail, since getting past Akamai Bot Manager is the reason it is being
+        retired. An operator whose run dies at the sign-in is the one who most
+        needs to hear that there is an API that does not have a sign-in.
+
+        Here rather than in ``__init__`` for the opposite reason: construction
+        happens in tests and in any code that merely inspects the broker, and a
+        notice at ERROR level that fires when nobody is running anything is how a
+        notice gets tuned out.
+        :param args: Parsed command-line arguments
+        :param db: The broker database this run writes to
+        :param host: Optional host override, passed straight through
+        :return: Whatever the base class reports for the run
+        :rtype: bool
+        """
+
+        announce_deprecation()
+
+        return super().__call__(args, db, host)
 
     def broker_logger(self) -> None:
         """

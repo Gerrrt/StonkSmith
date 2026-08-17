@@ -10,8 +10,10 @@ these tabs a live run has read back against a real spreadsheet, and one claim
 question of whether the `Transactions` tab windows. The other two closed on
 2026-08-15: the allocation blocks were read back by `verify tabs`, and the
 carried series was walked across nine dates on a workspace whose brokers really
-had reported on different days. That file also carries a gap that is not about the
-sheet: the `fidelity` broker has never been run against the real thing at all.
+had reported on different days. That file also records a gap that is not about the
+sheet and is no longer counted as one: the `fidelity` broker was never run against
+the real thing, and on 2026-08-17 it was deprecated for removal in 1.0 rather than
+verified, so its five claims were withdrawn.
 
 Every row here is rendered from the databases described in
 [`database.md`](database.md). The sheet holds nothing the databases do not.

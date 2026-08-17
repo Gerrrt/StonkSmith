@@ -21,6 +21,23 @@ base class each one gets.
 
 ## Fidelity
 
+> [!WARNING]
+> **The `fidelity` broker is deprecated and will be removed in StonkSmith 1.0.**
+> Link Fidelity through [SnapTrade](#snaptrade) instead — one API key, no browser,
+> no bot detection, and it runs unattended, which this never has.
+>
+> It still works and every run prints a notice saying this. But it was never once
+> run against the real site: all five of its claims in
+> [`live-verification.md`](live-verification.md) were withdrawn on 2026-08-17
+> rather than settled, because a broker nobody should use is not worth the sitting
+> it would take to verify. Everything below is the state of the code, not
+> something anyone has watched work lately.
+>
+> Already using it? Link Fidelity through SnapTrade, stop running `fidelity`, and
+> move its database out of the workspace — the accounts are otherwise counted
+> twice. See [*When two brokers can reach the same
+> account*](#when-two-brokers-can-reach-the-same-account).
+
 Fidelity fronts its login with Akamai Bot Manager and ThreatMetrix, which reject
 a scripted sign-in before the form renders. Sign in yourself once; StonkSmith
 reuses the session afterwards:
