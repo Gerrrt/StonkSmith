@@ -9,6 +9,8 @@ the two disagree.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-17
+
 ### Deprecated
 
 - **The `fidelity` broker, removed in 1.0.** Fidelity reaches the workspace
@@ -43,6 +45,15 @@ the two disagree.
 - The `stonksmith --help` transcript in the README had drifted from what the
   package prints: it was missing `--no-sheet` and the `manual` broker. Corrected
   in the same pass, since the deprecation edits that block anyway.
+- **Two lines of that transcript are now held to their single sources.** It
+  quotes the version and the codename, and nothing compared either against
+  `pyproject.toml` or `CODENAME` — the comment beside `CODENAME` said outright
+  that the copy "goes stale silently". `tests/test_version_single_source.py`
+  now fails if they part company, which is the same file that already explains
+  which copies of the version exist and which are deliberately left alone. It
+  matches whole lines and refuses a second line carrying either label, because
+  a substring check would pass on the stale duplicate it exists to catch. The
+  rest of the transcript is still maintained by hand.
 
 ## [0.2.0] - 2026-08-16
 
@@ -318,7 +329,8 @@ which is written to be read.
   `site-packages`. A broker or module written against those still loads, with a
   `DeprecationWarning`; that shim is removed in 1.0.
 
-[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.2.0
 [0.1.1]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.1.0

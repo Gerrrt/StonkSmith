@@ -50,8 +50,8 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         Aggregate everything in one dashboard
         Written by: @Gerrrt
 
-Version : 0.2.0
-Codename: Ferris Bueller
+Version : 0.3.0
+Codename: Fox Mulder
 
 Brokers:
   Available Brokers
