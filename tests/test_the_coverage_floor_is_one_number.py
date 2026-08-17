@@ -112,8 +112,22 @@ class CoverageFloorTests(unittest.TestCase):
         )
         assert match is not None
 
+        # Not FLOOR.findall(...)[0] straight into int(). The condition this test
+        # helps catch is the flag going missing from ci.yml, and indexing an empty
+        # list for it raises IndexError -- a traceback naming this file rather
+        # than the workflow, from a test whose message would have said which. The
+        # check above catches it too, but relying on that is relying on test
+        # order, which unittest does not promise.
         baseline = float(f"{match.group(1)}.{match.group(2)}")
-        floor = int(FLOOR.findall(string=ci)[0])
+        floors: list[str] = FLOOR.findall(string=ci)
+
+        self.assertTrue(
+            floors,
+            "ci.yml no longer passes --cov-fail-under, so there is no floor for "
+            "its baseline comment to be rounded down from",
+        )
+
+        floor = int(floors[0])
 
         self.assertGreaterEqual(
             baseline,
