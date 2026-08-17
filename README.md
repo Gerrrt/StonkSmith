@@ -49,8 +49,8 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         Aggregate everything in one dashboard
         Written by: @Gerrrt
 
-Version : 0.1.0
-Codename: Forrest Gump
+Version : 0.2.0
+Codename: Ferris Bueller
 
 Brokers:
   Available Brokers
@@ -505,6 +505,12 @@ This section summarises it rather than being maintained beside it.
 - [x] Scheduling (cron), for the brokers that run unattended — three of five,
       plus Ally in a reduced mode. Fidelity is replaced by SnapTrade, not
       scheduled
+- [x] A morning brief that turns up on its own — one self-contained page
+      rendered from the databases alone, no login, browser or network, opened by
+      a LaunchAgent at 06:30 on weekdays. It compares against the last brief you
+      were shown rather than the last scrape, so a morning you skip is covered by
+      the next one, and a figure no source reported stays a dash rather than
+      becoming a zero ([the design](docs/brief.md))
 - [ ] More brokers. Vanguard needs no code at all; link it through SnapTrade
 - [ ] Settle whether the `Transactions` tab windows at five hundred rows
       ([#141][issue-141]) — blocked on a broker with the movement volume

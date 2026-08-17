@@ -27,7 +27,12 @@ UNKNOWN_VERSION: str = "unknown"
 #: The release's name, and the one part of the banner still written by hand.
 #: A codename is not derivable from anything -- there is nothing to read it out
 #: of -- so it stays here, where it is the only thing to keep in step.
-CODENAME: str = "Forrest Gump"
+#:
+#: It moves with the minor version, which 0.2.0 is the first release to do:
+#: "Forrest Gump" stood through 0.1.0 and 0.1.1 while this comment already called
+#: it the release's name, so the line described a convention that had not started
+#: yet. The banner quoted in README.md states it too, and goes stale silently.
+CODENAME: str = "Ferris Bueller"
 
 
 def get_version() -> str:
