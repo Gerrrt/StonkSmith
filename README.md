@@ -510,9 +510,10 @@ This section summarises it rather than being maintained beside it.
       ([#141][issue-141]) — blocked on a broker with the movement volume
 - [x] Settle whether the `Net Worth` series carries across brokers
       ([#149][issue-149]) — walked across nine dates on 2026-08-15
-- [ ] Settle whether an account leaves the series after thirty days of silence
-      ([#207][issue-207]) — the half [#149][issue-149] could not reach, blocked
-      on a broker that has actually stopped for a month
+- [ ] Settle whether an account leaves the series after thirty days of silence,
+      the half [#149][issue-149] could not reach — blocked on a broker that
+      has actually stopped for a month, and recorded meanwhile in
+      [`docs/live-verification.md`](docs/live-verification.md)
 
 See the [open issues][issues-url] for a full list of proposed features (and
 known issues).
@@ -626,7 +627,6 @@ The three sources StonkSmith reads that it did not have to build:
 [issues-url]: https://github.com/Gerrrt/StonkSmith/issues
 [issue-141]: https://github.com/Gerrrt/StonkSmith/issues/141
 [issue-149]: https://github.com/Gerrrt/StonkSmith/issues/149
-[issue-207]: https://github.com/Gerrrt/StonkSmith/issues/207
 [license-shield]: https://img.shields.io/github/license/Gerrrt/StonkSmith?style=flat-square
 [license-url]: https://github.com/Gerrrt/StonkSmith/blob/main/LICENSE
 [python-shield]: https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white
