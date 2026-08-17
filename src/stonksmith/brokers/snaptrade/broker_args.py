@@ -4,6 +4,7 @@ Defines the command line arguments for the SnapTrade broker module.
 
 from argparse import (
     ArgumentParser,
+    ArgumentTypeError,
     _SubParsersAction,  # pyright: ignore
 )
 
@@ -20,6 +21,37 @@ DEFAULT_MAX_AGE_DAYS = 3
 #: every run, to re-fetch movements the database already deduplicated. Ninety
 #: days comfortably covers the gap left by any realistic missed run.
 DEFAULT_HISTORY_DAYS = 90
+
+
+def positive_page_size(value: str) -> int:
+    """
+    Reject a page size the API would refuse and the loop would misread.
+
+    SnapTrade's own schema puts the minimum at 1, so zero and below are rejected
+    at the wire regardless. Zero is the one worth naming, because it does not
+    simply fail: it passes ``page_size is not None``, so ``limit=0`` is sent, and
+    the short-page test that ends a read carrying no total --
+    ``len(rows) < page_size`` -- can never be true against it, so that read runs
+    to the page cap instead of stopping. A 400 and a capped read are both worse
+    ways to learn this than the parser saying so before anything is asked.
+    :param value: The raw argument text
+    :return: The page size
+    :rtype: int
+    :raises ArgumentTypeError: When the value is not a whole number of at least 1
+    """
+
+    try:
+        size: int = int(value)
+
+    except ValueError:
+        raise ArgumentTypeError(
+            f"page size must be a whole number, not {value!r}"
+        ) from None
+
+    if size < 1:
+        raise ArgumentTypeError(f"page size must be at least 1, not {size}")
+
+    return size
 
 
 def broker_args(
@@ -81,12 +113,13 @@ def broker_args(
 
     group.add_argument(
         "--page-size",
-        type=int,
+        type=positive_page_size,
         default=None,
         help=(
-            "How many transactions to ask for per request (default: the "
-            "server's own, which is 1000). Lower it to make the pagination "
-            "follow real pages -- at the default no account here fills a second"
+            "How many transactions to ask for per request, at least 1 "
+            "(default: the server's own, which is 1000). Lower it to make the "
+            "pagination follow real pages -- at the default, no account here "
+            "holds enough movements to fill a second page"
         ),
     )
 

@@ -15,7 +15,7 @@ import datetime
 import importlib.util
 import logging
 import unittest
-from argparse import Namespace
+from argparse import ArgumentTypeError, Namespace
 from typing import Any, ClassVar
 
 import keyring
@@ -697,6 +697,57 @@ class ActivityPageSizeTests(unittest.TestCase):
         self._fetch()
 
         self.assertEqual(len(self.client.activity_calls), 1)
+
+
+class PageSizeValidationTests(unittest.TestCase):
+    """A page size below 1 is refused where the operator can still read it.
+
+    Zero is the case that made this worth a guard rather than a docstring. It
+    does not fail loudly: it passes `page_size is not None`, so `limit=0` goes to
+    the wire, and the short-page test that ends a read carrying no total --
+    `len(rows) < page_size` -- can never be true against it, so that read follows
+    pages until the cap stops it. The operator sees a run that took twenty
+    requests and returned a truncated answer, with nothing naming the cause.
+
+    Rejected at the parser rather than inside fetch_activities on purpose. The
+    module wraps that call in `except Exception` and reports "Could not read
+    transactions ... Its balance is still recorded", which is the right posture
+    for a brokerage that failed and the wrong one for a flag that was typed
+    wrong: the run would carry on, having quietly skipped the transactions it
+    was asked to fetch.
+    """
+
+    def setUp(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "snaptrade_broker_args",
+            PACKAGE / "brokers" / "snaptrade" / "broker_args.py",
+        )
+        assert spec is not None and spec.loader is not None
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+
+    def test_a_usable_size_is_accepted(self) -> None:
+        self.assertEqual(self.module.positive_page_size("5"), 5)
+
+    def test_one_is_usable(self) -> None:
+        # The API's stated minimum, and the size that pages hardest.
+        self.assertEqual(self.module.positive_page_size("1"), 1)
+
+    def test_zero_is_refused(self) -> None:
+        with self.assertRaises(ArgumentTypeError) as caught:
+            self.module.positive_page_size("0")
+
+        self.assertIn("at least 1", str(object=caught.exception))
+
+    def test_a_negative_size_is_refused(self) -> None:
+        with self.assertRaises(ArgumentTypeError):
+            self.module.positive_page_size("-5")
+
+    def test_something_that_is_not_a_number_is_refused(self) -> None:
+        with self.assertRaises(ArgumentTypeError) as caught:
+            self.module.positive_page_size("lots")
+
+        self.assertIn("whole number", str(object=caught.exception))
 
 
 if __name__ == "__main__":

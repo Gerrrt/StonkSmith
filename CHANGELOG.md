@@ -25,6 +25,13 @@ the two disagree.
 - The flag is omitted from the request rather than defaulted, so an ordinary run
   sends the request it sent before the argument existed and the server's own
   default keeps deciding.
+- **A page size below 1 is refused by the parser.** SnapTrade's schema puts the
+  minimum at 1, and zero is the value worth naming because it does not simply
+  fail: it passes the "was one asked for" test, so `limit=0` reaches the wire,
+  and the short-page check that ends a read carrying no total can never be true
+  against it — so that read follows pages until the cap stops it. Refused at the
+  parser rather than inside `fetch_activities()`, whose caller reports a failed
+  fetch as the brokerage having failed and carries on.
 
 ### Fixed
 
