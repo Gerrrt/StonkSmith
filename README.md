@@ -570,7 +570,7 @@ worth reading before changing them. The four gates are:
 uv run ruff check
 uv run ruff format --check
 uv run ty check
-uv run pytest -q --cov --cov-fail-under=87
+uv run pytest -q --cov --cov-fail-under=89
 ```
 
 The version lives in `pyproject.toml` and nowhere else. `--version` and the
