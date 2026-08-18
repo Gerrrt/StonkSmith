@@ -31,12 +31,13 @@ UNKNOWN_VERSION: str = "unknown"
 #: It moves with the minor version. 0.2.0 was the first release to set a name
 #: under that rule and 0.3.0 the first to move one -- "Forrest Gump" stood through
 #: 0.1.0 and 0.1.1 while this comment already called it the release's name, so the
-#: line described a convention that had not started yet.
+#: line described a convention that had not started yet. 0.4.0 is the second move,
+#: which is the point at which it is a convention rather than a coincidence.
 #:
 #: README.md quotes the banner and so states this name a second time. That copy
 #: used to go stale silently; tests/test_version_single_source.py now holds it to
 #: this one, which is the only reason it is safe to keep both.
-CODENAME: str = "Fox Mulder"
+CODENAME: str = "Ford Prefect"
 
 
 def get_version() -> str:

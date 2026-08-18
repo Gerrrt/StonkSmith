@@ -51,8 +51,8 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         Aggregate everything in one dashboard
         Written by: @Gerrrt
 
-Version : 0.3.0
-Codename: Fox Mulder
+Version : 0.4.0
+Codename: Ford Prefect
 
 Brokers:
   Available Brokers
