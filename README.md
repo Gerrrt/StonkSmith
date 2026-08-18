@@ -190,16 +190,15 @@ template.
 > what it was written to do, which is not the same as saying the site still
 > looks the way it did when the parser was written. Every broker that is not
 > deprecated has been run against the real thing, and the sheet has been read
-> back off a real spreadsheet; five claims are still open. Two wait on data
-> rather than on effort — whether the `Transactions` tab holds every movement or
-> only the newest five hundred, and whether a 529 with more than one
-> beneficiary attributes its movements to the right one. Two wait on a
-> condition occurring at all: a SnapTrade connection lapsing, and an account's
-> holdings going stale. The fifth waits on neither, and is the only one here
-> anybody can close by deciding to: whether SnapTrade's transaction read goes past
-> its first page. That used to want a thousand movements nobody was going
-> to accumulate; `--page-size` asks the real API for small pages instead, so what
-> is left is the run.
+> back off a real spreadsheet; four claims are still open, and **none of them is
+> anybody's to-do**. Two wait on data rather than on effort — whether the
+> `Transactions` tab holds every movement or only the newest five hundred, and
+> whether a 529 with more than one beneficiary attributes its movements to the
+> right one. Two wait on a condition occurring at all: a SnapTrade connection
+> lapsing, and an account's holdings going stale. The one that was anybody's to-do
+> — whether SnapTrade's transaction read goes past its first page — was run on
+> 2026-08-18 and settled both ways round: at one row a page the loop made one
+> request per movement, and past twenty pages it stopped and said so.
 >
 > **The `fidelity` broker is the exception, and it is deprecated.** It was never
 > run against the real site, and its five claims were withdrawn rather than
@@ -527,6 +526,10 @@ This section summarises it rather than being maintained beside it.
       ([#141][issue-141]) — blocked on a broker with the movement volume
 - [x] Settle whether the `Net Worth` series carries across brokers
       ([#149][issue-149]) — walked across nine dates on 2026-08-15
+- [x] Settle whether SnapTrade's transaction read follows pages to exhaustion —
+      run against the real API on 2026-08-18 at `--page-size 1`, where each
+      movement cost its own request and the 20-page backstop stopped a 37-movement
+      read at 20 and said so
 - [ ] Settle whether an account leaves the series after thirty days of silence
       ([the record](docs/live-verification.md)) — the half [#149][issue-149]
       could not reach, blocked on a broker that actually stopped for a month

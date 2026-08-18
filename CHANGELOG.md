@@ -9,6 +9,41 @@ the two disagree.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The pagination claim is settled, and `--page-size` is what settled it.** 0.4.0
+  shipped the flag saying in as many words that "the live run this was written for
+  has **not** been made". It was made on 2026-08-18, against the real API, and both
+  halves came back the way the code says they should. Over a ninety-day window at
+  one row a page, one account's 3 movements cost 3 requests and another's 6 cost 6,
+  each returning exactly the rows the server's own page size returns in a single
+  request. Over a year, an account holding 37 movements came back with 20 after
+  20 requests — the backstop — short by 17, naming itself and the cap on the way
+  out. `docs/live-verification.md` goes to 34 of 38 settled and 4 outstanding.
+- **The procedure that shipped with the flag could not have settled it, and the
+  record now says so above the result.** It prescribed running paged, then
+  full-sized, and watching the movement count stand still, on the reasoning that a
+  paged read which dropped rows would have them put back by the full-sized read
+  behind it. Transactions dedupe on `(account_id, natural_key)` with
+  `on_conflict_do_nothing`, and the workspace already held every movement in the
+  window — so neither run writes anything either way, and the count stands still
+  identically whether the loop follows pages or stops dead at the first one. It was
+  run as written anyway and is recorded with its numbers, labelled as proving
+  nothing. This is the same wrong-reason pass [#141](https://github.com/Gerrrt/StonkSmith/issues/141)
+  records, reached from the other side: there a windowed read was compared against
+  a windowed read, here a deduplicated write against a deduplicated write.
+- **Counting the requests is what the claim is actually about**, so the procedure
+  now says to count them at the SDK boundary rather than to count rows in a
+  database. At `page_size=1` a window of N movements must cost N requests, and
+  nothing about what is already stored enters into it.
+- **The section's commands were missing `-M snaptrade`** and stopped at `No module
+  specified` having done nothing. A procedure whose first command does not run is
+  one the next person debugs instead of following.
+- **Nothing left on the outstanding list is anybody's to-do**, which is new and is
+  now stated in both the record and the README note. The four that remain wait on
+  the world: transaction volume accumulating, a connection lapsing, holdings going
+  stale, and a 529 with a second beneficiary.
+
 ## [0.4.0] - 2026-08-17
 
 ### Added
