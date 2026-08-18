@@ -6,6 +6,7 @@
 <div align="center"><nobr>
 
 [![CI][ci-shield]][ci-url]<!--
+-->[![PyPI][pypi-shield]][pypi-url]<!--
 -->[![Python][python-badge-shield]][python-url]<!--
 -->![Last Commit][lastcommit-shield]<!--
 -->[![Stargazers][stars-shield]][stars-url]<!--
@@ -634,7 +635,9 @@ The three sources StonkSmith reads that it did not have to build:
 
 [ci-shield]: https://img.shields.io/github/actions/workflow/status/Gerrrt/StonkSmith/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI
 [ci-url]: https://github.com/Gerrrt/StonkSmith/actions/workflows/ci.yml
-[python-badge-shield]: https://img.shields.io/badge/python-3.14-3776AB?style=flat-square&logo=python&logoColor=white
+[pypi-shield]: https://img.shields.io/pypi/v/stonksmith?style=flat-square&logo=pypi&logoColor=white
+[pypi-url]: https://pypi.org/project/stonksmith/
+[python-badge-shield]: https://img.shields.io/pypi/pyversions/stonksmith?style=flat-square&logo=python&logoColor=white
 [lastcommit-shield]: https://img.shields.io/github/last-commit/Gerrrt/StonkSmith?style=flat-square&logo=github
 [stars-shield]: https://img.shields.io/github/stars/Gerrrt/StonkSmith?style=flat-square&logo=github
 [stars-url]: https://github.com/Gerrrt/StonkSmith/stargazers
