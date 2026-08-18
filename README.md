@@ -596,6 +596,14 @@ followed by `uv sync` — and `tests/test_version_single_source.py` fails if the
 two ever part company. The codename beside it in `src/stonksmith/etc/cli.py` is the one
 piece still written by hand, because nothing can derive one.
 
+**The badge at the top is a third reading of that number, and it is deliberately
+not the same one.** It reports what PyPI has published, so between a version bump
+landing on `main` and the tag that publishes it, the badge reads one release
+behind `pyproject.toml`. That is the badge answering the question a badge is for —
+what you can install — rather than going stale. The Python badge beside it is read
+off the published classifiers for the same reason: both are derived, so neither is
+a copy anybody has to remember to update.
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- LICENSE -->
