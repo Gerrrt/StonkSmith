@@ -9,6 +9,8 @@ the two disagree.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-17
+
 ### Added
 
 - **`--page-size` on the `snaptrade` broker**, which exists to make the
@@ -404,7 +406,8 @@ which is written to be read.
   `site-packages`. A broker or module written against those still loads, with a
   `DeprecationWarning`; that shim is removed in 1.0.
 
-[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.2.0
 [0.1.1]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.1.1
