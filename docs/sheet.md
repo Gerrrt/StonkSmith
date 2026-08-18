@@ -5,9 +5,12 @@ to be constructed rather than read.
 
 **This is a reference chapter, not a record.** It describes the sheet as it is
 today. [`live-verification.md`](live-verification.md) is the record of which of
-these tabs a live run has read back against a real spreadsheet, and one claim
-*about the sheet* is still open — a broker with the transaction volume to put the
-question of whether the `Transactions` tab windows. The other two closed on
+these tabs a live run has read back against a real spreadsheet, and two claims
+*about the sheet* are still open. One waits on a broker with the transaction
+volume to put the question of whether the `Transactions` tab windows. The other
+is runnable and is the newer of the two: the Google grant was narrowed to Sheets
+access alone and the book is now opened by id, which needs a real consent screen
+read before it can be called settled. Two older ones closed on
 2026-08-15: the allocation blocks were read back by `verify tabs`, and the
 carried series was walked across nine dates on a workspace whose brokers really
 had reported on different days. That file also records a gap that is not about the
@@ -19,6 +22,48 @@ Every row here is rendered from the databases described in
 [`database.md`](database.md). The sheet holds nothing the databases do not.
 
 ---
+
+## Which spreadsheet, and what StonkSmith may see
+
+**The book is named by id, not by name.** Set `[SHEETS] spreadsheet_id` in
+`~/.stonksmith/stonksmith.conf` to the long segment of the spreadsheet's own URL,
+between `/d/` and `/edit`:
+
+```
+https://docs.google.com/spreadsheets/d/THIS_PART_HERE/edit#gid=0
+```
+
+```ini
+[SHEETS]
+spreadsheet_id = THIS_PART_HERE
+```
+
+An id rather than a title because a title has to be *searched for*, and searching
+is a Drive call. `gspread.oauth()` defaults to `spreadsheets` plus full `drive`,
+and looking the book up by name was the only thing in StonkSmith that ever needed
+the second — everything past it is Sheets API. So opening by id lets the stored
+refresh token stop reaching every file in your Drive.
+
+There is deliberately **no fallback** to searching by name when the id is unset.
+The fallback would re-request the Drive scope, which is the entire thing being
+removed, so an unset id is an error naming the setting instead.
+
+**Upgrading needs the cached token deleted.** Google does not narrow a grant in
+place, so an existing `authorized_user.json` keeps the scopes it was consented
+under until it is replaced:
+
+```bash
+rm ~/.config/gspread/authorized_user.json
+```
+
+The next run reauthorizes in a browser. `credentials.json` stays — that is the
+OAuth client, not the grant. This is the same one-line fix an expired token needs,
+and [`live-verification.md`](live-verification.md) has the procedure for checking
+the consent screen actually stopped asking for Drive.
+
+`spreadsheets` is still account-wide over Sheets: narrower than it was, not
+narrow. [`SECURITY.md`](../SECURITY.md) says why `drive.file` — the obvious
+narrower target — is not reachable for a command-line tool.
 
 ## The sheet is output
 

@@ -27,11 +27,11 @@ class OpenSpreadsheetTests(GspreadConfigMixin, unittest.TestCase):
         client = MagicMock()
 
         with patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client):
-            self.assertIs(open_spreadsheet(), client.open.return_value)
+            self.assertIs(open_spreadsheet(), client.open_by_key.return_value)
 
     def test_a_missing_book_still_names_it(self) -> None:
         client = MagicMock()
-        client.open.side_effect = gspread.exceptions.SpreadsheetNotFound("nope")
+        client.open_by_key.side_effect = gspread.exceptions.SpreadsheetNotFound("nope")
 
         with (
             patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
@@ -46,7 +46,7 @@ class OpenSpreadsheetTests(GspreadConfigMixin, unittest.TestCase):
         # else asking for a tab by name is still asking for one that should be
         # there.
         client = MagicMock()
-        client.open.return_value.worksheet.side_effect = (
+        client.open_by_key.return_value.worksheet.side_effect = (
             gspread.exceptions.WorksheetNotFound("nope")
         )
 
@@ -84,7 +84,7 @@ class WorksheetLookupFailureTests(GspreadConfigMixin, unittest.TestCase):
 
     def test_a_rejected_lookup_reports_as_sheets_unavailable(self) -> None:
         client = MagicMock()
-        client.open.return_value.worksheet.side_effect = self._api_error()
+        client.open_by_key.return_value.worksheet.side_effect = self._api_error()
 
         with (
             patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
@@ -96,7 +96,7 @@ class WorksheetLookupFailureTests(GspreadConfigMixin, unittest.TestCase):
 
     def test_an_expired_token_during_lookup_says_so(self) -> None:
         client = MagicMock()
-        client.open.return_value.worksheet.side_effect = RefreshError("expired")
+        client.open_by_key.return_value.worksheet.side_effect = RefreshError("expired")
 
         with (
             patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),

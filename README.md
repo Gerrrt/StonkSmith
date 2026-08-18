@@ -190,13 +190,16 @@ template.
 > what it was written to do, which is not the same as saying the site still
 > looks the way it did when the parser was written. Every broker that is not
 > deprecated has been run against the real thing, and the sheet has been read
-> back off a real spreadsheet; four claims are still open, and **none of them is
+> back off a real spreadsheet; five claims are still open, and **one of them is
 > anybody's to-do**. Two wait on data rather than on effort — whether the
 > `Transactions` tab holds every movement or only the newest five hundred, and
 > whether a 529 with more than one beneficiary attributes its movements to the
 > right one. Two wait on a condition occurring at all: a SnapTrade connection
-> lapsing, and an account's holdings going stale. The one that was anybody's to-do
-> — whether SnapTrade's transaction read goes past its first page — was run on
+> lapsing, and an account's holdings going stale. The fifth is the runnable one
+> and it is new: the Google grant was narrowed to Sheets access alone, which is a
+> claim about what Google accepts rather than about what this code does, so it
+> needs a consent screen looked at. Before it, the last runnable row — whether
+> SnapTrade's transaction read goes past its first page — was run on
 > 2026-08-18 and settled both ways round: at one row a page the loop made one
 > request per movement, and past twenty pages it stopped and said so.
 >
@@ -571,9 +574,11 @@ Current safeguards:
 > Never commit credentials to source control.
 
 [`SECURITY.md`](SECURITY.md) is the full account, including the risks this
-project accepts rather than solves — the CDP debugging port, the width of the
-Google grant, and what a rebuilt database still leaves on the disk around it —
-and how to report a vulnerability.
+project accepts rather than solves — the CDP debugging port, and what a rebuilt
+database still leaves on the disk around it — and how to report a vulnerability.
+The Google grant used to be on that list and is not any more: StonkSmith opens
+the sheet by id and asks for Sheets access alone, where it used to ask for that
+plus your whole Drive.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

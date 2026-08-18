@@ -24,10 +24,29 @@ from pathlib import Path
 from unittest.mock import patch
 
 import stonksmith.helpers.sheets as sheets
+from config_isolation import UserConfigMixin
+
+#: A spreadsheet id for tests that only need there to be one.
+#:
+#: ``open_spreadsheet`` refuses outright when ``[SHEETS] spreadsheet_id`` is
+#: unset -- deliberately, because falling back to a lookup by name would
+#: re-request the Drive scope. So every test reaching it needs a configured id,
+#: for the same reason every one of them already needs a redirected gspread
+#: directory: the alternative is answering out of whatever the developer has.
+STUB_SPREADSHEET_ID = "1TestSpreadsheetIdThatIsNotARealBook"
 
 
-class GspreadConfigMixin:
-    """Redirect GSPREAD_CONFIG_DIR for the duration of a TestCase."""
+class GspreadConfigMixin(UserConfigMixin):
+    """Redirect GSPREAD_CONFIG_DIR, and configure a spreadsheet to open.
+
+    Both halves, because reaching ``open_spreadsheet`` now needs both and
+    splitting them means every caller remembering the second. UserConfigMixin
+    supplies the StonkSmith config; a TestCase wanting different lines overrides
+    ``config_body`` as usual, and has to keep a ``[SHEETS] spreadsheet_id`` in it
+    or the call it is testing will refuse before reaching what it is about.
+    """
+
+    config_body: str = f"[SHEETS]\nspreadsheet_id = {STUB_SPREADSHEET_ID}\n"
 
     #: Whether to lay down a gspread config directory with credentials in it.
     #: Off by default, and off means the directory does not exist at all --

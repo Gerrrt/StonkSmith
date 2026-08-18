@@ -65,7 +65,7 @@ class OpenWorksheetErrorTests(GspreadConfigMixin, unittest.TestCase):
         # call instead. That is the branch a returning runner actually hits, and
         # it used to report the failure with no fix attached at all.
         client = MagicMock()
-        client.open.side_effect = RefreshError(
+        client.open_by_key.side_effect = RefreshError(
             "invalid_grant: Token has been expired or revoked.",
             {"error": "invalid_grant"},
         )
@@ -102,7 +102,7 @@ class OpenWorksheetErrorTests(GspreadConfigMixin, unittest.TestCase):
 
     def test_missing_spreadsheet_names_the_spreadsheet(self) -> None:
         client = MagicMock()
-        client.open.side_effect = gspread.exceptions.SpreadsheetNotFound("nope")
+        client.open_by_key.side_effect = gspread.exceptions.SpreadsheetNotFound("nope")
 
         with (
             patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client),
@@ -114,7 +114,7 @@ class OpenWorksheetErrorTests(GspreadConfigMixin, unittest.TestCase):
 
     def test_missing_worksheet_names_the_tab(self) -> None:
         client = MagicMock()
-        client.open.return_value.worksheet.side_effect = (
+        client.open_by_key.return_value.worksheet.side_effect = (
             gspread.exceptions.WorksheetNotFound("nope")
         )
 
@@ -128,7 +128,7 @@ class OpenWorksheetErrorTests(GspreadConfigMixin, unittest.TestCase):
 
     def test_success_returns_the_worksheet(self) -> None:
         client = MagicMock()
-        sentinel = client.open.return_value.worksheet.return_value
+        sentinel = client.open_by_key.return_value.worksheet.return_value
 
         with patch("stonksmith.helpers.sheets.gspread.oauth", return_value=client):
             self.assertIs(open_worksheet(worksheet_name="529 Plan"), sentinel)

@@ -18,6 +18,23 @@ SPREADSHEET_NAME = "Investment Account Scrapes"
 
 GSPREAD_CONFIG_DIR = "~/.config/gspread"
 
+#: What StonkSmith asks Google for, and deliberately all it asks for.
+#:
+#: gspread's default is this plus full ``drive``, which it needs for exactly one
+#: thing: ``Client.open(title)`` is a Drive ``files.list`` search. That was the
+#: only Drive call in this codebase -- every read and write past it goes to
+#: sheets.googleapis.com -- so opening by id instead removes the reason for the
+#: scope rather than merely narrowing it.
+#:
+#: Not ``drive.file``, which SECURITY.md used to name as the target. That grants
+#: per-file access to files the *app itself created* or the user picked through
+#: the Google Picker, and a command-line tool cannot show a Picker. A book made
+#: by hand in the browser is unreachable under it, even by id.
+#:
+#: ``spreadsheets`` is still account-wide over Sheets. It is narrower than what
+#: was here, not narrow.
+SHEETS_ONLY_SCOPES = ("https://www.googleapis.com/auth/spreadsheets",)
+
 
 class SheetsUnavailable(RuntimeError):
     """
@@ -81,8 +98,8 @@ def _authorization_failure(e: BaseException, doing: str = "") -> str:
     opening: str = f"Google authorization failed{where} ({detail})."
 
     new_client: str = (
-        "create a new OAuth client ID (Desktop app) with the Sheets and Drive "
-        f"APIs enabled and save it as {GSPREAD_CONFIG_DIR}/credentials.json"
+        "create a new OAuth client ID (Desktop app) with the Sheets API enabled "
+        f"and save it as {GSPREAD_CONFIG_DIR}/credentials.json"
     )
     fresh_token: str = (
         f"delete {GSPREAD_CONFIG_DIR}/authorized_user.json and re-run to reauthorize"
@@ -125,8 +142,26 @@ def open_spreadsheet(spreadsheet: str = SPREADSHEET_NAME) -> Any:
     :raises SheetsUnavailable: if authorization or lookup fails
     """
 
+    from stonksmith.etc.config import get_spreadsheet_id
+
+    book_id: str = get_spreadsheet_id()
+
+    # Refused rather than fallen back on. Falling back to client.open(name) would
+    # work -- and would re-request the Drive scope to do it, quietly putting back
+    # the reach this function exists to have dropped. A missing setting has to be
+    # louder than an insecure default is convenient.
+    if not book_id:
+        raise SheetsUnavailable(
+            "No spreadsheet id is configured, so there is nothing to open. Set "
+            "[SHEETS] spreadsheet_id in ~/.stonksmith/stonksmith.conf to the "
+            f"id of '{spreadsheet}' -- the long segment of its URL between /d/ "
+            "and /edit. StonkSmith opens the book by id rather than by name so "
+            "that it needs no access to your Drive; there is deliberately no "
+            "fall back to searching for it by name."
+        )
+
     try:
-        client: Any = gspread.oauth()
+        client: Any = gspread.oauth(scopes=list(SHEETS_ONLY_SCOPES))
 
     except GoogleAuthError as e:
         raise SheetsUnavailable(_authorization_failure(e=e)) from e
@@ -134,12 +169,18 @@ def open_spreadsheet(spreadsheet: str = SPREADSHEET_NAME) -> Any:
     _restrict_google_credentials()
 
     try:
-        return client.open(spreadsheet)
+        return client.open_by_key(book_id)
 
     except gspread.exceptions.SpreadsheetNotFound as e:
+        # open_by_key() builds the handle without a request, so this arrives
+        # from the first call that does reach the network rather than from the
+        # open itself. It is kept because a wrong id has to say which setting is
+        # wrong: under the old title lookup the answer was "create the
+        # spreadsheet", and under this one it is nothing of the sort.
         raise SheetsUnavailable(
-            f"No spreadsheet named '{spreadsheet}' in this Google account. "
-            "Create it, or share it with the account you authorized."
+            f"No spreadsheet with id '{book_id}' is reachable from this Google "
+            "account. Check [SHEETS] spreadsheet_id against the URL of "
+            f"'{spreadsheet}', and that the account you authorized may open it."
         ) from e
 
     except GoogleAuthError as e:
@@ -151,8 +192,9 @@ def open_spreadsheet(spreadsheet: str = SPREADSHEET_NAME) -> Any:
 
     except gspread.exceptions.APIError as e:
         raise SheetsUnavailable(
-            f"Google rejected the request ({e}). Check that the Sheets API and "
-            "the Drive API are both enabled for this project."
+            f"Google rejected the request ({e}). Check that the Sheets API is "
+            "enabled for this project. The Drive API is no longer used and no "
+            "longer needs enabling."
         ) from e
 
 
@@ -164,9 +206,9 @@ def _restrict_google_credentials() -> None:
     and gspread writes them at the process umask -- 0644 here, in a 0755
     directory with nothing above it. They are also the highest-value secret on
     the machine: ``authorized_user.json`` is a refresh token, renewable
-    indefinitely, and gspread.oauth() asks for full ``spreadsheets`` and
-    ``drive`` rather than the file-scoped variants, so it reaches the operator's
-    entire Drive rather than the one spreadsheet this tool writes.
+    indefinitely, and it is now consented at ``spreadsheets`` alone rather than
+    at that plus full ``drive``. That is narrower than it was and is not narrow
+    -- the scope is account-wide over Sheets -- so the mode still matters.
 
     Done here rather than documented as a step for the operator to run, because
     an instruction is not a mechanism. Only ever tightening, and best-effort, so
@@ -220,9 +262,8 @@ def _find_worksheet(book: Any, worksheet_name: str, spreadsheet: str) -> Any:
     except gspread.exceptions.APIError as e:
         raise SheetsUnavailable(
             f"Google rejected the request for the tabs in '{spreadsheet}' "
-            f"({e}). Check that the Sheets API and the Drive API are both "
-            "enabled for this project, and that the authorized account may "
-            "read the spreadsheet."
+            f"({e}). Check that the Sheets API is enabled for this project, "
+            "and that the authorized account may read the spreadsheet."
         ) from e
 
 
