@@ -571,6 +571,15 @@ recorded. An account returning zero positions is normal rather than a failure �
 a brokerage that pre-aggregates, such as a Schwab-held 529, gives SnapTrade a
 balance and nothing to break it down with.
 
+`--page-size` is the fourth, and it is not for a crontab. The transactions call
+is paginated and followed to the end, but SnapTrade answers with a thousand rows
+to a request, so no account here has ever filled a second page and the loop has
+never had to run. Lowering the size makes it run. It changes how many requests a
+window costs and not what the window holds, which is why it belongs to
+verification rather than to a schedule —
+[`live-verification.md`](live-verification.md) has the step and what either
+outcome would mean.
+
 Connections expire after a few weeks and re-authorising is a browser step —
 `scripts/snaptrade_register.py link` again. Until then the sync is unattended.
 

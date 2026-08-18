@@ -539,7 +539,11 @@ What that file already says, and what it means here:
   transaction path has been exercised at one movement, so the pagination behind it has
   not been exercised at all, and neither the disabled-connection skip nor the freshness
   guard has ever had a real case to fire on. Those two wait on a connection lapsing
-  rather than on anybody running anything.
+  rather than on anybody running anything. The pagination is the one that does not:
+  `--page-size` asks the real API for pages small enough to have to be followed, so that
+  gap closes on an afternoon somebody spends rather than on a condition occurring. It has
+  not been spent — a schedule installed today is one whose transaction reads have still
+  never been watched take a second request.
 
 None of that argues against scheduling them. It argues for reading the first week of cron
 mail rather than assuming silence means success — and for knowing that the first lapsed
