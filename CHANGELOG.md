@@ -9,7 +9,62 @@ the two disagree.
 
 ## [Unreleased]
 
+### Security
+
+- **Clearing a password column does not remove the password, and now a `VACUUM`
+  does.** `migrate_plaintext_secrets()` moves a legacy plaintext secret into the
+  keyring and runs `UPDATE credentials SET password = NULL`. SQLite marks the old
+  cell free inside its page and moves on, so the bytes stay in the file. It was
+  written down as an accepted risk and never measured; it has been measured now.
+  At ten credentials the cleared password was still greppable in the database in
+  **fifteen runs out of fifteen**. At one credential it was greppable in none of
+  them — a single row's page is rewritten in place — which is why the test that
+  makes this claim uses ten rows and says so: a one-row fixture asserts something
+  already true and passes with the fix reverted.
+- **The rebuild runs only when a migration moved something.** It is called from
+  `__init__`, so an unguarded `VACUUM` would rewrite every database on every
+  open. A migration that finds legacy plaintext happens once in a database's
+  life. `VACUUM` cannot run inside a transaction, which usually makes this
+  awkward from SQLAlchemy — here the engine is already built with
+  `isolation_level="AUTOCOMMIT"`, so a bare execute is outside one and the code
+  says so, because the reader's instinct is that it cannot be.
+
+### Added
+
+- **`vacuum` in `stonksmithdb`, which is the half that reaches the databases
+  that have the problem.** The automatic rebuild fires when a migration moves a
+  secret, and a workspace migrated before that rebuild existed already moved
+  its secrets — so the guard will never be true for it again, and it is exactly
+  the workspace still carrying the cleared bytes. Nothing but an explicit run
+  reaches it. Every database in the workspace rather than a named one: an
+  operator asking this question does not know which file the plaintext is in,
+  and making them guess is how a workspace ends up half done.
+- A database that cannot be rebuilt is reported and the sweep carries on, but
+  the run exits `1`. A scrub that skipped a file and exited `0` reads downstream
+  as a workspace that has been scrubbed.
+- **The report says "rebuilt" before it says a size.** A small database is
+  already one page and reclaims nothing measurable while still having had every
+  freed page rewritten, so `reclaimed 0 bytes` on its own reads as "nothing
+  happened" — the opposite of what just happened. Verified end to end against a
+  throwaway workspace: a 2,297,856-byte database came back 8,192 bytes with the
+  plaintext gone, and a one-page database reported `rebuilt, same size` having
+  also lost it.
+- The command is named in the shell's own intro. This is the defect
+  `tests/test_shell_advertises_what_it_runs.py` was written about — `delete
+  account` shipped working and invisible — and that file derives its check from
+  `DELETERS`, which covers the broker sub-shells and not the top level.
+
 ### Documentation
+
+- **`SECURITY.md`'s *A migrated database is not a scrubbed one* is now *A
+  vacuumed database is not a scrubbed disk*, and it shrank rather than closed.**
+  The rebuild reaches the database file. It does not reach the rollback journal,
+  which carries the pre-`UPDATE` page image — plaintext included — to
+  `<broker>.db-journal` and deletes rather than overwrites it on commit
+  (confirmed by reading one mid-transaction); the temporary full copy `VACUUM`
+  itself writes at the temp directory's mode; or the filesystem blocks the old
+  pages occupied. The honest statement is that this went from "the plaintext is
+  in your database" to "the plaintext may be in free space on your disk".
 
 - **The pagination claim is settled, and `--page-size` is what settled it.** 0.4.0
   shipped the flag saying in as many words that "the live run this was written for

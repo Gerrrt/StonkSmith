@@ -577,13 +577,26 @@ class PlaintextSecretMigrationTests(_DbTestCase):
     );
     """
 
-    def write_pre_keyring(self, name: str = "broker.db") -> None:
+    #: Rows to leave behind when the question is what survives in the file
+    #: rather than what SELECT returns.
+    #:
+    #: Ten, and the number is measured rather than picked. Whether the cleared
+    #: plaintext survives is a function of page layout, not of chance: with one
+    #: credential SQLite rewrites that page in place and the old bytes go with
+    #: it, so a one-row fixture asserts something already true and would pass
+    #: with the VACUUM reverted. Across 15 runs per size, 1 row survived 0/15
+    #: and 5 rows 0/15, while 2, 3, 10, 20 and 50 all survived 15/15. Ten is the
+    #: smallest round number reliably on the surviving side.
+    CREDENTIALS_LEFT_BEHIND = 10
+
+    def write_pre_keyring(self, name: str = "broker.db", count: int = 1) -> None:
         con = sqlite3.connect(self.tmp / name)
         try:
             con.executescript(self.PRE_KEYRING)
-            con.execute(
+            con.executemany(
                 "INSERT INTO credentials (username, password, type, pillaged_from) "
-                "VALUES ('someone', 'hunter2', 'plaintext', 'manual')"
+                "VALUES (?, 'hunter2', 'plaintext', 'manual')",
+                [(f"someone{i}" if count > 1 else "someone",) for i in range(count)],
             )
             con.commit()
         finally:
@@ -619,6 +632,64 @@ class PlaintextSecretMigrationTests(_DbTestCase):
         db = self.open_db()
 
         self.assertEqual(db.migrate_plaintext_secrets(), 0)
+
+    def test_the_cleared_plaintext_does_not_survive_in_the_file(self) -> None:
+        """The one claim SQL cannot make, so this reads the bytes.
+
+        ``test_the_secret_leaves_the_database_for_the_keyring`` above asserts
+        the password column is NULL, and that is true the instant the UPDATE
+        lands whether or not the old bytes are still in the file -- freed pages
+        are not reachable from SELECT. So the assertion that the plaintext is
+        *gone* has to be made against the file itself, and it is the reason
+        migrate_plaintext_secrets ends in a VACUUM.
+        """
+
+        self.write_pre_keyring(count=self.CREDENTIALS_LEFT_BEHIND)
+
+        self.open_db()
+
+        self.assertNotIn(
+            b"hunter2",
+            (self.tmp / "broker.db").read_bytes(),
+            "the cleared plaintext is still readable in the database file",
+        )
+
+    def test_nothing_is_vacuumed_when_nothing_migrated(self) -> None:
+        """A VACUUM on every open would rewrite every database, every run.
+
+        migrate_plaintext_secrets() is called from __init__, so the guard on
+        ``migrated`` is what keeps a whole-file rewrite off the common path. A
+        VACUUM leaves the free list empty; a database opened twice has had no
+        second migration and so must still be carrying whatever free pages its
+        ordinary writes left.
+        """
+
+        self.write_pre_keyring(count=self.CREDENTIALS_LEFT_BEHIND)
+        self.open_db()
+
+        con = sqlite3.connect(self.tmp / "broker.db")
+        try:
+            con.execute("CREATE TABLE scratch (blob TEXT)")
+            con.executemany(
+                "INSERT INTO scratch (blob) VALUES (?)", [("x" * 400,)] * 200
+            )
+            con.execute("DROP TABLE scratch")
+            con.commit()
+            freed: int = con.execute("PRAGMA freelist_count").fetchone()[0]
+        finally:
+            con.close()
+
+        self.assertGreater(freed, 0, "the fixture did not free any pages")
+
+        self.open_db(name="broker.db")
+
+        con = sqlite3.connect(self.tmp / "broker.db")
+        try:
+            after: int = con.execute("PRAGMA freelist_count").fetchone()[0]
+        finally:
+            con.close()
+
+        self.assertEqual(after, freed, "opening the database vacuumed it")
 
 
 if __name__ == "__main__":

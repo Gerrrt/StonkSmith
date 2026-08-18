@@ -63,6 +63,8 @@ class StonkSmithDBMenu(cmd.Cmd):
         "    stale [days]      report accounts nothing has refreshed lately\n"
         "    brief [peek|--no-open]  what changed since the last brief\n"
         "    dividends         refresh what each holding pays per share\n"
+        "    vacuum            rebuild the databases so freed pages stop "
+        "carrying\n"
         "    help              commands at this level\n"
         "    exit              quit\n"
     )
@@ -958,6 +960,70 @@ class StonkSmithDBMenu(cmd.Cmd):
             print(f"[-] {what} failed: {type(e).__name__}: {e}")
 
         return None
+
+    def do_vacuum(self, line: str) -> None:
+        """
+        Rebuild every database in the workspace, so freed pages stop carrying.
+
+        The half that reaches the databases that actually have the problem.
+        ``migrate_plaintext_secrets`` vacuums when it moves a secret, but it only
+        moves one once: a workspace migrated before that VACUUM existed will
+        never satisfy the guard again, and is exactly the workspace still holding
+        cleared plaintext in freed pages. Nothing but an explicit run reaches it.
+
+        Not confined to credentials, and not only about secrets. A VACUUM
+        rewrites the whole file, so it also drops the pages left by any delete
+        this tool has ever done -- a retired broker's rows, a snapshot removed
+        with its account.
+
+        Every database in the workspace, rather than a named one: the operator
+        asking this question does not know which file the plaintext is in, and
+        making them guess is how a workspace ends up half done. Sorted for
+        do_workspace's reason -- a listing a person reads should not shuffle.
+        :param line: Ignored; the workspace is the unit
+        :return: None
+        """
+
+        del line
+
+        from stonksmith.etc.broker_db import vacuum
+
+        here: Path = Path(workspace_dir) / self.workspace
+        databases: list[Path] = sorted(here.glob("*.db"))
+
+        if not databases:
+            print(f"[-] No databases in workspace '{self.workspace}'.")
+            return
+
+        print(f"[*] Vacuuming {len(databases)} database(s) in '{self.workspace}'.")
+
+        for path in databases:
+            engine: Engine = create_db_engine(db_path=path)
+
+            try:
+                reclaimed: int = vacuum(engine=engine)
+
+            except Exception as e:
+                # Reported per database and the run carries on: one unreadable
+                # file must not leave the rest of the workspace unvacuumed. The
+                # flag is what stops the scripted form exiting 0 having skipped
+                # the database somebody ran this for.
+                print(f"[-] {path.name}: {type(e).__name__}: {e}")
+                self.failed = True
+                continue
+
+            finally:
+                engine.dispose()
+
+            # "rebuilt" first and the size second, because the size is the
+            # part that misleads: a small database is already one page and
+            # reclaims nothing measurable while still having had every freed
+            # page rewritten. Reporting "reclaimed 0 bytes" on its own reads as
+            # "nothing happened", which is the opposite of what just happened.
+            freed: str = (
+                f", {reclaimed} byte(s) smaller" if reclaimed > 0 else ", same size"
+            )
+            print(f"[+] {path.name}: rebuilt{freed}")
 
     def write_config(self) -> None:
         """

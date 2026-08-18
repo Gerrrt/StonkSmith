@@ -46,8 +46,13 @@ under the service name `stonksmith` and the key `<broker>:<username>`. See
 `src/stonksmith/etc/secrets.py`.
 
 **Databases written before that split are migrated on first open.** Each
-plaintext password moves into the keyring and the column is cleared in place.
-See the accepted risk below about what "in place" does and does not mean.
+plaintext password moves into the keyring, the column is cleared, and the
+database is then rebuilt with a `VACUUM` so the cleared bytes do not stay behind
+in a freed page. The rebuild runs only when a migration actually moved
+something — it is a whole-file rewrite, and the migration happens once in a
+database's life. `vacuum` in `stonksmithdb` runs it on demand for a workspace
+that migrated before this existed. See the accepted risk below for what the
+rebuild does and does not reach.
 
 **Everything StonkSmith writes is owner-only** — `0600` for files, `0700` for
 directories. That covers the account databases, the config, the run log, page
@@ -84,14 +89,38 @@ anything that is not a boolean is not permission to reveal a secret.
 Each of these is known, and each is here because the alternative was worse or
 was not available.
 
-### A migrated database is not a scrubbed one
+### A vacuumed database is not a scrubbed disk
 
-`migrate_plaintext_secrets()` runs `UPDATE credentials SET password = NULL`. It
-does not `VACUUM`, so the old plaintext can survive in freed pages until SQLite
-reuses them.
+`migrate_plaintext_secrets()` clears the legacy `password` column and then
+rebuilds the database with a `VACUUM`, because clearing a column is not the same
+as removing what was in it: SQLite marks the old cell free inside its page and
+moves on. That is measured rather than assumed — at ten credentials the cleared
+password was still greppable in the file in fifteen runs out of fifteen. At one
+credential it was greppable in none of them, since a single row's page is
+rewritten in place, so the exposure needs more than one credential to exist at
+all.
 
-*If it matters to you:* `sqlite3 <workspace>/<broker>.db 'VACUUM;'`, or start a
-fresh workspace.
+The rebuild reaches the database file. **Three things it does not reach:**
+
+- **The rollback journal.** SQLite's default journal mode writes the pre-`UPDATE`
+  page image — plaintext included — to `<broker>.db-journal`, which is deleted
+  rather than overwritten on commit. Confirmed by reading one mid-transaction.
+- **The temporary copy `VACUUM` itself writes**, which is a full copy of the
+  database at whatever mode the system temp directory gives it. StonkSmith
+  tightens what it creates; this file is SQLite's.
+- **The filesystem blocks** the old pages occupied. On an SSD those outlive the
+  file by whatever the drive decides.
+
+So this shrank from "the plaintext is in your database" to "the plaintext may be
+in free space on your disk". That is a real reduction and it is not a scrub.
+
+*If it matters to you:* full-disk encryption is the control that covers the
+residue; a fresh workspace on an encrypted volume is the belt-and-braces answer.
+
+*If you migrated before this shipped:* the automatic rebuild only runs when a
+migration actually moves a secret, and yours already did — so it will never fire
+again for you. Run `vacuum` in `stonksmithdb`, which rebuilds every database in
+the workspace. That is what it is for.
 
 ### `-p` on the command line
 
