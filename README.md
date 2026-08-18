@@ -189,12 +189,16 @@ template.
 > what it was written to do, which is not the same as saying the site still
 > looks the way it did when the parser was written. Every broker that is not
 > deprecated has been run against the real thing, and the sheet has been read
-> back off a real spreadsheet; four claims are still open. Two wait on data
+> back off a real spreadsheet; five claims are still open. Two wait on data
 > rather than on effort — whether the `Transactions` tab holds every movement or
 > only the newest five hundred, and whether a 529 with more than one
 > beneficiary attributes its movements to the right one. Two wait on a
 > condition occurring at all: a SnapTrade connection lapsing, and an account's
-> holdings going stale.
+> holdings going stale. The fifth waits on neither, and is the only one here
+> anybody can close by deciding to: whether SnapTrade's transaction read goes past
+> its first page. That used to want a thousand movements nobody was going
+> to accumulate; `--page-size` asks the real API for small pages instead, so what
+> is left is the run.
 >
 > **The `fidelity` broker is the exception, and it is deprecated.** It was never
 > run against the real site, and its five claims were withdrawn rather than

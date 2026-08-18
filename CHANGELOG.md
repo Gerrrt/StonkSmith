@@ -53,8 +53,36 @@ the two disagree.
   logs the account and the cap and tells the operator to narrow the window.
 
 > The live run this was written for has **not** been made. The flag makes the
-> claim settleable; it does not settle it, and the row in
-> `docs/live-verification.md` is unchanged until a run happens.
+> claim settleable; it does not settle it, and no row in
+> `docs/live-verification.md` reads `Yes` because of it.
+
+### Documentation
+
+- **The pagination claim has its own row, because it was hiding inside a settled
+  one.** `SnapTrade — transactions reach the database` reads `Yes, at one
+  movement`, and `tests/test_live_verification_tally.py` counts any verdict
+  starting `Yes` as confirmed — so the bolded caveat about the
+  follow-to-exhaustion loop was invisible to the count, and to the reader the
+  count exists to save from counting. The table goes from 37 claims to 38 and
+  from 4 outstanding to 5. The settled count is unchanged at 33, because nothing
+  was settled.
+- **The sentence saying the loop would stay unexercised "until an account trades
+  enough to need a second page" was made false by `--page-size`, and is gone.**
+  It stood in [`docs/live-verification.md`](docs/live-verification.md) and, in
+  another form, in the SnapTrade paragraph of
+  [`docs/scheduling.md`](docs/scheduling.md), which grouped the pagination with
+  two gaps that really do wait on the world. This one waits on an operator, and
+  that is the distinction the new row buys.
+- **A procedure for the run**, in the *SnapTrade* section, which until now was
+  the one broker section with no numbered steps at all: what to pass, why a page
+  size below the movement count is the whole trick, why the paged run has to go
+  first, what the 20-page cap prints when it fires, and what either outcome would
+  mean. It also names the branch a live run *cannot* reach — the short-page arm
+  needs a response carrying no `total`, and the live endpoint carries one.
+- **`--page-size` is documented in the reference chapter**, beside
+  `--history-days` and `--no-positions` in
+  [`docs/brokers.md`](docs/brokers.md), where it shipped with no entry at all.
+  The README's verification note now counts five open claims rather than four.
 
 ## [0.3.0] - 2026-08-17
 

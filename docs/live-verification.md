@@ -34,18 +34,23 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*As of 2026-08-17: 33 of 37 claims have been settled by a live run — 31 confirmed,
+*As of 2026-08-17: 33 of 38 claims have been settled by a live run — 31 confirmed,
 2 disproved. 0 of those were settled more than six months before that date, and 0
-carry no date at all. The remaining 4 rest on evidence no run here has produced: a
+carry no date at all. The remaining 5 rest on evidence no run here has produced: a
 broker with the transaction volume to put the question, a SnapTrade connection that
-has actually lapsed, an account whose holdings have actually gone stale, and a 529
-with more than one beneficiary on it. Three of those are alike and worth naming as
-such: a lapsed connection, stale holdings and a second beneficiary each need a
-condition to occur rather than a run to be made, and no amount of sitting down at the
-machine produces one. Two rows left this list on 2026-08-15 and are worth telling
-apart: the allocation blocks only ever needed a run made after the check existed,
-while the carried series needed a workspace to become the ordinary state of a real
-one, which took waiting rather than doing. Five more left it on 2026-08-17 by being
+has actually lapsed, an account whose holdings have actually gone stale, a 529
+with more than one beneficiary on it, and a transaction read followed across more
+than one page of the real API. They are not alike, and the three kinds are worth
+telling apart. Three need a condition to occur rather than a run to be made: a lapsed
+connection, stale holdings and a second beneficiary, none of which any amount of
+sitting down at the machine produces. The transaction volume is a kind of its own —
+nothing has to happen, but enough has to accumulate, and at nine movements in five days
+that is a wait rather than an afternoon. The last is the only one that is anybody's
+to-do. Following pages wanted volume too until `--page-size` landed; now it wants a page
+size asked for and a machine holding the credentials, which is a run somebody makes. Two rows left this list on 2026-08-15 and
+are worth telling apart: the allocation blocks only ever needed a run made after the
+check existed, while the carried series needed a workspace to become the ordinary state
+of a real one, which took waiting rather than doing. Five more left it on 2026-08-17 by being
 withdrawn rather than settled, which is a third way off this list and is explained
 below.*
 
@@ -141,7 +146,8 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | SnapTrade — a personal API key reaches the API | Four runs on 2026-08-11 against a real account, written up below. `verify_access` listed the connections and every run proceeded on the key alone — no userId, no userSecret, no browser | Yes | 2026-08-11 |
 | SnapTrade — accounts and balances reach the database | The same four runs, into a real `snaptrade.db`: snapshots 168–199, eight accounts per run, each carrying an `As Of` of 2026-08-11 | Yes | 2026-08-11 |
 | SnapTrade — positions reach the database | The `Holdings` tab went from 2 rows to 9 between the `--no-positions` run and the full one that followed, both on 2026-08-11 — the seven are SnapTrade's, and the two that survived the first run are other brokers' | Yes | 2026-08-11 |
-| SnapTrade — transactions reach the database | The same pair of runs took movements from 9 to 10. **One movement, which is not a test of the pagination behind it** — the 20-page backstop and the follow-to-exhaustion loop are still unexercised | Yes, at one movement | 2026-08-11 |
+| SnapTrade — transactions reach the database | The same pair of runs took movements from 9 to 10. **One movement, which is not a test of the pagination behind it** — that half is the row below, and it is why this one is settled at a size rather than settled | Yes, at one movement | 2026-08-11 |
+| SnapTrade — the transaction read follows pages to exhaustion | Unit tests over the fake client in `tests/test_snaptrade_broker.py`, and nothing else. SnapTrade serves a thousand rows to a request, so no real run has ever filled a second page and neither the loop nor its 20-page backstop has run against the API. `--page-size` makes both askable without waiting for the volume — the run is what has not happened | No | — |
 | SnapTrade — a liability is skipped, not filed as an asset | All four runs skipped `Chase / CREDIT CARD` by name, reporting `it is a liability (LOC)`, against a real card carrying a real negative balance | Yes | 2026-08-11 |
 | SnapTrade — `exclude_accounts` drops an account another broker owns | All four runs skipped the Schwab-held 529 by name, reporting `excluded, because another broker covers it`, with the label matched out of the config | Yes | 2026-08-11 |
 | SnapTrade — one row per account across runs | Four runs inside five minutes: `show accounts` held at nine rows while `show snapshots` went 168 → 199, eight per run | Yes | 2026-08-11 |
@@ -1184,8 +1190,120 @@ So the positions call is worth seven rows here and the transactions call one. Th
 holdings that survived the first run are other brokers'; SnapTrade contributed none,
 which is the flag doing exactly what it says and is why it now carries a warning. **One
 movement is not a test of the pagination behind it.** The follow-to-exhaustion loop and
-its 20-page backstop remain unexercised, and will stay that way until an account trades
-enough to need a second page.
+its 20-page backstop are unexercised against the API, and they were going to stay that
+way: SnapTrade serves a thousand rows to a request, so the volume that would fill a
+second page is volume no workspace here is going to reach. `--page-size` removes the
+wait rather than the gap. The loop is now askable of the real API at any size you name,
+which turns this from something to wait for into something to run — and nobody has run
+it. The procedure is below.
+
+### Following the pages, at a size asked for
+
+**Not run.** This is the procedure for the row above, written when `--page-size` landed
+rather than after a run, so that making the run is a sitting rather than a rediscovery.
+
+**Why a flag and not a wait.** `fetch_activities()` asks for a page, keeps what came
+back, and asks again until the pagination block reports itself exhausted or twenty
+requests have gone out. SnapTrade's own default is a thousand rows to a request, and no
+account here has held a thousand movements in ninety days — so every real run this broker
+has made took one request and stopped, and the loop around it has only ever turned against
+the fake client in `tests/test_snaptrade_broker.py`. That is the evidence this file opens
+by saying does not count. `--page-size` supplies the smallness rather than waiting for the
+bigness, which is the move [`verify volume`](sheet.md) makes for the sheet and for the
+same reason.
+
+**It has to be asked for by name.** Omitted, the flag is left out of the request
+altogether and the server's default decides, so an ordinary run sends what it sent before
+the argument existed. That is deliberate: a small default would make every nightly run pay
+for a check whose answer does not change between runs.
+
+Three things to observe, and they are three runs rather than one.
+
+#### 1. The loop does not stop at the first page
+
+Needs an account holding **between 2 and 20 movements** in the window — more than one, so
+there is a second page to follow, and fewer than twenty-one, so the cap in step 2 is not
+what ends the read.
+
+Ask for one row a page and `N` movements should cost `N` requests: the live API returns
+the envelope with a real `total` — checked against it on 2026-08-17 — so the read ends on
+`offset >= total` rather than on the short-page test. That short-page test is the
+defensive path, for the SDK versions that unwrap the envelope and hand back no total at
+all, and this run does not reach it.
+
+**Run the paged one first, and the ordinary one second. That order is the check.** The
+database deduplicates, so the second run writes only what the first one missed — and if
+the small-page read dropped movements, the full-sized read behind it puts them back and
+the count moves. Run them the other way round and the paged read has nothing left to fail
+to find, so the two agree about nothing.
+
+```bash
+uv run stonksmith snaptrade --no-sheet --history-days 90 --page-size 1
+uv run stonksmith snaptrade --no-sheet --history-days 90
+```
+
+**What settles it** is the movement count standing still across the second run. At a page
+size below the number of movements in the window, that is only possible if the loop asked
+for the second page and every page after it. Record the count before, between and after,
+and the window — a pass with no numbers under it is the state this document exists to end.
+
+**Read the count off `read_workspace()`, never off `show transactions`.** That is
+`get_transactions`, whose `limit=500` `broker_db.py` says "would report the newest five
+hundred movements as though they were all of them", which is why it "cannot back a sheet".
+Comparing a read that windows against another read that windows is how this check passes
+for the wrong reason — [#141](https://github.com/Gerrrt/StonkSmith/issues/141) records the
+sheet's procedure telling people to do exactly that until it was corrected. `verify tabs`
+reports that count on its movement line and is the one place it is already printed — it
+counts against `read_workspace()` for exactly this reason, which `_count_case()` in
+`portfolio_sheet.py` says in as many words.
+
+**If the two counts disagree,** that is this row settled the other way rather than a failed
+step, and it is the more interesting outcome by some distance: a small page size losing
+rows means the loop stops early, and every full-sized run this broker has ever made was a
+single request that never had the chance to show it.
+
+#### 2. The backstop fires, and says it stopped short
+
+`page_limit` is 20 and is not exposed as a flag, so twenty requests is the ceiling. At one
+row a page that is **twenty-one movements** in the window — reached by widening
+`--history-days` until some account holds that many, which is a far smaller number than
+the five hundred [#141](https://github.com/Gerrrt/StonkSmith/issues/141) is waiting on and
+is the reason this row is a run rather than a wait.
+
+Expect the account and the cap, both named:
+
+```text
+    [-] Stopped reading transactions for account <id> at the 20-page cap. Some movements were not read; narrow the window with --history-days, or raise the page size, and run again.
+```
+
+**What settles it is that line appearing at all.** A capped read and a complete read are
+indistinguishable from the return value — which is the whole reason the message was
+added — so a run that reads twenty-one movements at one row a page and says nothing is
+this step failing, not passing. Record the movement count as well: the read is *supposed*
+to come back short here, and a step whose expected outcome is a short read has to say how
+short.
+
+#### 3. A page size the API would refuse is refused before the wire
+
+```bash
+uv run stonksmith snaptrade --page-size 0
+```
+
+```text
+stonksmith snaptrade: error: argument --page-size: page size must be at least 1, not 0
+```
+
+Exit `2`, from `argparse`, before anything is asked of the network. Zero is the value worth
+naming because it does not simply fail: it passes `page_size is not None`, so `limit=0`
+would reach the wire against a schema whose stated minimum is 1, and `len(rows) <
+page_size` can never be true against it — so a read carrying no total would run to the
+twenty-page cap instead of stopping. `positive_page_size()` in
+`brokers/snaptrade/broker_args.py` is where it stops instead.
+
+This step costs no API call and needs no credential, so unlike the two above it can be run
+anywhere. It was run on 2026-08-17 and the output above is what it printed — which settles
+nothing in the table, because the row is about the loop and this is about the parser in
+front of it.
 
 ### What an exclusion does not do
 
@@ -1211,12 +1329,19 @@ rather than this row. Nothing here has been run against the real `snaptrade.db`,
 so no claim is opened for it; the command's own behaviour is covered by
 `tests/test_delete_account.py` against a real SQLite file.
 
-Two rows stay `No`, and neither is waiting on effort. A disabled connection needs a
-connection to actually lapse — SnapTrade goes on serving its last cached balance rather
+Three rows stay `No`, and the third is not like the other two. A disabled connection needs
+a connection to actually lapse — SnapTrade goes on serving its last cached balance rather
 than erroring, which is the whole reason the guard exists and the reason it cannot be
 staged. The freshness guard needs holdings that have actually gone stale; every real
 account here had synced that morning, so `--max-age-days` has never been handed anything
-to reject.
+to reject. Neither is waiting on effort, and no amount of sitting at the machine produces
+either.
+
+The pagination row is waiting on effort, and only on effort. It used to belong with the
+other two — it wanted a thousand movements, which this workspace was not going to grow —
+and `--page-size` is what moved it, by letting the size be asked for instead of waited
+for. So it is the one `No` in this section that somebody can turn into a `Yes` on an
+afternoon, and the procedure above is written for whoever has the credentials to do it.
 
 ---
 
