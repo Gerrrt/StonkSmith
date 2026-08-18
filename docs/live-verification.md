@@ -40,14 +40,14 @@ carry no date at all. The remaining 5 rest on evidence no run here has produced:
 broker with the transaction volume to put the question, a SnapTrade connection that
 has actually lapsed, an account whose holdings have actually gone stale, a 529
 with more than one beneficiary on it, and a transaction read followed across more
-than one page of the real API. Three of those are alike and worth naming as
-such: a lapsed connection, stale holdings and a second beneficiary each need a
-condition to occur rather than a run to be made, and no amount of sitting down at the
-machine produces one. The fifth is the one that is not like them, and it is the
-newest here: following pages needed volume too until `--page-size` landed, and now it
-needs a page size asked for and a machine holding the credentials. That is a run
-somebody makes rather than a condition somebody waits for, which makes it the only
-row on this list that is anybody's to-do. Two rows left this list on 2026-08-15 and
+than one page of the real API. They are not alike, and the three kinds are worth
+telling apart. Three need a condition to occur rather than a run to be made: a lapsed
+connection, stale holdings and a second beneficiary, none of which any amount of
+sitting down at the machine produces. The transaction volume is a kind of its own —
+nothing has to happen, but enough has to accumulate, and at nine movements in five days
+that is a wait rather than an afternoon. The last is the only one that is anybody's
+to-do. Following pages wanted volume too until `--page-size` landed; now it wants a page
+size asked for and a machine holding the credentials, which is a run somebody makes. Two rows left this list on 2026-08-15 and
 are worth telling apart: the allocation blocks only ever needed a run made after the
 check existed, while the carried series needed a workspace to become the ordinary state
 of a real one, which took waiting rather than doing. Five more left it on 2026-08-17 by being
@@ -1219,7 +1219,7 @@ for a check whose answer does not change between runs.
 
 Three things to observe, and they are three runs rather than one.
 
-#### 1. The loop follows a page it did not fill
+#### 1. The loop does not stop at the first page
 
 Needs an account holding **between 2 and 20 movements** in the window — more than one, so
 there is a second page to follow, and fewer than twenty-one, so the cap in step 2 is not

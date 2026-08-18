@@ -195,8 +195,8 @@ template.
 > beneficiary attributes its movements to the right one. Two wait on a
 > condition occurring at all: a SnapTrade connection lapsing, and an account's
 > holdings going stale. The fifth waits on neither, and is the only one here
-> anybody can close by deciding to: whether SnapTrade's transaction read follows
-> pages it did not fill. That used to want a thousand movements nobody was going
+> anybody can close by deciding to: whether SnapTrade's transaction read goes past
+> its first page. That used to want a thousand movements nobody was going
 > to accumulate; `--page-size` asks the real API for small pages instead, so what
 > is left is the run.
 >
