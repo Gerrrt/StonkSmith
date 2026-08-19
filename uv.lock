@@ -1085,7 +1085,7 @@ wheels = [
 
 [[package]]
 name = "snaptrade-python-sdk"
-version = "12.1.0"
+version = "13.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1096,9 +1096,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bc/1c/d0394047f71451bf1876deb8bd4459f99ed18bae63e0bdbd42b4b775b2c6/snaptrade_python_sdk-12.1.0.tar.gz", hash = "sha256:1ac3ca3cd296e9ec8d1cf14e23bbbb53f71b792d7ba6ccd72d3599cb7f9e3fb9", size = 354384, upload-time = "2026-08-07T15:45:41.281Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/c6/2632fa1f2e152595720dbc7ab68c731aa1b7e1d4b53b5e61fb1efb06ed5e/snaptrade_python_sdk-13.0.2.tar.gz", hash = "sha256:998daffee1ad840778ae360829866b78305b90510b26420773a38f538c7f89c1", size = 327693, upload-time = "2026-08-13T22:29:16.024Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e3/a5/4488ca3796f9044a918c809c7abca8e644ed79692d1fd6198d80891ea371/snaptrade_python_sdk-12.1.0-py3-none-any.whl", hash = "sha256:c699b4c66f8c93c1b0df3c5fd505b28489ac21d8cc811697bebfebe623a137d9", size = 1138500, upload-time = "2026-08-07T15:45:39.868Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/63/dd23a9ddc8991ad7b06b3c4e32351ab370e61d1cc7b3eff6b07647e6426c/snaptrade_python_sdk-13.0.2-py3-none-any.whl", hash = "sha256:9b7811672f9e11b40818b71d644424753cecb9f12ebb4fae52d8413135871436", size = 1068362, upload-time = "2026-08-13T22:29:14.134Z" },
 ]
 
 [[package]]
