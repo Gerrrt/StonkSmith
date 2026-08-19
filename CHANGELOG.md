@@ -11,6 +11,38 @@ the two disagree.
 
 ### Security
 
+- **StonkSmith no longer asks Google for access to your Drive.** `gspread.oauth()`
+  defaults to full `spreadsheets` *plus* `drive`, and that default is what shipped —
+  so the refresh token in `~/.config/gspread/authorized_user.json` reached every
+  file in the operator's Drive rather than the one book being written. It was an
+  open item in `SECURITY.md` rather than a settled one.
+- **Drive was there for exactly one call.** `Client.open(title)` is a Drive
+  `files.list` search, and it was the only Drive request in the codebase —
+  `worksheet`, `add_worksheet`, `del_worksheet` and every read and write past it
+  go to `sheets.googleapis.com`. So the book is now opened by id, from
+  `[SHEETS] spreadsheet_id`, which removes the reason for the scope rather than
+  trimming it. `open_by_key()` makes no request at all, so nothing replaces the
+  one that went away.
+- **Not `drive.file`, which `SECURITY.md` had named as the target.** That grants
+  per-file access to files the app *itself created* or the user picked through the
+  Google Picker, and a command-line tool cannot show a Picker — so a spreadsheet
+  made by hand in a browser is unreachable under it, even by id. Closing the item
+  that way would have meant creating a fresh book and migrating the history into
+  it. Dropping Drive outright is both narrower and workable.
+- **An unset id refuses rather than falling back to a lookup by name.** The
+  fallback is the kind-looking option and it would have put the whole risk back:
+  searching by title is the Drive call, so anyone who had not yet set the option —
+  that is, everyone, on the day this ships — would have gone on consenting the wide
+  grant. The refusal names the setting and happens *before* `gspread.oauth()` is
+  called, so it cannot consent a token on its way to failing.
+- **Upgrading needs `~/.config/gspread/authorized_user.json` deleted.** Google does
+  not narrow a grant in place: a token consented under the old scopes keeps them
+  until it is replaced, so an install that skips this keeps the wide grant and
+  every other check still passes. `credentials.json` stays.
+- `spreadsheets` is still account-wide over Sheets. This is narrower than it was
+  and it is not narrow, and `SECURITY.md` now says so in those words rather than
+  implying the item closed further than it did.
+
 - **Clearing a password column does not remove the password, and now a `VACUUM`
   does.** `migrate_plaintext_secrets()` moves a legacy plaintext secret into the
   keyring and runs `UPDATE credentials SET password = NULL`. SQLite marks the old
@@ -30,6 +62,22 @@ the two disagree.
   says so, because the reader's instinct is that it cannot be.
 
 ### Added
+
+- **`[SHEETS] spreadsheet_id` in `~/.stonksmith/stonksmith.conf`**, which is how
+  the book is now identified. `SPREADSHEET_NAME` in `helpers/sheets.py` survives as
+  the label errors print and is no longer how anything is found.
+- **A live-verification row, and it is the first runnable one since the pagination
+  claim was settled on 2026-08-18.** A scope is invisible at runtime — a token
+  consented too widely works *better* than a narrow one — and the suite authorizes
+  against a `MagicMock`, which accepts anything. So no test can say Google accepts
+  the narrowed grant; only a consent screen read by a person can. The record's
+  header paragraph said "nothing on this list is anybody's to-do any more" two days
+  ago, and it now says which one is and why that sentence stopped being true.
+- `tests/test_the_google_grant_is_narrow.py` asserts on the `scopes=` argument
+  itself rather than on `oauth` having been called — the obvious version of that
+  test passes on the old code. Every test in the file was checked against a
+  behaviour-reverted `sheets.py`: five fail on the scope and the id, three more on
+  a refusal replaced with the title-lookup fallback.
 
 - **`vacuum` in `stonksmithdb`, which is the half that reaches the databases
   that have the problem.** The automatic rebuild fires when a migration moves a

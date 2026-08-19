@@ -1026,3 +1026,27 @@ def get_brief_movers() -> int:
         return 8
 
     return max(1, configured)
+
+
+def get_spreadsheet_id() -> str:
+    """
+    Which spreadsheet to write, by id rather than by name.
+
+    The id is what removes the Drive scope. ``gspread``'s ``Client.open(title)``
+    is a Drive ``files.list`` search, and it is the *only* call in StonkSmith
+    that touches Drive at all -- every read and write past it is Sheets API. So
+    asking for a title is what made the stored refresh token reach the whole of
+    the operator's Drive; asking for an id lets the grant narrow to spreadsheets
+    alone. See SECURITY.md.
+
+    Blank is unset, and the caller refuses rather than falling back to a name
+    search. That is deliberate: a fallback would re-request the Drive scope and
+    quietly restore the reach this removed, and an option that silently does the
+    insecure thing when it is blank is worse than one that says it is missing.
+    :return: The configured spreadsheet id, or "" when unset
+    :rtype: str
+    """
+
+    return (
+        get_config().get(section="SHEETS", option="spreadsheet_id", fallback="").strip()
+    )

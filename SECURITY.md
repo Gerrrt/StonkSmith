@@ -54,6 +54,37 @@ database's life. `vacuum` in `stonksmithdb` runs it on demand for a workspace
 that migrated before this existed. See the accepted risk below for what the
 rebuild does and does not reach.
 
+**StonkSmith asks Google for Sheets access and nothing else.** `gspread.oauth()`
+defaults to full `spreadsheets` **plus** `drive`, and that default is what this
+tool used to ship — so the refresh token in
+`~/.config/gspread/authorized_user.json` reached every file in the operator's
+Drive rather than the one book being written.
+
+Drive was there for exactly one call. `Client.open(title)` is a Drive
+`files.list` search, and it was the only Drive request in the codebase;
+everything past it goes to `sheets.googleapis.com`. StonkSmith now opens the
+book by id — `[SHEETS] spreadsheet_id` in `~/.stonksmith/stonksmith.conf` — which
+removes the reason for the scope rather than trimming it.
+
+Not `drive.file`, which earlier versions of this file named as the target.
+`drive.file` grants per-file access to files *the app itself created* or the user
+picked through the Google Picker, and a command-line tool cannot show a Picker —
+so a spreadsheet made by hand in the browser is unreachable under it, even by id.
+Dropping Drive outright is both narrower and workable.
+
+There is deliberately **no fallback** to looking the book up by name when the id
+is unset: the fallback would re-request the Drive scope, which is the entire
+thing being removed. An unset id is an error that names the setting.
+
+`spreadsheets` is still account-wide over Sheets. This is narrower than it was;
+it is not narrow. **An existing `authorized_user.json` still carries the old
+wide grant** — Google does not narrow a token in place, so until it is deleted
+and re-consented nothing has changed for that install:
+
+```bash
+rm ~/.config/gspread/authorized_user.json
+```
+
 **Everything StonkSmith writes is owner-only** — `0600` for files, `0700` for
 directories. That covers the account databases, the config, the run log, page
 captures and screenshots, the saved browser session, the Playwright trace, the
@@ -136,18 +167,6 @@ that port is open, any local process can drive the signed-in session. StonkSmith
 cannot authenticate that channel — nothing can; that is what the protocol is.
 
 *Mitigation:* close the window when the run finishes.
-
-### The Google grant is wider than it needs to be
-
-`gspread.oauth()` requests full `spreadsheets` and `drive` scopes, not the
-file-scoped `drive.file`. So the token in
-`~/.config/gspread/authorized_user.json` reaches the operator's entire Drive,
-not just the one spreadsheet StonkSmith writes. That is gspread's default rather
-than a StonkSmith decision, and narrowing it means passing `scopes=` and deleting
-`authorized_user.json` to re-consent. It is an open item, not a settled one.
-
-StonkSmith tightens the mode on that file and the directory holding it, but the
-scope is what it is.
 
 ### The scheduled run holds keychain access
 

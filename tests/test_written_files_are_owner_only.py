@@ -34,6 +34,7 @@ import stonksmith.etc.browser_connection as browser_mod
 import stonksmith.etc.config as etc_config
 import stonksmith.helpers.sheets as sheets
 from config_isolation import UserConfigMixin
+from gspread_isolation import STUB_SPREADSHEET_ID
 from stonksmith.etc.browser_connection import BrowserConnection
 from stonksmith.etc.infrastructure import create_db_engine
 from stonksmith.etc.logger import StonkSmithAdapter
@@ -262,7 +263,18 @@ class TraceAndProfileTests(_TempRoot):
         self.assertEqual(theirs.stat().st_mode & 0o777, 0o755)
 
 
-class GoogleCredentialTests(_TempRoot):
+class GoogleCredentialTests(UserConfigMixin, _TempRoot):
+    """The credential files, and the config that has to exist to reach them.
+
+    UserConfigMixin is here for open_spreadsheet's sake rather than for the
+    permissions this file is about: the call refuses before it authorizes when
+    no ``[SHEETS] spreadsheet_id`` is configured, so without a throwaway config
+    these tests would answer out of the developer's own -- and pass or fail on
+    whether they happen to have set one.
+    """
+
+    config_body = f"[SHEETS]\nspreadsheet_id = {STUB_SPREADSHEET_ID}\n"
+
     def _seed(self) -> None:
         self.tmp.chmod(mode=0o755)
         for name in ("authorized_user.json", "credentials.json"):

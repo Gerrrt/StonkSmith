@@ -34,21 +34,26 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*As of 2026-08-18: 34 of 38 claims have been settled by a live run — 32 confirmed,
+*As of 2026-08-18: 34 of 39 claims have been settled by a live run — 32 confirmed,
 2 disproved. 0 of those were settled more than six months before that date, and 0
-carry no date at all. The remaining 4 rest on evidence no run here has produced: a
+carry no date at all. The remaining 5 rest on evidence no run here has produced: a
 broker with the transaction volume to put the question, a SnapTrade connection that
-has actually lapsed, an account whose holdings have actually gone stale, and a 529
-with more than one beneficiary on it. They are not alike, and the two kinds are worth
+has actually lapsed, an account whose holdings have actually gone stale, a 529
+with more than one beneficiary on it, and a Google consent screen read after the
+grant was narrowed. They are not alike, and the kinds are worth
 telling apart. Three need a condition to occur rather than a run to be made: a lapsed
 connection, stale holdings and a second beneficiary, none of which any amount of
 sitting down at the machine produces. The transaction volume is a kind of its own —
 nothing has to happen, but enough has to accumulate, and at nine movements in five days
-that is a wait rather than an afternoon. **Nothing on this list is anybody's to-do any
-more**, which is new: following pages was the last one that was, and it was made on
-2026-08-18. A list with no runnable rows on it is not a finished list — it is a list
-whose remaining rows are waiting on the world, and the honest thing to do with it is
-leave it alone rather than find something to do to it. Two rows left this list on 2026-08-15 and
+that is a wait rather than an afternoon. **One of the five is somebody's to-do**, and
+it is the newest: narrowing the Google scope is a claim about what Google accepts,
+which no fake can answer and no waiting will produce. It needs the cached token
+deleted and a consent screen looked at. That sentence is worth pausing on, because
+the paragraph said the opposite two days ago — "nothing on this list is anybody's
+to-do any more" was true on 2026-08-18 and stopped being true the moment a change
+was made that only a live run can confirm. A list with no runnable rows is a list
+waiting on the world; a list with one is a list with work on it, and writing code
+that adds a row here is how the second becomes the first. Two rows left this list on 2026-08-15 and
 are worth telling apart: the allocation blocks only ever needed a run made after the
 check existed, while the carried series needed a workspace to become the ordinary state
 of a real one, which took waiting rather than doing. Five more left it on 2026-08-17 by being
@@ -144,6 +149,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes | 2026-08-11 |
 | The sheet — every allocation block adding up to the total it is a share of | `verify tabs` on 2026-08-15 against the real spreadsheet, the first run since the check was written: all three blocks were drawn and all three read back — account kind, position, and asset class — which is why that run counts thirteen checks where 2026-08-11 counted ten. The asset class line appearing at all is the config half, since it is drawn only when `asset_classes` is set. The refusal state was not seen and cannot be arranged; it needs positions exceeding balances, which check 8 says in advance is the expected outcome. Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, cover the wrong sum, the wrong share, and a refusal not being mistaken for either | Yes | 2026-08-15 |
 | The sheet — the account series carried across brokers that scraped on different days | A run on 2026-08-15 against a workspace whose six brokers entered the series twelve days apart and fell silent for up to six days inside it, quoted below: 78 rows off the real `Net Worth` tab, over nine dates, for twelve accounts. The account count per date ran `1, 7, 7, 9, 9, 11, 11, 11, 12` and never fell, where the observed-only count falls three times — so the carry-forward ran. Every row read `observed` or `carried`, the 17 carried ones dating `Observed On` before their `Date`; the eleven accounts that joined after the first date have no row on any date before they did, and no row is a zero. The thirty-day horizon is untouched by it — the longest silence there is six days — and that half still rests on `tests/test_net_worth_history.py`, alongside `tests/test_portfolio_sheet_workspace.py` over two real databases on disk | Yes | 2026-08-15 |
+| The sheet — a Sheets-only grant opens the book by id | Unit tests over the `scopes=` argument itself and over the refusal when no id is configured, in `tests/test_the_google_grant_is_narrow.py`. Those cannot settle it, and the reason is the shape of the thing: a scope is invisible at runtime, and a token consented too widely works *better* than a narrow one, so nothing short of watching a real consent screen says Google accepts this. Needs the cached token deleted, the consent screen read for whether it still asks for Drive, and a `sheet` run that creates a tab — `add_worksheet` being the operation most likely to have wanted Drive, and the one a read-only check would miss | No | — |
 | SnapTrade — a personal API key reaches the API | Four runs on 2026-08-11 against a real account, written up below. `verify_access` listed the connections and every run proceeded on the key alone — no userId, no userSecret, no browser | Yes | 2026-08-11 |
 | SnapTrade — accounts and balances reach the database | The same four runs, into a real `snaptrade.db`: snapshots 168–199, eight accounts per run, each carrying an `As Of` of 2026-08-11 | Yes | 2026-08-11 |
 | SnapTrade — positions reach the database | The `Holdings` tab went from 2 rows to 9 between the `--no-positions` run and the full one that followed, both on 2026-08-11 — the seven are SnapTrade's, and the two that survived the first run are other brokers' | Yes | 2026-08-11 |
@@ -1473,11 +1479,19 @@ needs is not a broker's.** No sign-in to anything StonkSmith scrapes, no browser
 drives. It is also the only one here that writes anywhere but a local database.
 
 **What it needs.** An OAuth client `gspread.oauth()` can authorize — a Desktop-app
-client ID with **both** the Sheets and the Drive API enabled, saved as
+client ID with the **Sheets** API enabled, saved as
 `~/.config/gspread/credentials.json`, the path `GSPREAD_CONFIG_DIR` in
-`src/stonksmith/helpers/sheets.py` names — and a spreadsheet called `Investment Account Scrapes` in
-that Google account or shared with it. That name is `SPREADSHEET_NAME` in the same file
-and nothing reads it from config. Then a workspace with at least one broker database
+`src/stonksmith/helpers/sheets.py` names. The Drive API is no longer used and no longer
+needs enabling: StonkSmith opens the book by id, and looking one up by name was the only
+Drive call it ever made.
+
+The book is named by `[SHEETS] spreadsheet_id` in `~/.stonksmith/stonksmith.conf` — the
+long segment of its URL between `/d/` and `/edit`. `SPREADSHEET_NAME` in
+`src/stonksmith/helpers/sheets.py` is now only the label errors print, not how the
+spreadsheet is found. An unset id refuses rather than falling back to a search by name,
+because the search is what would need Drive back.
+
+Then a workspace with at least one broker database
 already in it, and for check 5 specifically, a broker with a long transaction history
 rather than a fresh one — for the windowing half of it, which is the half `verify volume`
 cannot supply its own rows for.
@@ -1962,6 +1976,80 @@ bites: one `sheet` run touches all six of these rows, and the refusal is the onl
 that writes itself up. The 2026-08-15 run is that warning working — it was made for the
 carried series and settled the allocation blocks on the way past, and the second row would
 have been easy to leave unrecorded because nothing about it failed.
+
+### The narrowed grant, which has not been run yet
+
+**Outstanding.** The code changed on 2026-08-20 and nothing live has confirmed it. Until
+somebody sits down with a browser this row stays `No`, and the entry above says so.
+
+The claim is that a token consented at `spreadsheets` alone can open the book by id and
+complete a whole sync, tab creation included. No test here can make it: the suite
+authorizes against a `MagicMock`, which accepts any scope you hand it, and a scope is
+invisible at runtime in the direction that matters — a token consented too widely works
+*better* than a narrow one, so the failure mode of asking for too much is silence.
+
+The before-picture is already on this page. The 2026-08-10 transcript below quotes the
+consent URL that run produced, and its query string ends
+`scope=...auth%2Fspreadsheets+...auth%2Fdrive` — two scopes, the second of them the whole
+of the operator's Drive. That is what this row exists to see the end of, and it is what
+step 3 is looking for.
+
+**Before you start**, be clear that deleting the cached token is not optional and is not
+a reset-if-stuck step. Google does not narrow a grant in place: an `authorized_user.json`
+consented under the old scopes keeps the old scopes for as long as it is refreshable, so
+skipping this step leaves the wide token live and every other step below passing anyway.
+A run that skips it proves nothing and looks exactly like a run that did not.
+
+1. **Delete the cached token.** `credentials.json` stays; it is the client, not the grant.
+
+   ```bash
+   rm ~/.config/gspread/authorized_user.json
+   ```
+
+2. **Point the config at the book by id**, since there is no longer a lookup by name to
+   fall back on. The id is the long segment of the spreadsheet's URL between `/d/` and
+   `/edit`.
+
+   ```ini
+   [SHEETS]
+   spreadsheet_id = <the id from the URL>
+   ```
+
+   Getting this wrong is worth doing once on purpose: an unset id refuses before it
+   authorizes, and the refusal names the setting. A run that opens a browser at this
+   point has fallen back to something, which is the defect the refusal exists to prevent.
+
+3. **Run the sync and read the consent screen rather than clicking through it.** This is
+   the actual observation and it happens in about four seconds, once.
+
+   ```bash
+   uv run stonksmithdb sheet
+   ```
+
+   The URL printed to the terminal carries the scopes in its query string. Compare it
+   against the 2026-08-10 line below. **`auth%2Fdrive` must not be in it**, and the
+   browser's own consent page should ask about Google Sheets and say nothing about Drive
+   or about seeing your files. If Drive is still named, the token was not deleted or the
+   change did not take, and step 1 is the first thing to check.
+
+4. **Confirm all five machine-owned tabs were written**, which is the ordinary success
+   path under the new grant.
+
+5. **Delete one tab and run `sheet` again.** This is the step that matters most and the
+   one a read-only check would skip. Everything in step 4 only *reads and writes* tabs
+   that already exist; creating one goes through `ensure_worksheet` to `add_worksheet`,
+   which is the operation most likely to have been quietly relying on Drive. A creation
+   that fails here with the reads passing is the interesting outcome, not a mistake.
+
+6. **`verify`** (tabs and guard) to confirm the read-back path still holds under the
+   narrowed token.
+
+**Either outcome is a result.** If Drive is gone from the consent screen and all six steps
+pass, the row settles `Yes` and `SECURITY.md`'s safeguard paragraph stands as written. If
+any Sheets operation turns out to need Drive after all — creation is the candidate — then
+the row settles the other way, as **Run, and it cannot**, and the honest response is to say
+so in `SECURITY.md` rather than to quietly restore the scope and leave the paragraph
+claiming a narrowing that was reverted.
 
 ### Run twice, on 2026-08-10
 
