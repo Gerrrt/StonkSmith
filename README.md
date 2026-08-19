@@ -8,7 +8,7 @@
 [![CI][ci-shield]][ci-url]<!--
 -->[![PyPI][pypi-shield]][pypi-url]<!--
 -->[![Python][python-badge-shield]][python-url]<!--
--->![Last Commit][lastcommit-shield]<!--
+-->[![Last Commit][lastcommit-shield]][lastcommit-url]<!--
 -->[![Stargazers][stars-shield]][stars-url]<!--
 -->[![Issues][issues-shield]][issues-url]<!--
 -->[![MIT License][license-shield]][license-url]
@@ -216,6 +216,7 @@ template.
 ### Built With
 
 [![Python][python-shield]][python-url]
+[![uv][uv-shield]][uv-url]
 [![Playwright][playwright-shield]][playwright-url]
 [![SQLAlchemy][sqlalchemy-shield]][sqlalchemy-url]
 [![Google Sheets][sheets-shield]][sheets-url]
@@ -651,32 +652,34 @@ The three sources StonkSmith reads that it did not have to build:
 
 <!-- MARKDOWN LINKS & IMAGES -->
 
-[ci-shield]: https://img.shields.io/github/actions/workflow/status/Gerrrt/StonkSmith/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI
+[ci-shield]: https://img.shields.io/github/actions/workflow/status/Gerrrt/StonkSmith/ci.yml?branch=main&style=plastic&logo=githubactions&logoColor=white&label=CI
 [ci-url]: https://github.com/Gerrrt/StonkSmith/actions/workflows/ci.yml
-[pypi-shield]: https://img.shields.io/pypi/v/stonksmith?style=flat-square&logo=pypi&logoColor=white
+[pypi-shield]: https://img.shields.io/pypi/v/stonksmith?style=plastic&logo=pypi&logoColor=white
 [pypi-url]: https://pypi.org/project/stonksmith/
-[python-badge-shield]: https://img.shields.io/pypi/pyversions/stonksmith?style=flat-square&logo=python&logoColor=white
-[lastcommit-shield]: https://img.shields.io/github/last-commit/Gerrrt/StonkSmith?style=flat-square&logo=github
-[stars-shield]: https://img.shields.io/github/stars/Gerrrt/StonkSmith?style=flat-square&logo=github
+[python-badge-shield]: https://img.shields.io/pypi/pyversions/stonksmith?style=plastic&logo=python&logoColor=white
+[lastcommit-shield]: https://img.shields.io/github/last-commit/Gerrrt/StonkSmith?style=plastic&logo=github
+[lastcommit-url]: https://github.com/Gerrrt/StonkSmith/commits/main
+[stars-shield]: https://img.shields.io/github/stars/Gerrrt/StonkSmith?style=plastic&logo=github
 [stars-url]: https://github.com/Gerrrt/StonkSmith/stargazers
-[issues-shield]: https://img.shields.io/github/issues/Gerrrt/StonkSmith?style=flat-square&logo=github
+[issues-shield]: https://img.shields.io/github/issues/Gerrrt/StonkSmith?style=plastic&logo=github
 [issues-url]: https://github.com/Gerrrt/StonkSmith/issues
 [issue-141]: https://github.com/Gerrrt/StonkSmith/issues/141
 [issue-149]: https://github.com/Gerrrt/StonkSmith/issues/149
-[license-shield]: https://img.shields.io/github/license/Gerrrt/StonkSmith?style=flat-square
+[license-shield]: https://img.shields.io/github/license/Gerrrt/StonkSmith?style=plastic
 [license-url]: https://github.com/Gerrrt/StonkSmith/blob/main/LICENSE
-[python-shield]: https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white
+[python-shield]: https://img.shields.io/badge/Python-3776AB?style=plastic&logo=python&logoColor=white
 [python-url]: https://www.python.org
+[uv-shield]: https://img.shields.io/badge/uv-DE5FE9?style=plastic&logo=uv&logoColor=white
 [uv-url]: https://docs.astral.sh/uv/
-[playwright-shield]: https://img.shields.io/badge/Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white
+[playwright-shield]: https://img.shields.io/badge/Playwright-2EAD33?style=plastic&logo=playwright&logoColor=white
 [playwright-url]: https://playwright.dev
-[sqlalchemy-shield]: https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white
+[sqlalchemy-shield]: https://img.shields.io/badge/SQLAlchemy-D71F00?style=plastic&logo=sqlalchemy&logoColor=white
 [sqlalchemy-url]: https://www.sqlalchemy.org
-[sheets-shield]: https://img.shields.io/badge/Google_Sheets-34A853?style=flat-square&logo=googlesheets&logoColor=white
-[sheets-url]: https://docs.gspread.org
-[snaptrade-shield]: https://img.shields.io/badge/SnapTrade-1A1A1A?style=flat-square
+[sheets-shield]: https://img.shields.io/badge/Google_Sheets-34A853?style=plastic&logo=googlesheets&logoColor=white
+[sheets-url]: https://developers.google.com/sheets/api
+[snaptrade-shield]: https://img.shields.io/badge/SnapTrade-1A1A1A?style=plastic
 [snaptrade-url]: https://snaptrade.com
-[rich-shield]: https://img.shields.io/badge/Rich-000000?style=flat-square
+[rich-shield]: https://img.shields.io/badge/Rich-000000?style=plastic
 [rich-url]: https://rich.readthedocs.io
 [tsp-url]: https://www.tsp.gov
 [dfas-url]: https://www.dfas.mil
