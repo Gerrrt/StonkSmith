@@ -27,13 +27,35 @@ keyring, so `add creds` points at the setup script instead — and its own shell
 lists `delete snapshot` and `delete account` but not `delete creds`, for the
 same reason.
 
-At the top level, three commands read the workspace rather than a broker:
+At the top level, four commands read the workspace rather than a broker:
 `sheet` rewrites the Google Sheet from these databases, `verify [tabs|guard]`
-reads it back, and `stale [days]` reports accounts nothing has refreshed lately
-and exits `1` if any turn up. All three also run as `stonksmithdb <command>`
-without entering the shell, which is what a crontab calls — see
+reads it back, `stale [days]` reports accounts nothing has refreshed lately
+and exits `1` if any turn up, and `vacuum` rebuilds every database in the
+workspace. All four also run as `stonksmithdb <command>` without entering the
+shell, which is what a crontab calls — see
 [*The freshness step*](scheduling.md#the-freshness-step-is-the-one-that-catches-silence)
-for why the last one exists.
+for why `stale` exists.
+
+### `vacuum`, and why it is not on the schedule
+
+`vacuum` rewrites each `<broker>.db` so the pages freed by past deletes stop
+carrying what was deleted. It is a maintenance command, not a nightly one: a
+whole-file rewrite every night would cost real time for nothing most nights.
+
+The reason it exists is narrower than "reclaim space". Clearing a column does
+not remove what was in it — SQLite marks the old cell free inside its page and
+moves on — so a database migrated off plaintext passwords could still have them
+greppable in the file. `migrate_plaintext_secrets()` now rebuilds automatically
+when it moves a secret, but it moves one *once*: a workspace migrated before
+that existed will never trigger it again, and is exactly the workspace that
+still has the bytes. This command is the only thing that reaches it.
+
+Every database in the workspace, not a named one — an operator running this does
+not know which file the plaintext is in. A database that cannot be rebuilt is
+reported and the sweep carries on, but the run exits `1`, because a scrub that
+skipped a file and exited `0` reads downstream as a workspace that has been
+scrubbed. What a rebuild does *not* reach is in
+[`SECURITY.md`](../SECURITY.md) and is worth reading before relying on it.
 
 ## What is stored
 

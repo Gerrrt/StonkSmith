@@ -555,8 +555,10 @@ Current safeguards:
   tell two credentials apart.
 - `export creds` writes the keyring reference, never the secret.
 - Databases created before this change are migrated automatically on first
-  open: each plaintext password moves into the keyring and the column is
-  cleared in place.
+  open: each plaintext password moves into the keyring, the column is cleared,
+  and the database is rebuilt with a `VACUUM` so the cleared bytes do not stay
+  behind in a freed page. `vacuum` in `stonksmithdb` runs that rebuild on
+  demand, for a workspace that migrated before it existed.
 
 - **Everything StonkSmith writes is owner-only** — `0600` for files, `0700` for
   the directories under `~/.stonksmith`. That covers the databases, the config,
@@ -570,8 +572,8 @@ Current safeguards:
 
 [`SECURITY.md`](SECURITY.md) is the full account, including the risks this
 project accepts rather than solves — the CDP debugging port, the width of the
-Google grant, and what a migrated database still has in its freed pages — and
-how to report a vulnerability.
+Google grant, and what a rebuilt database still leaves on the disk around it —
+and how to report a vulnerability.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

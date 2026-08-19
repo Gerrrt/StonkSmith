@@ -27,6 +27,7 @@ table is renamed aside rather than dropped -- see migrate_legacy_accounts.
 import datetime
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
@@ -75,6 +76,42 @@ _MONEY = Numeric(precision=18, scale=4, asdecimal=False)
 
 #: Quantity columns. Six places, because fractional shares are routine.
 _QUANTITY = Numeric(precision=18, scale=6, asdecimal=False)
+
+
+def vacuum(engine: Engine) -> int:
+    """
+    Rebuild a database so its freed pages stop carrying what was deleted.
+
+    ``UPDATE credentials SET password = NULL`` makes the plaintext unreachable
+    from SQL, which is not the same as removing it: SQLite marks the old cell
+    free within its page and moves on, so with more than one credential in the
+    table the previous bytes stay in the file and any reader with the file has
+    them. Measured before this existed -- at ten rows the cleared password was
+    still greppable in every one of fifteen runs.
+
+    A VACUUM writes the whole database out fresh, which is the only thing that
+    reaches a freed page. **It cannot run inside a transaction**, which normally
+    makes this awkward from SQLAlchemy; here the engine is built with
+    ``isolation_level="AUTOCOMMIT"`` (see etc.infrastructure), so a bare execute
+    is already outside one and no special handling is needed.
+
+    File mode survives: SQLite rebuilds through a temporary file and copies back
+    into the original, so the inode and its 0600 keep their identity. The
+    temporary copy is a different matter and SECURITY.md carries it.
+    :param engine: The engine whose database to rebuild
+    :return: Bytes the rebuild reclaimed, which may be 0 or negative
+    :rtype: int
+    """
+
+    path: Path | None = Path(engine.url.database) if engine.url.database else None
+    before: int = path.stat().st_size if path and path.is_file() else 0
+
+    with engine.connect() as conn:
+        conn.execute(text("VACUUM"))
+
+    after: int = path.stat().st_size if path and path.is_file() else 0
+
+    return before - after
 
 
 class BrokerDatabase:
@@ -540,6 +577,20 @@ class BrokerDatabase:
                 migrated += 1
 
             conn.commit()
+
+        # Only when something moved, and the guard is load-bearing rather than
+        # tidy: this runs from __init__, so an unguarded VACUUM would rewrite
+        # every database on every open to no purpose. A migration that finds
+        # legacy plaintext happens once in a database's life.
+        if migrated:
+            reclaimed: int = vacuum(engine=self.db_engine)
+            stonksmith_logger.success(
+                msg=(
+                    f"Vacuumed {self.broker} after migrating {migrated} "
+                    f"secret(s), reclaiming {reclaimed} byte(s). The cleared "
+                    "plaintext is no longer in the file."
+                )
+            )
 
         return migrated
 
