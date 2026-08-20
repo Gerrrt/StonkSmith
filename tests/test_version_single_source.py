@@ -71,6 +71,18 @@ CODENAMES: dict[str, str] = {
 #: for reuses nobody has made yet.
 SKIPPED_THE_MOVE: frozenset[str] = frozenset({"0.5"})
 
+#: The letter every codename has begun with. Forrest Gump, Ferris Bueller, Fox
+#: Mulder and Ford Prefect are four for four, which is past the point where it
+#: reads as coincidence -- but four names are also few enough that the pattern
+#: lived entirely in whoever picked the last one, and the person picking the next
+#: one is not guaranteed to be them.
+#:
+#: Pinned as the letter rather than as "they all agree with each other". The
+#: weaker rule is satisfied by the whole set moving to G, which is not the
+#: convention -- it is a different convention that happens to be self-consistent,
+#: and it would pass on the release that abandoned this one.
+CODENAME_INITIAL: str = "F"
+
 
 def minor_series(version: str) -> str:
     """The minor series a version belongs to: ``1.2.3`` -> ``"1.2"``."""
@@ -389,6 +401,29 @@ class CodenameConventionTests(unittest.TestCase):
                         "a release genuinely meant to keep the previous name, "
                         "add the series to SKIPPED_THE_MOVE with a reason.",
                     )
+
+    def test_every_codename_starts_with_the_same_letter(self) -> None:
+        # The other half of the convention, and the half with no natural moment
+        # to be noticed. A codename that has moved is visibly a new name, so the
+        # gate above fires on the release that forgets; a name that moved but
+        # broke the pattern looks correct from every angle except this one.
+        #
+        # Checked over the whole history rather than over CODENAME alone. The
+        # current name is held equal to its recorded entry above, so covering the
+        # record covers it -- and a name added for some other series would
+        # otherwise never be looked at again.
+        for series, name in sorted(
+            CODENAMES.items(), key=lambda kv: series_order(kv[0])
+        ):
+            with self.subTest(series=series, codename=name):
+                self.assertTrue(
+                    name.startswith(CODENAME_INITIAL),
+                    f"the {series} codename {name!r} does not start with "
+                    f"{CODENAME_INITIAL!r}. Every release so far has been named "
+                    "for a fictional character whose name begins with that "
+                    "letter; breaking it is a decision rather than a slip, so "
+                    "move CODENAME_INITIAL and say why.",
+                )
 
     def test_no_skip_is_a_stale_suppression(self) -> None:
         # The half that keeps the exception list honest. Without it an entry
