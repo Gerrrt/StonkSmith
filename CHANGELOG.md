@@ -9,6 +9,38 @@ the two disagree.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The codename convention is a gate rather than a comment, because 0.5.0
+  proved a comment does not run.** `CODENAME` moves with the minor version, and
+  the only statement of that rule was the paragraph beside the value it governs.
+  0.5.0 shipped reusing 0.4.0's "Ford Prefect" with every check green: the
+  release gates compare the README's copy of the banner against `CODENAME`, so
+  the two agree with each other whatever `CODENAME` says, and nothing compared it
+  against the release before it.
+- **A rule about movement needs two values, and there was only ever one.** The
+  comment said outright that a codename "is not derivable from anything — there
+  is nothing to read it out of", which was true of the current name and quietly
+  also true of every earlier one: the only record of them was the literal inside
+  each tag. `tests/test_version_single_source.py` now holds that history —
+  recovered by reading `etc/cli.py` out of `v0.1.0` through `v0.5.0` rather than
+  from memory — and checks the current minor against it.
+- **Reuse is caught wherever it happens, not only between neighbours.** Going
+  back to a name from two series ago is the same defect as not moving at all, and
+  a check comparing adjacent pairs would pass it. A release that genuinely means
+  to keep the previous name records the series in `SKIPPED_THE_MOVE` and says
+  why, which is the deliberate act the gate exists to force.
+- **The exception list cannot become a way to silence the gate.** An entry has to
+  describe a reuse that actually happened; one naming a series that was later
+  given a fresh name is a suppression with nothing under it, and fails. 0.5 is
+  the only entry, recorded rather than repaired — 0.5.0 is on PyPI under that
+  name, and a version number is spent whether or not what went under it was right.
+- Every assertion was checked against the break it claims to catch: a minor bump
+  with no entry, an adjacent reuse, a non-adjacent reuse, a stale suppression,
+  and — the one that matters — dropping `0.5` from the exception list, which
+  fails. The suite passes because the reuse is recorded, not because the check
+  is inert.
+
 ## [0.5.0] - 2026-08-20
 
 ### Security
