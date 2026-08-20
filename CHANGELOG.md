@@ -35,11 +35,23 @@ the two disagree.
   given a fresh name is a suppression with nothing under it, and fails. 0.5 is
   the only entry, recorded rather than repaired — 0.5.0 is on PyPI under that
   name, and a version number is spent whether or not what went under it was right.
+- **The names alliterate, and that is now checked too.** Forrest Gump, Ferris
+  Bueller, Fox Mulder and Ford Prefect are four for four, which is past
+  coincidence — but four names are few enough that the pattern lived entirely in
+  whoever picked the last one, and the person picking the next one is not
+  guaranteed to be them. This is the half with no natural moment to be noticed: a
+  codename that failed to move is visibly the old name, while one that moved and
+  broke the pattern looks right from every angle except this.
+- **Pinned as the letter rather than as "they all agree with each other."** The
+  weaker rule is satisfied by the whole set migrating to G, which is not this
+  convention — it is a different one that happens to be self-consistent, and it
+  would pass on the very release that abandoned this one. Rewriting all four
+  names to G fails six checks; under the weaker rule it fails none.
 - Every assertion was checked against the break it claims to catch: a minor bump
-  with no entry, an adjacent reuse, a non-adjacent reuse, a stale suppression,
-  and — the one that matters — dropping `0.5` from the exception list, which
-  fails. The suite passes because the reuse is recorded, not because the check
-  is inert.
+  with no entry, an adjacent reuse, a non-adjacent reuse, a stale suppression, a
+  name that moves but breaks the pattern, and — the one that matters — dropping
+  `0.5` from the exception list, which fails. The suite passes because the reuse
+  is recorded, not because the check is inert.
 
 ## [0.5.0] - 2026-08-20
 
