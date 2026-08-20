@@ -51,7 +51,7 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         Aggregate everything in one dashboard
         Written by: @Gerrrt
 
-Version : 0.4.0
+Version : 0.5.0
 Codename: Ford Prefect
 
 Brokers:
@@ -190,18 +190,21 @@ template.
 > what it was written to do, which is not the same as saying the site still
 > looks the way it did when the parser was written. Every broker that is not
 > deprecated has been run against the real thing, and the sheet has been read
-> back off a real spreadsheet; five claims are still open, and **one of them is
-> anybody's to-do**. Two wait on data rather than on effort — whether the
-> `Transactions` tab holds every movement or only the newest five hundred, and
-> whether a 529 with more than one beneficiary attributes its movements to the
-> right one. Two wait on a condition occurring at all: a SnapTrade connection
-> lapsing, and an account's holdings going stale. The fifth is the runnable one
-> and it is new: the Google grant was narrowed to Sheets access alone, which is a
-> claim about what Google accepts rather than about what this code does, so it
-> needs a consent screen looked at. Before it, the last runnable row — whether
-> SnapTrade's transaction read goes past its first page — was run on
-> 2026-08-18 and settled both ways round: at one row a page the loop made one
-> request per movement, and past twenty pages it stopped and said so.
+> back off a real spreadsheet; four claims are still open, and **none of them is
+> anybody's to-do** — each waits on the world rather than on effort. Two wait on
+> data: whether the `Transactions` tab holds every movement or only the newest
+> five hundred, and whether a 529 with more than one beneficiary attributes its
+> movements to the right one. Two wait on a condition occurring at all: a
+> SnapTrade connection lapsing, and an account's holdings going stale. The most
+> recent runnable row was the Google grant, narrowed to Sheets access alone —
+> a claim about what Google accepts rather than about what this code does, so
+> nothing but a consent screen could answer it. It was read on 2026-08-20, the
+> day the row appeared: the screen named Sheets and never mentioned Drive, and
+> the token written back records one scope where the token it replaced recorded
+> two. The runnable row before that — whether SnapTrade's transaction read goes
+> past its first page — was run on 2026-08-18 and settled both ways round: at one
+> row a page the loop made one request per movement, and past twenty pages it
+> stopped and said so.
 >
 > **The `fidelity` broker is the exception, and it is deprecated.** It was never
 > run against the real site, and its five claims were withdrawn rather than

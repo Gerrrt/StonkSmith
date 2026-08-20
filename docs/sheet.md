@@ -5,15 +5,16 @@ to be constructed rather than read.
 
 **This is a reference chapter, not a record.** It describes the sheet as it is
 today. [`live-verification.md`](live-verification.md) is the record of which of
-these tabs a live run has read back against a real spreadsheet, and two claims
-*about the sheet* are still open. One waits on a broker with the transaction
-volume to put the question of whether the `Transactions` tab windows. The other
-is runnable and is the newer of the two: the Google grant was narrowed to Sheets
-access alone and the book is now opened by id, which needs a real consent screen
-read before it can be called settled. Two older ones closed on
-2026-08-15: the allocation blocks were read back by `verify tabs`, and the
-carried series was walked across nine dates on a workspace whose brokers really
-had reported on different days. That file also records a gap that is not about the
+these tabs a live run has read back against a real spreadsheet, and one claim
+*about the sheet* is still open: it waits on a broker with the transaction volume
+to put the question of whether the `Transactions` tab windows. Three have closed.
+Two went on 2026-08-15 — the allocation blocks were read back by `verify tabs`,
+and the carried series was walked across nine dates on a workspace whose brokers
+really had reported on different days. The third went on 2026-08-20, the day it
+opened: the Google grant was narrowed to Sheets access alone and the book is now
+opened by id, and the consent screen read that day named Sheets without mentioning
+Drive, with tab creation — the operation with the best claim on Drive — working
+under the narrowed token. That file also records a gap that is not about the
 sheet and is no longer counted as one: the `fidelity` broker was never run against
 the real thing, and on 2026-08-17 it was deprecated for removal in 1.0 rather than
 verified, so its five claims were withdrawn.

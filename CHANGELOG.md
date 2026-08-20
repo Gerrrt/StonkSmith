@@ -9,6 +9,8 @@ the two disagree.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-20
+
 ### Security
 
 - **StonkSmith no longer asks Google for access to your Drive.** `gspread.oauth()`
@@ -66,13 +68,24 @@ the two disagree.
 - **`[SHEETS] spreadsheet_id` in `~/.stonksmith/stonksmith.conf`**, which is how
   the book is now identified. `SPREADSHEET_NAME` in `helpers/sheets.py` survives as
   the label errors print and is no longer how anything is found.
-- **A live-verification row, and it is the first runnable one since the pagination
-  claim was settled on 2026-08-18.** A scope is invisible at runtime — a token
-  consented too widely works *better* than a narrow one — and the suite authorizes
-  against a `MagicMock`, which accepts anything. So no test can say Google accepts
-  the narrowed grant; only a consent screen read by a person can. The record's
-  header paragraph said "nothing on this list is anybody's to-do any more" two days
-  ago, and it now says which one is and why that sentence stopped being true.
+- **A live-verification row that opened and closed inside the same day.** A scope
+  is invisible at runtime — a token consented too widely works *better* than a
+  narrow one — and the suite authorizes against a `MagicMock`, which accepts
+  anything. So no test could say Google accepts the narrowed grant; only a consent
+  screen read by a person could, and one was read on 2026-08-20. Drive was absent
+  from it, the sync completed against a book opened by id, and a deleted tab was
+  recreated through `add_worksheet` — the operation with the best claim on Drive
+  and the one a read-only check would miss.
+- **The evidence is two files rather than a remembered screen.** The grant cached
+  on 2026-08-18 recorded its own `scopes` as `spreadsheets` and `drive`; the one
+  this run wrote records `spreadsheets` alone, with the string `drive` absent
+  entirely and an mtime belonging to the run rather than to the older grant. That
+  last part is what says the token was replaced instead of refreshed — a surviving
+  wide token is the one failure mode that looks like success from every other
+  angle, which is why the procedure now prescribes reading the written token and
+  its timestamp alongside the consent URL. `docs/live-verification.md` goes to 35
+  of 39 settled and 4 outstanding, and the bullet above about nothing on that list
+  being anybody's to-do — false for the hours this row was open — is true again.
 - `tests/test_the_google_grant_is_narrow.py` asserts on the `scopes=` argument
   itself rather than on `oauth` having been called — the obvious version of that
   test passes on the old code. Every test in the file was checked against a
@@ -544,7 +557,8 @@ which is written to be read.
   `site-packages`. A broker or module written against those still loads, with a
   `DeprecationWarning`; that shim is removed in 1.0.
 
-[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.2.0
