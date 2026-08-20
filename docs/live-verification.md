@@ -34,29 +34,30 @@ the source has not. That is what the `Rests on` column is for, and a capture and
 run are not the same evidence. A row can also be settled the other way: **Run, and it
 cannot** is an observation, not a gap.
 
-*As of 2026-08-18: 34 of 39 claims have been settled by a live run — 32 confirmed,
+*As of 2026-08-20: 35 of 39 claims have been settled by a live run — 33 confirmed,
 2 disproved. 0 of those were settled more than six months before that date, and 0
-carry no date at all. The remaining 5 rest on evidence no run here has produced: a
+carry no date at all. The remaining 4 rest on evidence no run here has produced: a
 broker with the transaction volume to put the question, a SnapTrade connection that
-has actually lapsed, an account whose holdings have actually gone stale, a 529
-with more than one beneficiary on it, and a Google consent screen read after the
-grant was narrowed. They are not alike, and the kinds are worth
+has actually lapsed, an account whose holdings have actually gone stale, and a 529
+with more than one beneficiary on it. They are not alike, and the kinds are worth
 telling apart. Three need a condition to occur rather than a run to be made: a lapsed
 connection, stale holdings and a second beneficiary, none of which any amount of
 sitting down at the machine produces. The transaction volume is a kind of its own —
 nothing has to happen, but enough has to accumulate, and at nine movements in five days
-that is a wait rather than an afternoon. **One of the five is somebody's to-do**, and
-it is the newest: narrowing the Google scope is a claim about what Google accepts,
-which no fake can answer and no waiting will produce. It needs the cached token
-deleted and a consent screen looked at. That sentence is worth pausing on, because
-the paragraph said the opposite two days ago — "nothing on this list is anybody's
-to-do any more" was true on 2026-08-18 and stopped being true the moment a change
-was made that only a live run can confirm. A list with no runnable rows is a list
-waiting on the world; a list with one is a list with work on it, and writing code
-that adds a row here is how the second becomes the first. Two rows left this list on 2026-08-15 and
-are worth telling apart: the allocation blocks only ever needed a run made after the
-check existed, while the carried series needed a workspace to become the ordinary state
-of a real one, which took waiting rather than doing. Five more left it on 2026-08-17 by being
+that is a wait rather than an afternoon. **Nothing on this list is anybody's to-do
+again.** That sentence was true on 2026-08-18, stopped being true on 2026-08-20 when
+narrowing the Google scope added a claim only a consent screen could answer, and was
+true again by the end of that same day because somebody sat down and read one. The
+round trip is the point rather than the tidy ending: a runnable row is not a gap in
+the record, it is work in it, and this one was open for hours instead of becoming a
+line people learn to read past. The four that remain wait on the world, which is the
+state this list returns to rather than the state it stays in — writing code that only
+a live run can confirm is how a row appears here, and making the run is how it leaves.
+Three rows have now left by being run. Two went on 2026-08-15 and are worth telling
+apart: the allocation blocks only ever needed a run made after the check existed,
+while the carried series needed a workspace to become the ordinary state
+of a real one, which took waiting rather than doing. The Google grant went on
+2026-08-20, the same day it arrived. Five more left it on 2026-08-17 by being
 withdrawn rather than settled, which is a third way off this list and is explained
 below.*
 
@@ -149,7 +150,7 @@ it lives under *Recording a result*, and an instruction is not a mechanism.
 | The sheet — the fifth tab, `Net Worth`, created, written and read back | `sheet` then `verify tabs` on 2026-08-11 against the real spreadsheet, quoted below: the banner line counted five tabs and the eleven-column contract came back off the real tab, ending at `K`. Ten checks, all passing, the two render assertions unmarked for the first time on a sheet written that morning. That same run created the tab — four machine-owned tabs stood on 2026-08-10, no `sheet` ran in between, five carried the banner after — so `ensure_worksheet` made it and `claim()` adopted it empty, which is the half no read can show | Yes | 2026-08-11 |
 | The sheet — every allocation block adding up to the total it is a share of | `verify tabs` on 2026-08-15 against the real spreadsheet, the first run since the check was written: all three blocks were drawn and all three read back — account kind, position, and asset class — which is why that run counts thirteen checks where 2026-08-11 counted ten. The asset class line appearing at all is the config half, since it is drawn only when `asset_classes` is set. The refusal state was not seen and cannot be arranged; it needs positions exceeding balances, which check 8 says in advance is the expected outcome. Unit tests over a fake spreadsheet, `tests/test_portfolio_sheet_readback.py`, cover the wrong sum, the wrong share, and a refusal not being mistaken for either | Yes | 2026-08-15 |
 | The sheet — the account series carried across brokers that scraped on different days | A run on 2026-08-15 against a workspace whose six brokers entered the series twelve days apart and fell silent for up to six days inside it, quoted below: 78 rows off the real `Net Worth` tab, over nine dates, for twelve accounts. The account count per date ran `1, 7, 7, 9, 9, 11, 11, 11, 12` and never fell, where the observed-only count falls three times — so the carry-forward ran. Every row read `observed` or `carried`, the 17 carried ones dating `Observed On` before their `Date`; the eleven accounts that joined after the first date have no row on any date before they did, and no row is a zero. The thirty-day horizon is untouched by it — the longest silence there is six days — and that half still rests on `tests/test_net_worth_history.py`, alongside `tests/test_portfolio_sheet_workspace.py` over two real databases on disk | Yes | 2026-08-15 |
-| The sheet — a Sheets-only grant opens the book by id | Unit tests over the `scopes=` argument itself and over the refusal when no id is configured, in `tests/test_the_google_grant_is_narrow.py`. Those cannot settle it, and the reason is the shape of the thing: a scope is invisible at runtime, and a token consented too widely works *better* than a narrow one, so nothing short of watching a real consent screen says Google accepts this. Needs the cached token deleted, the consent screen read for whether it still asks for Drive, and a `sheet` run that creates a tab — `add_worksheet` being the operation most likely to have wanted Drive, and the one a read-only check would miss | No | — |
+| The sheet — a Sheets-only grant opens the book by id | A run on 2026-08-20 against the real spreadsheet, written up below, with the cached token deleted first so the grant was consented fresh rather than refreshed. The consent screen named Google Sheets and said nothing about Drive. **The before and after are both on disk rather than both transcribed**: the token cached on 2026-08-18 recorded its own `scopes` as `spreadsheets` and `drive`, and the one written by this run records `spreadsheets` alone, with the string `drive` absent from the file. Its mtime is the run rather than the older grant, which is what says step 1 actually happened — the failure mode here is a wide token surviving and every later step passing anyway. The whole sync then completed against a book opened by id, and a deleted tab was recreated through `ensure_worksheet` to `add_worksheet`, the operation most likely to have wanted Drive and the one a read-only check would miss | Yes | 2026-08-20 |
 | SnapTrade — a personal API key reaches the API | Four runs on 2026-08-11 against a real account, written up below. `verify_access` listed the connections and every run proceeded on the key alone — no userId, no userSecret, no browser | Yes | 2026-08-11 |
 | SnapTrade — accounts and balances reach the database | The same four runs, into a real `snaptrade.db`: snapshots 168–199, eight accounts per run, each carrying an `As Of` of 2026-08-11 | Yes | 2026-08-11 |
 | SnapTrade — positions reach the database | The `Holdings` tab went from 2 rows to 9 between the `--no-positions` run and the full one that followed, both on 2026-08-11 — the seven are SnapTrade's, and the two that survived the first run are other brokers' | Yes | 2026-08-11 |
@@ -1977,10 +1978,12 @@ that writes itself up. The 2026-08-15 run is that warning working — it was mad
 carried series and settled the allocation blocks on the way past, and the second row would
 have been easy to leave unrecorded because nothing about it failed.
 
-### The narrowed grant, which has not been run yet
+### The narrowed grant, run on 2026-08-20
 
-**Outstanding.** The code changed on 2026-08-20 and nothing live has confirmed it. Until
-somebody sits down with a browser this row stays `No`, and the entry above says so.
+**Settled `Yes`, the same day the code changed.** The procedure is kept below rather
+than collapsed into its result: the six-month reading convention at the top of this file
+applies here like anywhere else, and a grant is exactly the kind of thing a provider
+changes under you. What follows is written to be run again.
 
 The claim is that a token consented at `spreadsheets` alone can open the book by id and
 complete a whole sync, tab creation included. No test here can make it: the suite
@@ -2032,6 +2035,19 @@ A run that skips it proves nothing and looks exactly like a run that did not.
    or about seeing your files. If Drive is still named, the token was not deleted or the
    change did not take, and step 1 is the first thing to check.
 
+   Then check what the run *wrote back*, which is the same observation without a human
+   parsing a URL query string while a browser steals focus. The token records the scopes
+   it was granted, so the answer is in a file rather than in a memory of a screen:
+
+   ```bash
+   python3 -c "import json,pathlib;print(json.loads((pathlib.Path.home()/'.config/gspread/authorized_user.json').read_text()).get('scopes'))"
+   ```
+
+   `['https://www.googleapis.com/auth/spreadsheets']` and nothing else. **Check its
+   modification time too.** A token that was refreshed rather than replaced carries the
+   old grant and the old date, and it is the one outcome that looks like success from
+   every other angle — which is the whole reason step 1 is written as strongly as it is.
+
 4. **Confirm all five machine-owned tabs were written**, which is the ordinary success
    path under the new grant.
 
@@ -2050,6 +2066,34 @@ any Sheets operation turns out to need Drive after all — creation is the candi
 the row settles the other way, as **Run, and it cannot**, and the honest response is to say
 so in `SECURITY.md` rather than to quietly restore the scope and leave the paragraph
 claiming a narrowing that was reverted.
+
+#### What it came back with, 2026-08-20
+
+The first outcome. Drive was gone from the consent screen, which named Google Sheets and
+nothing else, and every step passed — tab creation included. `SECURITY.md`'s safeguard
+paragraph stands as written.
+
+The strongest evidence is not the screen, because a screen is a thing somebody remembers
+having read. It is the pair of token files:
+
+| | `scopes` recorded in `authorized_user.json` |
+| --- | --- |
+| Cached 2026-08-18, before the change | `spreadsheets`, `drive` |
+| Written by this run | `spreadsheets` |
+
+The string `drive` does not occur anywhere in the new file, and its modification time is
+the run rather than 2026-08-18 — so the old grant was replaced and not refreshed, which
+is the one thing that would have made every other check pass for the wrong reason.
+
+Both preconditions were live on this machine rather than hypothetical, and that is worth
+recording because the procedure's two "do not skip" steps are the two that had teeth here:
+`spreadsheet_id` was unset, so the run had something real to refuse if the refusal had not
+worked, and the cached token was a genuine wide-scope grant rather than an absent file.
+
+Step 5 is the one that could have gone the other way and did not: a tab was deleted and the
+next `sheet` run recreated it through `ensure_worksheet` to `add_worksheet` under the
+narrowed token. Creation was the operation with the best claim on Drive, and it does not
+need it.
 
 ### Run twice, on 2026-08-10
 
