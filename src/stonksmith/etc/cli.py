@@ -25,14 +25,24 @@ from stonksmith.loaders.brokerloader import BrokerInfo, BrokerLoader
 UNKNOWN_VERSION: str = "unknown"
 
 #: The release's name, and the one part of the banner still written by hand.
-#: A codename is not derivable from anything -- there is nothing to read it out
-#: of -- so it stays here, where it is the only thing to keep in step.
+#: A codename is not derivable from anything -- there is no metadata field to
+#: read one out of -- so it stays here, where it is the only thing to keep in
+#: step.
 #:
 #: It moves with the minor version. 0.2.0 was the first release to set a name
 #: under that rule and 0.3.0 the first to move one -- "Forrest Gump" stood through
 #: 0.1.0 and 0.1.1 while this comment already called it the release's name, so the
-#: line described a convention that had not started yet. 0.4.0 is the second move,
+#: line described a convention that had not started yet. 0.4.0 was the second move,
 #: which is the point at which it is a convention rather than a coincidence.
+#:
+#: **0.5.0 did not move it**, and that is the whole argument for the gate that now
+#: exists. This paragraph was the only statement of the rule anywhere, and a
+#: comment cannot fail a build: 0.5.0 shipped reusing "Ford Prefect" with every
+#: check green, because the checks compared the README's copy against this value
+#: and so agreed with each other whatever it said. The name is on PyPI and a
+#: version number is spent, so it is recorded rather than repaired --
+#: tests/test_version_single_source.py holds the released history and refuses a
+#: reuse that is not written down as one.
 #:
 #: README.md quotes the banner and so states this name a second time. That copy
 #: used to go stale silently; tests/test_version_single_source.py now holds it to

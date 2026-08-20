@@ -41,6 +41,65 @@ from stonksmith.etc.cli import CODENAME, UNKNOWN_VERSION, get_version
 PYPROJECT = REPO / "pyproject.toml"
 README = REPO / "README.md"
 
+#: Every codename released so far, keyed by the minor series it named. Recovered
+#: from the tags rather than written from memory -- `git show
+#: v0.3.0:src/stonksmith/etc/cli.py` prints the literal that shipped, and until
+#: this map existed that was the only record of any of them.
+#:
+#: It exists because a rule about *movement* needs two values and there was only
+#: ever one. The comment beside `CODENAME` says a codename "is not derivable from
+#: anything -- there is nothing to read it out of"; that was true of the current
+#: name and quietly also true of every name before it, so "it moves with the
+#: minor version" could not be checked by anything even in principle.
+CODENAMES: dict[str, str] = {
+    "0.1": "Forrest Gump",
+    "0.2": "Ferris Bueller",
+    "0.3": "Fox Mulder",
+    "0.4": "Ford Prefect",
+    "0.5": "Ford Prefect",
+}
+
+#: The minor series that shipped without moving the codename. 0.5 reused 0.4's
+#: "Ford Prefect", and it is recorded rather than repaired: 0.5.0 is on PyPI
+#: under that name, and a version number is spent whether or not what went under
+#: it was right.
+#:
+#: Adding to this set is the deliberate act the gate below exists to force. It is
+#: not an escape hatch for a release in flight -- an entry has to describe a
+#: reuse that actually happened, and `test_no_skip_is_a_stale_suppression`
+#: fails on one that does not, so the set cannot quietly accumulate permissions
+#: for reuses nobody has made yet.
+SKIPPED_THE_MOVE: frozenset[str] = frozenset({"0.5"})
+
+
+def minor_series(version: str) -> str:
+    """The minor series a version belongs to: ``1.2.3`` -> ``"1.2"``."""
+
+    major, minor, *_ = version.split(".")
+
+    return f"{major}.{minor}"
+
+
+def series_order(series: str) -> tuple[int, ...]:
+    """Sort key for a series, so 0.10 follows 0.9 rather than 0.1."""
+
+    return tuple(int(part) for part in series.split("."))
+
+
+def reused_codenames() -> dict[str, list[str]]:
+    """Every codename naming more than one series, each in release order."""
+
+    by_name: dict[str, list[str]] = {}
+
+    for series, name in CODENAMES.items():
+        by_name.setdefault(name, []).append(series)
+
+    return {
+        name: sorted(series, key=series_order)
+        for name, series in by_name.items()
+        if len(series) > 1
+    }
+
 
 def declared() -> str:
     """The version pyproject.toml declares, which is the single source."""
@@ -263,6 +322,94 @@ class UserAgentTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(assigned_literal(module=module, name=name), held[name])
                 self.assertNotIn(UNKNOWN_VERSION, held[name])
+
+
+class CodenameConventionTests(unittest.TestCase):
+    """ "It moves with the minor version" was a comment, and comments do not run.
+
+    0.5.0 is the proof and the reason this class exists. It shipped reusing
+    0.4.0's "Ford Prefect" with every gate green, because no gate was ever
+    looking: `BannerTests` compares the README's copy against `CODENAME`, so
+    those two agree with each other whatever `CODENAME` says, and nothing
+    compared `CODENAME` against the release before it. The rule was written down
+    in the one place that cannot enforce it -- in a comment beside the value it
+    governs -- and the release went out before anybody re-read the comment.
+
+    That is this project's recurring shape, reached from a new direction. The
+    version was two copies agreeing by luck until something compared them; the
+    codename was one copy with a rule about it that nothing could evaluate,
+    because evaluating it needs the previous value and the previous value was
+    only ever in the tags.
+    """
+
+    def test_the_current_minor_has_a_codename_recorded(self) -> None:
+        # The check that fires on the release that forgets. A minor bump with no
+        # entry here is exactly what 0.5.0 was, and it is the moment the omission
+        # is still free to fix -- once tagged, the name is on PyPI.
+        series: str = minor_series(declared())
+
+        self.assertIn(
+            series,
+            CODENAMES,
+            f"pyproject.toml declares {declared()} and CODENAMES has no entry "
+            f"for the {series} series. A minor bump moves the codename: add the "
+            "new name here and to etc/cli.py, or record the series in "
+            "SKIPPED_THE_MOVE and say why.",
+        )
+
+    def test_the_package_holds_the_recorded_codename(self) -> None:
+        # What makes the map authoritative rather than decorative. Without this
+        # the history could say one thing while the banner printed another, and
+        # the gate below would be checking a record of nothing.
+        series: str = minor_series(declared())
+
+        self.assertEqual(
+            CODENAMES.get(series),
+            CODENAME,
+            f"etc/cli.py holds {CODENAME!r} but CODENAMES records "
+            f"{CODENAMES.get(series)!r} for the {series} series. These are the "
+            "same fact and one of them has moved.",
+        )
+
+    def test_every_minor_moves_the_codename(self) -> None:
+        # The convention itself, finally executable. Reuse is caught wherever it
+        # happens rather than only between neighbours: going back to a name from
+        # two series ago is the same defect as not moving at all, and a check
+        # that only compared adjacent pairs would wave it through.
+        for name, series in reused_codenames().items():
+            first, *repeats = series
+
+            for repeat in repeats:
+                with self.subTest(codename=name, series=repeat):
+                    self.assertIn(
+                        repeat,
+                        SKIPPED_THE_MOVE,
+                        f"the {repeat} series reuses {name!r}, already used by "
+                        f"{first}. The codename moves with the minor version. If "
+                        "a release genuinely meant to keep the previous name, "
+                        "add the series to SKIPPED_THE_MOVE with a reason.",
+                    )
+
+    def test_no_skip_is_a_stale_suppression(self) -> None:
+        # The half that keeps the exception list honest. Without it an entry
+        # added for a release that was then given a fresh name would sit here
+        # permitting a reuse nobody has made -- a silenced alarm on a door that
+        # was subsequently locked, which is worse than no alarm because it reads
+        # as a decision somebody made about the current state.
+        actually_reused: set[str] = {
+            series for repeats in reused_codenames().values() for series in repeats[1:]
+        }
+
+        for series in sorted(SKIPPED_THE_MOVE, key=series_order):
+            with self.subTest(series=series):
+                self.assertIn(
+                    series,
+                    actually_reused,
+                    f"SKIPPED_THE_MOVE names the {series} series, but its "
+                    "codename is not a reuse of an earlier one. The entry is "
+                    "suppressing nothing and should go -- left in place it would "
+                    "permit a future reuse in that series without comment.",
+                )
 
 
 if __name__ == "__main__":
