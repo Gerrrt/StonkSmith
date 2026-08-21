@@ -535,15 +535,16 @@ What that file already says, and what it means here:
   the liability and exclusion skips firing against a real card and a real overlap, and
   nine account rows holding steady while snapshots went 168 → 199. One Schwab 529 run
   settled the form-post login, both parses and the write. What those runs did *not*
-  settle is worth carrying into a crontab as much as what they did: SnapTrade's
-  transaction path has been exercised at one movement, so the pagination behind it has
-  not been exercised at all, and neither the disabled-connection skip nor the freshness
-  guard has ever had a real case to fire on. Those two wait on a connection lapsing
-  rather than on anybody running anything. The pagination is the one that does not:
-  `--page-size` asks the real API for pages small enough to have to be followed, so that
-  gap closes on an afternoon somebody spends rather than on a condition occurring. It has
-  not been spent — a schedule installed today is one whose transaction reads have still
-  never been watched take a second request.
+  settle is worth carrying into a crontab as much as what they did: neither the
+  disabled-connection skip nor the freshness guard has ever had a real case to fire on,
+  and both wait on a connection lapsing rather than on anybody running anything.
+  The pagination was a third of that kind and is no longer. It was the one that closed
+  on an afternoon somebody spent rather than on a condition occurring, and the afternoon
+  was 2026-08-18: `--page-size 1` asked the real API for pages small enough to have to
+  be followed, the loop made one request per movement, and the twenty-page backstop
+  stopped a thirty-seven-movement read at twenty and said so. A schedule installed today
+  is one whose transaction reads have been watched take a second request — and watched
+  stop.
 
 None of that argues against scheduling them. It argues for reading the first week of cron
 mail rather than assuming silence means success — and for knowing that the first lapsed
