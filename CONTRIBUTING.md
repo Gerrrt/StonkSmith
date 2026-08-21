@@ -12,7 +12,7 @@ All four have to pass, and CI runs exactly these:
 uv run ruff check
 uv run ruff format --check
 uv run ty check
-uv run pytest -q --cov --cov-fail-under=89
+uv run pytest -q --cov --cov-fail-under=90
 ```
 
 The coverage flags are not optional. Without them the suite passes locally and

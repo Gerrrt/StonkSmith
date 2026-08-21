@@ -47,6 +47,16 @@ the two disagree.
   double-counting since they switched; this is the release that makes the fix
   permanent.
 
+### Changed
+
+- **The coverage floor is 89 → 90.** The measured baseline is 90.93%, and the
+  floor is that rounded down. Worth saying which way the number was earned:
+  removing code usually flatters coverage rather than improving it, and
+  `brokers/fidelity/broker.py` went at 59% covered, which on its own would have
+  raised the average while leaving the shared browser lifecycle it exercised at
+  71%. That coverage was re-based onto Ally first, so the figure is the smaller
+  tree actually being tested rather than the larger one being averaged.
+
 ### Fixed
 
 - **Three broker packages documented a `saver.py` that does not exist.**
