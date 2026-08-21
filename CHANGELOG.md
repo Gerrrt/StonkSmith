@@ -21,6 +21,21 @@ the two disagree.
 - **`stonksmith fidelity` is no longer a subcommand**, and `--help` no longer
   lists it. A `~/.stonksmith/brokers/fidelity/` of your own is still discovered
   and still runs; nothing about this removal touches brokers you wrote.
+- **The pre-namespace import names no longer resolve.** Before 0.1.0 the package
+  installed `etc`, `helpers`, `modules`, `loaders` and `brokers` straight into
+  `site-packages`, and a shim aliased those names back for as long as one of your
+  own files was executing. It has done that under a `DeprecationWarning` since
+  0.1.0, and 1.0 is the release it named. **This is a breaking change for anyone
+  whose broker or module still says `from etc.context import Context`.** The fix
+  is the prefix — `from stonksmith.etc.context import Context` — and nothing else
+  about the contract has moved.
+- **A file still on the old names is reported by name and skipped, not fatal.**
+  The rest of the run continues and every other broker and module still loads.
+  The report exists because `ModuleNotFoundError: No module named 'etc'` on its
+  own reads as a broken Python rather than as two imports that need a prefix.
+  One consequence goes away with the shim: the alias was scoped to the load, so
+  an `import etc.config` inside `on_login()` used to fail where the same import
+  at the top of the file worked. Both now behave the same.
 - **An existing `fidelity.db` is not removed, and is still read.**
   `read_workspace()` globs `*.db` and does not ask which brokers still ship, so
   the accounts in it keep appearing on the `Accounts` tab, keep counting toward

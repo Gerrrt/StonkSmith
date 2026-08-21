@@ -12,7 +12,6 @@ from stonksmith.etc.broker_db import BrokerDatabase
 from stonksmith.etc.broker_nav import BrokerNavigator
 from stonksmith.etc.logger import stonksmith_logger
 from stonksmith.etc.paths import package_root
-from stonksmith.loaders._legacy_names import legacy_top_level_names
 
 
 class BrokerInfo(TypedDict):
@@ -74,12 +73,7 @@ class BrokerLoader:
             # taking down the caller -- which, for gen_cli_args(), was every
             # invocation of the tool including --version and --help.
             try:
-                # A user broker predating the stonksmith namespace still says
-                # `from etc.context import Context`. The alias is scoped to this
-                # call so the deprecated names never become importable in the
-                # main process, which is the whole point of having moved.
-                with legacy_top_level_names():
-                    spec.loader.exec_module(module=broker)
+                spec.loader.exec_module(module=broker)
             except Exception as e:
                 stonksmith_logger.fail(
                     msg=(
