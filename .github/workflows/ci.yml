@@ -49,8 +49,16 @@ jobs:
         # backend probe from picking something interactive.
         env:
           PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
-        # The floor is the measured baseline (89.83%) rounded down, not a target.
+        # The floor is the measured baseline (90.93%) rounded down, not a target.
         # It lives here rather than in [tool.coverage.report] so that running
         # `pytest --cov` over a handful of files locally does not fail on it.
         # Raise it when the real number moves; never lower it to make CI pass.
-        run: uv run pytest -q --cov --cov-fail-under=89
+        #
+        # 89 -> 90 at 1.0, and the direction is worth noting because removing
+        # code usually flatters this number rather than earning it. It did not
+        # here: brokers/fidelity/broker.py went at 59% covered, which on its own
+        # would have raised the average while leaving the shared browser
+        # lifecycle it exercised at 71%. That coverage was re-based onto Ally
+        # first, in its own commit, so the figure above is the smaller tree
+        # actually being tested rather than the larger one being averaged.
+        run: uv run pytest -q --cov --cov-fail-under=90
