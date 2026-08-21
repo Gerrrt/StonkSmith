@@ -168,8 +168,10 @@ unavailable for that run, so a half-finished broker under
 `~/.stonksmith/brokers/` never takes the rest of the tool down with it.
 
 Your own brokers and modules import from `stonksmith.` — see
-[what to import](docs/modules.md#what-to-import), which also covers the
-pre-namespace names, still accepted under deprecation until 1.0.
+[what to import](docs/modules.md#what-to-import). The pre-namespace names
+(`etc`, `helpers`, `modules`, `loaders`, `brokers`) were accepted under
+deprecation until 1.0 and are not any more; a file still on them is reported by
+name and skipped for that run.
 
 Brokers come in three shapes. A **scraper** posts a form and reads the response,
 and subclasses `Connection`: Schwab 529. A **browser-backed** broker has a login

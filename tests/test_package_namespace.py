@@ -23,18 +23,26 @@ Nothing here builds a wheel: that is slow, and the declaration is what actually
 decides the layout. What a built wheel contains is checked by hand at release time.
 """
 
+import subprocess
+import sys
 import tomllib
 import unittest
 from typing import Any
 
-from package_tree import PACKAGE, REPO
+from package_tree import PACKAGE, REPO, SRC
 
 PYPROJECT = REPO / "pyproject.toml"
 
 #: The names the package used to install at the top level. A .py file under
 #: src/stonksmith/ importing one of these would mean part of the tree never got
-#: moved -- and it would keep working locally, because the compat shim aliases
-#: exactly these names while a file is being loaded by path.
+#: moved.
+#:
+#: Until 1.0 that could hide: a compat shim aliased exactly these names while a
+#: user's file was loaded by path, so a shipped module left on them ran correctly
+#: here and failed only once installed from a wheel. The shim is gone and the
+#: hiding place with it -- but the check stays, because it is cheaper to read a
+#: failing assertion naming the line than to work backwards from an ImportError
+#: in somebody else's site-packages.
 LEGACY_ROOTS = ("etc", "helpers", "loaders", "modules", "brokers", "main")
 
 
@@ -121,13 +129,34 @@ class ConfiguredPathTests(unittest.TestCase):
                 self.assertTrue((REPO / pattern).exists(), f"{pattern} does not exist")
 
 
+class InstalledNamesTests(unittest.TestCase):
+    def test_the_legacy_names_are_not_importable_in_a_fresh_process(self) -> None:
+        # Moved here from tests/test_legacy_import_names.py, which was deleted
+        # with the shim at 1.0. The claim is this file's rather than that one's:
+        # it is about what the wheel installs, not about what a shim did while a
+        # user's file was executing.
+        #
+        # In-process this cannot be trusted -- sys.modules is already populated
+        # by every test that loads a broker by path. A subprocess is the only
+        # honest check.
+        result = subprocess.run(
+            [sys.executable, "-c", "import etc"],
+            env={"PYTHONPATH": str(SRC), "PATH": "/usr/bin:/bin"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0, "`import etc` must not resolve")
+        self.assertIn("No module named 'etc'", result.stderr)
+
+
 class SourceTreeTests(unittest.TestCase):
     def test_no_shipped_file_imports_a_pre_namespace_name(self) -> None:
-        # The standing version of the grep this migration was driven by. It has
-        # to be a test rather than a one-time check because the shim makes the
-        # old names work again while a file is loaded by path -- so a shipped
-        # module left on them would run correctly here and fail only once
-        # installed from a wheel.
+        # The standing version of the grep this migration was driven by, kept as
+        # a test rather than a one-time check because a stray import of an old
+        # name is invisible from inside the repo: src/ is on the path here in a
+        # way it is not in an installed environment.
         offenders: list[str] = [
             f"{path.relative_to(REPO)}:{number}: {statement}"
             for path in sorted(PACKAGE.rglob("*.py"))

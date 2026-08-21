@@ -38,9 +38,19 @@ Quote the failure in the commit body. If it does not fail, the test is not
 testing what you think, and finding that out takes a minute now or an incident
 later.
 
-A worked example is `tests/test_legacy_import_names.py`, whose docstring names
-the three tests that exist specifically because the obvious implementation passes
-the other four.
+A worked example is `tests/test_broker_discovery.py`. Its
+`test_no_flat_module_shadows_a_broker_package` asserts the broker directory holds
+what it should *before* asserting a glob over it is empty — because `glob()` on a
+path that has gone stale yields nothing and passes, which is the second failure
+named above and is exactly what happened to that test when the tree moved under
+`src/stonksmith/`.
+
+`tests/test_protocol_conformance.py` is the recent one, and it is the first
+failure rather than the second: `SHIPPED_BROKERS` and `SHIPPED_MODULES` are
+written down so a stopped glob cannot leave the file asserting nothing, but until
+1.0 nothing compared those tuples to the tree. Two entries were missing and were
+simply never checked. It surfaced only because deleting a module broke no test —
+an allowlist cannot notice something leaving it.
 
 ## Commits
 

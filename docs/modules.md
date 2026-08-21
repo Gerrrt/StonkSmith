@@ -21,25 +21,35 @@ from stonksmith.etc.connection import Connection
 from stonksmith.etc.context import Context
 ```
 
-**The old top-level names still work, and will stop working at 1.0.** Before the
-package had a namespace it installed `etc`, `helpers`, `modules`, `loaders` and
-`brokers` directly into `site-packages`, and modules were written against those:
+**The old top-level names stopped working at 1.0.** Before the package had a
+namespace it installed `etc`, `helpers`, `modules`, `loaders` and `brokers`
+directly into `site-packages`, and modules were written against those:
 
 ```python
-from etc.connection import Connection  # deprecated
-from etc.context import Context  # deprecated
+from etc.connection import Connection  # no longer resolves
+from etc.context import Context  # no longer resolves
 ```
 
-A file under `~/.stonksmith/modules` or `~/.stonksmith/brokers` that says this
-still loads. StonkSmith aliases the old names for as long as it is executing your
-file, logs which name it aliased, and raises a `DeprecationWarning`. Change the
-imports when convenient; nothing else about the contract has moved.
+From 0.1.0 until 1.0 a shim aliased those names back for as long as your file was
+executing, logged which name it had aliased, and raised a `DeprecationWarning`.
+It is gone. A file still written that way is reported by name and skipped for
+that run:
 
-One limit worth knowing, because it is not obvious: the alias exists only while
-your file is being *loaded*. A top-level `import etc.config` is fine — the name it
-binds is the real module and keeps working for the life of the run. The same
-import written inside `on_login()` runs later, after the alias is gone, and raises
-`ModuleNotFoundError`. Import at the top of the file, as the template does.
+```text
+[-] ~/.stonksmith/brokers/mine/broker.py failed to load and is unavailable this run: ModuleNotFoundError: No module named 'etc'
+```
+
+**Skipped, not fatal.** The rest of the run continues and every other broker and
+module still loads — the report is there so you can find the file, because
+`No module named 'etc'` on its own reads as a broken Python rather than as two
+imports that need a prefix.
+
+The fix is the prefix, and nothing else about the contract has moved: add
+`stonksmith.` to the front of each such import. There is no longer any difference
+between importing at the top of the file and importing inside `on_login()`, which
+there was while the shim existed — the alias was scoped to the load, so a
+function-local import ran after it had gone. Import at the top anyway, as the
+template does.
 
 ---
 
