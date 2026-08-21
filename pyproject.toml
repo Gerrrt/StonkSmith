@@ -26,7 +26,7 @@ description = "A tool that aggregates investment account data, written in python
 name = "stonksmith"
 readme = "README.md"
 requires-python = ">=3.14"
-version = "0.5.0"
+version = "1.0.0"
 
 authors = [ { name = "Garrett Allen", email = "garrettallen2@gmail.com" } ]
 keywords = [ "brokerage", "finance", "investing", "portfolio", "scraping" ]
@@ -36,12 +36,23 @@ keywords = [ "brokerage", "finance", "investing", "portfolio", "scraping" ]
 # hatchling picks up the LICENSE file beside it on its own.
 license = "MIT"
 
-# Read by PyPI, and the reason for the first two: this needs 3.14 -- it is not a
+# Read by PyPI, and the reason for the first: this needs 3.14 -- it is not a
 # package anyone should be pip-installing into 3.12 and discovering that at
-# import. Development Status is "3 - Alpha" because that is what an 0.1.0 with
-# no prior release is, whatever the test count says.
+# import.
+#
+# Development Status moved 3 -> 5 at 1.0. The old value said "that is what an
+# 0.1.0 with no prior release is, whatever the test count says", which was right
+# when it was written and had been wrong for four releases by the time anyone
+# read it again -- a value kept correct while the reason under it expired. It is
+# 5 now for the reason the version number is 1.0: the deprecations are gone, the
+# CLI surface is what it will stay, and there is nothing scheduled for removal.
+#
+# What 5 does not claim is that every claim in docs/live-verification.md has been
+# settled by a live run. Four have not. They wait on conditions rather than on
+# effort, that file says which, and none of them is a reason to call a released
+# tool alpha.
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: MacOS",

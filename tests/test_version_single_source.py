@@ -57,6 +57,7 @@ CODENAMES: dict[str, str] = {
     "0.3": "Fox Mulder",
     "0.4": "Ford Prefect",
     "0.5": "Ford Prefect",
+    "1.0": "Frodo Baggins",
 }
 
 #: The minor series that shipped without moving the codename. 0.5 reused 0.4's

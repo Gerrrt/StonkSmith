@@ -47,7 +47,7 @@ UNKNOWN_VERSION: str = "unknown"
 #: README.md quotes the banner and so states this name a second time. That copy
 #: used to go stale silently; tests/test_version_single_source.py now holds it to
 #: this one, which is the only reason it is safe to keep both.
-CODENAME: str = "Ford Prefect"
+CODENAME: str = "Frodo Baggins"
 
 
 def get_version() -> str:

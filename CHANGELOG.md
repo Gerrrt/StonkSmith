@@ -9,6 +9,14 @@ the two disagree.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-20
+
+**The release the deprecations named.** Both of them landed on a date rather than
+on a promise: the `fidelity` broker said "removed in 1.0" from 0.3.0, and the
+pre-namespace import shim said it from 0.1.0. This is that release, and it takes
+nothing else with it — no new surface, no behaviour change to anything that was
+not already scheduled to go.
+
 ### Removed
 
 - **The `fidelity` broker is gone.** Deprecated in 0.3.0 and removed here, which
@@ -664,7 +672,8 @@ which is written to be read.
   `site-packages`. A broker or module written against those still loads, with a
   `DeprecationWarning`; that shim is removed in 1.0.
 
-[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Gerrrt/StonkSmith/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v1.0.0
 [0.5.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Gerrrt/StonkSmith/releases/tag/v0.3.0
