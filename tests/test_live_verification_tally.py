@@ -78,6 +78,40 @@ AS_OF = re.compile(r"As of (\d{4}-\d{2}-\d{2}):")
 DUE = re.compile(r"(\d+) of those were settled more than six months")
 UNDATED_COUNT = re.compile(r"(\d+) carry no date at all")
 
+#: The sentence naming every place that summarises the claims table. It states a
+#: count in words and then lists that many links, so the count and the list are
+#: the same fact written twice -- which is exactly the shape the rest of this
+#: file exists to check, one paragraph further up the page.
+#:
+#: This is the half that had no mechanism. The instruction said "three places"
+#: while four files summarised the table, so `docs/scheduling.md` described the
+#: SnapTrade pagination row as unexercised for two days after a live run settled
+#: it. Nobody skipped a step: the step named three files and that section was the
+#: fourth, and an instruction cannot be followed into a place it does not name.
+SUMMARISERS = re.compile(
+    r"\*\*This file is the record\.\*\* (\w+) places summarise it — "
+    r"(.+?) — and all (\w+) are derived"
+)
+
+#: Word forms of the count that sentence can state, because the prose spells it
+#: out. Digits are not accepted and the map deliberately stops short of a length
+#: nobody reads as a list any more -- a record with ten summaries has a problem
+#: this test cannot help with.
+NUMBER_WORDS: dict[str, int] = {
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+}
+
+#: An inline markdown link, matched only against the sentence above. It needs
+#: none of the care tests/test_doc_cross_references.py takes over fenced blocks,
+#: because it is never run over the whole document -- and resolving these targets
+#: is that file's job rather than this one's.
+LINK = re.compile(r"\[[^\]]*\]\([^)\s]+\)")
+
 
 def _document() -> str:
     """The record, with its line wrapping collapsed."""
@@ -335,6 +369,90 @@ class SettledOnTests(unittest.TestCase):
         )
 
         self.assertEqual(dated + _settled_on().count(UNDATED), confirmed + disproved)
+
+
+class SummaryPointerTests(unittest.TestCase):
+    """The list of places that summarise this file has to be complete.
+
+    The count above the table is checked against the table. This sentence is the
+    other summary in the file, and until 2026-08-20 nothing checked it at all:
+    it said "Three places" while four files summarised the record, and
+    docs/scheduling.md duly went on calling the SnapTrade pagination row
+    unexercised for two days after a live run had settled it.
+
+    Nobody skipped a step. The step named three files and that section was the
+    fourth, so the instruction was followed exactly and the drift happened
+    anyway -- which is the failure mode this whole file was written for one
+    paragraph up: an instruction is not a mechanism.
+
+    **This does not catch the bug that happened, and it is worth being exact
+    about that.** Nothing can: "this file summarises the claims table" is not a
+    property a test can read off a paragraph, so a summary written and never
+    added to the list is invisible here as it was before. That half stays human,
+    and the foot of the record says so.
+
+    What it catches is the failure mode the fix creates. The list is now the
+    mechanism -- the thing that decides where the next settled claim gets
+    written -- and a sentence that states a count and then lists that many links
+    is one fact written twice. So a fifth summary added without moving the word,
+    or a word moved without adding the summary, fails here instead of in
+    somebody's reading a fortnight later. That is a smaller claim than the count
+    above the table earns, and it is the whole of what these two assertions
+    check.
+    """
+
+    def _sentence(self) -> re.Match[str]:
+        """The summariser sentence, matched or a failure naming what it wanted."""
+
+        match: re.Match[str] | None = SUMMARISERS.search(_document())
+
+        self.assertIsNotNone(
+            match,
+            "docs/live-verification.md no longer opens with a sentence of the "
+            "form '**This file is the record.** N places summarise it — … — and "
+            "all N are derived'. Either it was re-worded, in which case move "
+            "SUMMARISERS with it, or the list of summaries is gone -- which is "
+            "the thing that has already gone wrong once.",
+        )
+
+        assert match is not None
+
+        return match
+
+    def test_the_stated_count_is_the_number_of_places_listed(self) -> None:
+        match = self._sentence()
+        stated: str = match.group(1).lower()
+
+        self.assertIn(
+            stated,
+            NUMBER_WORDS,
+            f"the sentence counts {match.group(1)!r} places, which is not a "
+            "number word this test knows. Spell it out and add it to "
+            "NUMBER_WORDS.",
+        )
+
+        self.assertEqual(
+            NUMBER_WORDS[stated],
+            len(LINK.findall(string=match.group(2))),
+            f"the sentence says {match.group(1)!r} places summarise this file "
+            "but links to a different number of them. Both halves are the same "
+            "fact, and the one that goes stale is the word -- a summary this "
+            "list does not name is one nobody is told to update.",
+        )
+
+    def test_both_counts_in_the_sentence_agree(self) -> None:
+        # The sentence says the number twice -- "Four places summarise it" and
+        # "all four are derived". Re-wording one and not the other leaves a
+        # sentence that argues with itself, which reads as a typo rather than as
+        # the missing entry it would actually be.
+        match = self._sentence()
+
+        self.assertEqual(
+            match.group(1).lower(),
+            match.group(3).lower(),
+            f"the sentence opens with {match.group(1)!r} and closes with "
+            f"{match.group(3)!r}. These are the same count written twice.",
+        )
 
 
 if __name__ == "__main__":
