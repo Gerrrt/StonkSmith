@@ -22,11 +22,11 @@ afterwards, which is what makes them worse than an empty table and a message.
 
 import unittest
 from typing import Any, ClassVar
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from stonksmith.etc.context import Context, SnapshotDbProtocol
 from stonksmith.etc.records import AccountIdentity, Holding, Transaction
-from stonksmith.modules.fidelity_module import FidelityModule
+from stonksmith.modules.ally_module import AllyModule
 from stonksmith.modules.schwab529plan_module import Schwab529Module
 
 
@@ -126,31 +126,30 @@ class ProtocolDiscriminationTests(unittest.TestCase):
         self.assertTrue(isinstance(_SnapshotDb(), SnapshotDbProtocol))
 
 
-class FidelityWriteTests(unittest.TestCase):
-    """The simplest module: a balance, a number, and its history."""
+class AllyWriteTests(unittest.TestCase):
+    """Both database contracts, from a module that still supports both.
 
-    ACCOUNTS: ClassVar[list[dict[str, str]]] = [
+    ``save_accounts`` is where the two audiences part, and Ally's version is
+    called directly rather than through ``on_login``. The module splits at
+    exactly this seam and says why: the branches here are about what the store
+    supports, which is a different question from reading the page. Driving them
+    through a scrape would mean standing up a browser page, the holdings
+    navigation and the account rail to reach three lines about a database.
+    """
+
+    ACCOUNTS: ClassVar[list[dict[str, Any]]] = [
         {
             "Account": "ROTH IRA (123456789)",
             "Balance": "$1,234.56",
-            "Name": "ROTH IRA",
             "Number": "123456789",
+            "Holdings": (Holding(symbol="VTI", units=2.0, price=100.0, value=200.0),),
         }
     ]
 
     def _run(self, db: Any) -> bool:
-        module = FidelityModule()
-        context = _context(db)
-        connection = MagicMock()
-        connection.username = "someone"
-
-        module.scrape_accounts = lambda page, context: list(self.ACCOUNTS)  # type: ignore[method-assign]
-
-        # Stubbed for the same reason as elsewhere: the sheet sync reads the
-        # configured workspace to know which databases to render, and letting it
-        # would rewrite the developer's own config. This is about the snapshot.
-        with patch("stonksmith.modules.fidelity_module.sync", return_value=True):
-            return module.on_login(context=context, connection=connection)
+        return AllyModule().save_accounts(
+            context=_context(db), accounts=[dict(a) for a in self.ACCOUNTS]
+        )
 
     def test_a_snapshot_database_receives_a_number_not_a_string(self) -> None:
         db = _SnapshotDb()
@@ -172,13 +171,26 @@ class FidelityWriteTests(unittest.TestCase):
         self.assertEqual(identity.external_id, "123456789")
 
     def test_the_display_name_keeps_the_number_that_disambiguates_it(self) -> None:
-        # Several Fidelity accounts can share a nickname.
+        # Two Ally accounts can share a nickname, and Ally re-masks the label.
         db = _SnapshotDb()
         self._run(db)
 
         self.assertEqual(
             db.snapshots[0]["account"].display_name, "ROTH IRA (123456789)"
         )
+
+    def test_the_units_are_stamped_with_when_they_were_read(self) -> None:
+        # Looks redundant on a scrape, where the units and the value are read at
+        # the same moment. It stops looking redundant under --from-prices, which
+        # reprices the row against a published price and leaves the units as old
+        # as the last signed-in run -- and the only thing that can say how old is
+        # a date recorded now rather than inferred later from the snapshots that
+        # run has itself been adding to.
+        db = _SnapshotDb()
+        self._run(db)
+
+        holding = db.snapshots[0]["holdings"][0]
+        self.assertEqual(holding.units_as_of, db.snapshots[0]["scraped_at"])
 
     def test_a_legacy_database_still_gets_its_balances(self) -> None:
         db = _LegacyDb()

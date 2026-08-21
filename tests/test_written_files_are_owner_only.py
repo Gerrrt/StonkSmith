@@ -171,7 +171,7 @@ class TraceAndProfileTests(_TempRoot):
         connection.context = MagicMock()
         connection.attached = True
         connection.tracing_started = True
-        connection.trace_path = self.tmp / "Fidelity_trace.zip"
+        connection.trace_path = self.tmp / "Ally_trace.zip"
         connection.browser = None
         connection.page = None
         connection.playwright = None

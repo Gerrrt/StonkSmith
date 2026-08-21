@@ -44,7 +44,8 @@ The reasons are all upstream, and there are four of them.
 **There is no second source.** `scripts/snaptrade_coverage.py` asks the authoritative
 `/brokerages` endpoint what SnapTrade actually covers, and the 2026-08-05 run recorded in its
 docstring found **no Ally Invest at all**. That matters more than it looks: SnapTrade is
-exactly what takes Fidelity from attended to unattended, as
+exactly what took Fidelity from attended to unattended — so completely that the
+`fidelity` broker was removed at 1.0 rather than kept, as
 [*When two brokers can reach the same account*](brokers.md#when-two-brokers-can-reach-the-same-account)
 describes. For Ally that route does not exist, so there is no
 aggregator to fall back to and no path to transactions that does not go through the scraper.

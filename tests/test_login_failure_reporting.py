@@ -1,6 +1,6 @@
 """A run that cannot log in must say why.
 
-From the field: `stonksmith fidelity -M fidelity -id 1` with no stored
+From the field: `stonksmith ally -M ally -id 1` with no stored
 credential opened a browser, closed it, and printed nothing at all. Every
 progress message in this path is INFO, which the default log level hides, and
 the three failure exits were silent.
@@ -60,7 +60,7 @@ class LoginFailureReportingTests(unittest.TestCase):
 
     def _conn(self, db: object, **args) -> Connection:
         conn = Connection()
-        conn.broker = "Fidelity"
+        conn.broker = "Ally"
         conn.args = Namespace(
             cred_id=[], username=[], password=[], module_run_markers=False, **args
         )

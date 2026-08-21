@@ -106,30 +106,34 @@ project has already written down what muting costs — see
 [`scheduling.md`](scheduling.md). Bump the date when you record a result, and the
 count comes with it.
 
-**Five `fidelity` rows were withdrawn on 2026-08-17, and withdrawn is not settled.**
-They asked whether the `fidelity` broker's sign-in, scrape, session and database
-write still work against the real site. Nobody ever ran it, and now nobody will: the
-broker was deprecated that day for removal in 1.0, because Fidelity reaches the
-workspace through SnapTrade and nothing here recommends the scraper. A row is a
-question somebody intends to answer, and these stopped being that.
+**Five `fidelity` rows were withdrawn on 2026-08-17, and the broker was removed at
+1.0.** They asked whether that broker's sign-in, scrape, session and database write
+still worked against the real site. Nobody ever ran it and nobody now can: it was
+deprecated that day because Fidelity reaches the workspace through SnapTrade, and
+the code went at 1.0 rather than being verified.
 
-**The broker still ships.** `stonksmith fidelity` runs until 1.0 and prints a notice
-saying so, and its ten test files are still in the suite. So this is not a case of
-the rows describing code that is gone — it is the narrower and more awkward one of
-code that is still here and deliberately unverified. Anyone who runs it is running
-something no live check stands behind, which is the whole reason the deprecation
-names a replacement rather than just a date.
-
-That is stated here rather than left to an absence, on the same reasoning that put
-the five rows in to begin with: an absent row reads as nothing to say instead of
-nothing observed, and this file has already implied otherwise once by leaving a gap
-where a claim belonged. When the broker goes at 1.0, this paragraph goes with it.
+**This is the third way a row leaves this list, and the only one that answers
+nothing.** A row can be settled by a run, or settled the other way by a run that
+shows the thing cannot be done. These were settled by neither. Deleting the code
+under a question does not answer it — it retires it, and the honest record of that
+is a paragraph rather than a silence, because an absent row reads as nothing to say
+instead of nothing observed.
 
 The Fidelity *accounts* SnapTrade reaches are settled, and they always were a
 different claim: SnapTrade asks an API for a balance, while the `fidelity` broker
 drove a browser past Akamai Bot Manager and ThreatMetrix to scrape a summary page.
 Nothing about the first ever said the second worked — which is why removing the
-scraper costs this table no coverage it had.
+scraper cost this table no coverage it had.
+
+**The name survives below, in the transcripts, and that is deliberate.** Runs
+recorded here name `fidelity` in their `Refreshed: … from …` lines because that is
+what those runs printed on the day they were made. A record that edits its own
+evidence to match the current tree is not a record — and the lines happen to still
+be accurate besides: `read_workspace()` globs `*.db`, so a workspace that ever ran
+the broker still reads `fidelity.db` and still lists it. What went at 1.0 was the
+code, not the database. Prose written in the present tense about how things work
+today has been changed; transcripts and the descriptions of specific dated runs
+have not.
 
 `tests/test_live_verification_tally.py` derives the five numbers in the count above
 from the table below
@@ -303,9 +307,10 @@ the outcome, and each line carries the endpoint's parameter *names* alongside it
 status and size. Values, bodies and headers are still never read. A future run of this
 procedure should therefore attach that file rather than a number.
 
-Ally is the only broker that arms the recorder, so a Fidelity run still leaves
-nothing. Saving is generic and needs no per-broker wiring; arming is one call, and
-worth adding there only if Fidelity acquires a question of its own.
+Ally is the only broker that arms the recorder, and since 1.0 the only one that
+opens a browser at all. Saving is generic and needs no per-broker wiring; arming is
+one call, worth adding to a future browser-backed broker only if it acquires a
+question of its own.
 
 **The outcome: the Ally scrape cannot run unattended.** `--manual-login` on every
 scrape is the correct description, and both the README's
@@ -1067,112 +1072,6 @@ step 5 exists to keep honest.
 
 ---
 
-## Fidelity
-
-Five steps, and the only broker here whose whole procedure depends on getting past
-something that is actively trying to stop it. Nothing below has been run: every
-Fidelity row in the table above rests on unit tests, and unit tests cannot tell you
-whether Akamai still refuses the same browsers it refused when this was written.
-
-**What it needs.** A real Fidelity login with 2FA to hand, and a Chrome you can start
-yourself for step 2. No stored credential: `--manual-login` needs none, and the CDP
-path needs none either.
-
-**Run steps 1 and 2 on different days if you can.** Both establish a session, and a
-session established twice in ten minutes says nothing about step 4, which is the one
-that matters most.
-
-### 1. The manual sign-in hands off, and the summary is reached
-
-```bash
-uv run stonksmith fidelity -M fidelity --manual-login
-```
-
-A browser opens. Sign in yourself, 2FA included. Expect:
-
-```
-[*] Starting Fidelity sync for: <username>
-[*] Found <n> account(s)
-[+] Fidelity sync complete.
-```
-
-**The hand-off is the claim, not the sign-in.** You signing in proves nothing about
-StonkSmith; what this settles is that it waits, recognises the portfolio summary when
-it renders, and takes over without navigating first. `--manual-login` implies
-`--headed` and needs no credential, so a prompt for one means the flag did not take.
-
-If it reports finding accounts but the count is wrong, that is step 3, not this one.
-
-### 2. Attaching to a browser you started yourself
-
-Start Chrome with the dedicated profile the chapter names, sign in to Fidelity in that
-window, then:
-
-```bash
-uv run stonksmith --verbose fidelity -M fidelity --browser cdp
-```
-
-**StonkSmith must not navigate before you are signed in.** That is the part worth
-watching: `brokers.md` records that driving an attached browser before sign-in trips
-the bot sensor and flags the Chrome profile permanently, after which even a manual
-sign-in is refused and the fix is a fresh `--user-data-dir`. So this check has a cost
-when it fails, and a flagged profile is the evidence rather than a stack trace.
-
-If nothing is listening on the debugging port, StonkSmith prints the exact launch
-command. That path needs no Fidelity account and can be checked in a second — it is
-the cheapest half of this step and settles none of it.
-
-### 3. Account names, numbers and balances parse
-
-From either run above, against what fidelity.com shows you:
-
-- **Every account on the summary is present**, and the count on the `Found <n>` line
-  matches what you can see. A run that finds none captures the page instead — the
-  path is printed, and `capture_page(reason="no-accounts")` writes HTML and a
-  screenshot to `~/.stonksmith/logs` with owner-only permissions. **Attach that
-  capture to the issue.** It is the artefact that lets the selector be fixed without
-  another sign-in, and `ACCOUNT_BALANCE_SELECTORS` is a one-entry tuple, so a class
-  rename is the whole failure.
-- **The balance is a number.** Fidelity writes it for screen readers, as
-  `", balance:  $1,234.56"`, and `clean_money()` pulls the amount out of that
-  sentence. A balance stored as the whole sentence is this check failing quietly:
-  the row exists, the account is named, and the money is text.
-
-### 4. The session survives to the next run
-
-The claim that separates Fidelity from Ally, and the reason both are in this file.
-`brokers.md` says later runs reuse the saved session and only prompt again when it
-expires. Ally's equivalent claim is settled as **Run, and it cannot**.
-
-On a later day, with no browser of your own open:
-
-```bash
-uv run stonksmith fidelity -M fidelity
-```
-
-Reaching the summary with no sign-in confirms it. A sign-in page instead means the
-session did not survive, and *that is a result*: it would make Fidelity unschedulable
-for the same reason Ally is, and `docs/scheduling.md` already says Fidelity is
-replaced by SnapTrade rather than scheduled — so a failure here confirms the
-recommendation rather than breaking anything.
-
-Record which it was, and how long after step 1. "It expired" and "it never persisted"
-are different findings, and only the gap between the runs tells them apart.
-
-### 5. The database write
-
-```bash
-uv run stonksmithdb
-broker fidelity
-show accounts
-show snapshots
-```
-
-One row per account, a snapshot per run, and the balances matching step 3. The
-generic form of this is *Every broker* below, and it applies here unchanged.
-
----
-
 ## SnapTrade
 
 Four runs on 2026-08-11, against a real personal key with four brokerages linked —
@@ -1482,7 +1381,7 @@ row stays `No` and needs a second beneficiary rather than a second sitting.
 
 Eight checks and a refusal, and it sits outside the broker sections because the sheet is
 not any broker's. One `sheet` run reads every database in the workspace, so the tabs it
-writes are as much Fidelity's and SnapTrade's as TSP's, and the three *The sheet — …*
+writes are as much Ally's and SnapTrade's as TSP's, and the three *The sheet — …*
 rows in the table above, and the *account series* row beside them, settle for all of
 them at once. This procedure lived under *TSP*
 until it was moved here, because TSP was the broker it happened to be written against.

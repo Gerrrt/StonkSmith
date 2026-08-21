@@ -356,7 +356,7 @@ class HistoryRowsTests(MemoryKeyringMixin, unittest.TestCase):
         self.assertEqual(len(narrowed), 0, "no account has id 0, so nothing matches")
 
     def test_a_legacy_database_explains_itself(self) -> None:
-        nav = BrokerNavigator(object(), _LegacyDb(), "fidelity")
+        nav = BrokerNavigator(object(), _LegacyDb(), "ally")
 
         self.assertIsNone(nav.history_rows(category="snapshots"))
 
@@ -545,7 +545,7 @@ class ExportWritesEverythingTests(MemoryKeyringMixin, unittest.TestCase):
     def test_a_legacy_database_does_not_reach_the_writer(self) -> None:
         # history_rows returning None must stop the export, not hand None to
         # write_csv -- the show path already refuses; this one has to as well.
-        nav = BrokerNavigator(object(), _LegacyDb(), "fidelity")
+        nav = BrokerNavigator(object(), _LegacyDb(), "ally")
         target: Path = self.root / "never.csv"
 
         nav.do_export(f"snapshots {target}")

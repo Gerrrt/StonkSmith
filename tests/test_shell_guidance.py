@@ -32,7 +32,7 @@ def _menu(brokers: dict[str, dict[str, str]] | None = None) -> StonkSmithDBMenu:
         brokers
         if brokers is not None
         else {
-            "fidelity": {"path": "f.py", "nvpath": "n.py", "dbpath": "d.py"},
+            "ally": {"path": "a.py", "nvpath": "n.py", "dbpath": "d.py"},
             "schwab529plan": {"path": "s.py", "nvpath": "n.py", "dbpath": "d.py"},
         }
     )
@@ -66,7 +66,7 @@ class TopLevelGuidanceTests(unittest.TestCase):
         output = _capture(menu.do_broker, "")
 
         self.assertIn("Available brokers", output)
-        self.assertIn("fidelity", output)
+        self.assertIn("ally", output)
         self.assertIn("schwab529plan", output)
 
     def test_unknown_broker_name_lists_the_real_ones(self) -> None:

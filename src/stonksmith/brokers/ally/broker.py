@@ -13,7 +13,9 @@ performs is the bank's, and what StonkSmith waits for is arrival on the
 investing host rather than the submission of any form.
 
 Starting, attaching to, persisting and tearing down the browser all live in
-etc.browser_connection, shared with Fidelity.
+etc.browser_connection. That split was made when there were two browser-backed
+brokers; Ally is the only one left, and the class stays split because the
+CDP-attach reasoning in it is subtle enough that its comments are load bearing.
 
 BrokerLoader discovers this package by the presence of this file and imports it
 by path, reading the module-level ``Broker`` alias at the bottom. Imports here
@@ -164,9 +166,9 @@ class Ally(BrowserConnection):
 
         Always the human path. Ally's login is fronted by Akamai, Dynatrace and
         Transmit, and there is no automated flow here to fall back to -- so
-        unlike Fidelity, this does not defer to the credential login for some
-        cases and the human one for others. A stored credential would be asked
-        for and then never used.
+        there is no automated flow here to defer to for some cases and a
+        human one for others. A stored credential would be asked for and then
+        never used.
         :return: True when the browser holds an authenticated session
         :rtype: bool
         """

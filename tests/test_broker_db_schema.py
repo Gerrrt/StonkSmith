@@ -50,7 +50,7 @@ CREATE TABLE credentials (
 LEGACY_ROWS: tuple[tuple[str | None, str, str], ...] = (
     ("Beneficiary A", "$1,000.00", "2025-12-01 00:00:00"),
     ("Beneficiary A", "$1,100.00", "2025-12-02 00:00:00"),
-    ("Fidelity - Roth", "-$50.00", "2025-12-02 00:00:00"),
+    ("Ally - Roth", "-$50.00", "2025-12-02 00:00:00"),
     (None, "--", "2025-12-03 00:00:00"),
 )
 
@@ -70,7 +70,7 @@ class _DbTestCase(MemoryKeyringMixin, unittest.TestCase):
         self._dir.cleanup()
         super().tearDown()
 
-    def open_db(self, name: str = "broker.db", broker: str = "fidelity") -> Any:
+    def open_db(self, name: str = "broker.db", broker: str = "ally") -> Any:
         db = BrokerDatabase(create_db_engine(db_path=self.tmp / name), broker)
         self.opened.append(db)
         return db
@@ -282,7 +282,7 @@ class LegacyMigrationTests(_DbTestCase):
         db = self.open_db()
 
         names = sorted(row[2] for row in db.get_accounts())
-        self.assertEqual(names, ["Beneficiary A", "Fidelity - Roth", "Unknown account"])
+        self.assertEqual(names, ["Ally - Roth", "Beneficiary A", "Unknown account"])
 
     def test_text_balances_become_numbers(self) -> None:
         self.write_legacy()

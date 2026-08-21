@@ -354,9 +354,9 @@ class ManualLoginTests(unittest.TestCase):
 
 class LoginPathTests(unittest.TestCase):
     def test_login_always_takes_the_human_path(self) -> None:
-        # Unlike Fidelity there is no credential flow to fall back to, so
-        # asking for a stored credential would be asking for something this
-        # broker never uses.
+        # There is no credential flow here to fall back to, so asking for a
+        # stored credential would be asking for something this broker never
+        # uses.
         broker = _broker(url=INVEST_URL, body=SIGNED_IN_BODY, attached=True)
 
         self.assertTrue(broker.login())

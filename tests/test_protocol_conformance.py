@@ -29,10 +29,19 @@ from stonksmith.loaders.brokerloader import BrokerLoader
 #: Not collected by globbing what exists: a glob that silently stopped matching
 #: would leave this file asserting nothing, which is the failure mode
 #: test_broker_discovery.py was written about.
-SHIPPED_BROKERS = ("ally", "fidelity", "schwab529plan", "snaptrade", "tsp")
+#:
+#: Written down, and then checked against the directory -- both halves, which is
+#: the shape test_broker_discovery.py already uses for the broker packages and
+#: this file had only half of. Without the check a name missing from these tuples
+#: is simply never conformance-tested, and two were: `manual` and
+#: `manual_module.py` had been shipping unchecked because nothing compared the
+#: lists to what is on disk. Removing the fidelity broker is what surfaced it --
+#: deleting `modules/fidelity_module.py` broke no test, because an allowlist
+#: cannot notice something leaving it.
+SHIPPED_BROKERS = ("ally", "manual", "schwab529plan", "snaptrade", "tsp")
 SHIPPED_MODULES = (
     "ally_module.py",
-    "fidelity_module.py",
+    "manual_module.py",
     "schwab529plan_module.py",
     "snaptrade_module.py",
     "tsp_module.py",
@@ -119,6 +128,48 @@ class BrokerConformanceTests(unittest.TestCase):
                     [p for p in signature.parameters if p != "self"],
                     ["args", "db", "host"],
                 )
+
+
+#: Exempt from the listing check below. `example.py` is the annotated template
+#: rather than a module anybody runs -- it is excluded from coverage and from
+#: some lint rules for the same reason -- and `__init__.py` is packaging.
+NOT_MODULES = ("__init__.py", "example.py")
+
+
+class ShippedListsMatchTheTreeTests(unittest.TestCase):
+    """The written-down lists have to be what is actually on disk.
+
+    The tuples above exist so a stopped glob cannot leave this file asserting
+    nothing. That is the right trade and it has a cost the other half pays for:
+    a list nothing compares to the tree is a list that can quietly disagree with
+    it, and then a broker or module ships with its conformance never checked.
+    """
+
+    def test_every_broker_package_is_listed(self) -> None:
+        found = sorted(
+            p.name
+            for p in (MODULES_DIR.parent / "brokers").iterdir()
+            if p.is_dir() and not p.name.startswith((".", "_"))
+        )
+
+        self.assertEqual(
+            found,
+            sorted(SHIPPED_BROKERS),
+            "brokers/ and SHIPPED_BROKERS disagree. A broker missing from the "
+            "tuple is never checked against BrokerProtocol by this file.",
+        )
+
+    def test_every_module_is_listed(self) -> None:
+        found = sorted(
+            p.name for p in MODULES_DIR.glob("*.py") if p.name not in NOT_MODULES
+        )
+
+        self.assertEqual(
+            found,
+            sorted(SHIPPED_MODULES),
+            "modules/ and SHIPPED_MODULES disagree. A module missing from the "
+            "tuple is never checked against ModuleProtocol by this file.",
+        )
 
 
 class ModuleConformanceTests(unittest.TestCase):

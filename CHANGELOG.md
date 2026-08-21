@@ -9,7 +9,45 @@ the two disagree.
 
 ## [Unreleased]
 
+### Removed
+
+- **The `fidelity` broker is gone.** Deprecated in 0.3.0 and removed here, which
+  is what 1.0 is for. Fidelity accounts reach the workspace through SnapTrade —
+  an API key rather than a browser driven past Akamai Bot Manager and
+  ThreatMetrix — and that route runs unattended, which the scraper never did.
+  The broker was never once run against the real site: its five claims in
+  `docs/live-verification.md` were withdrawn rather than settled, so removing it
+  costs that record no coverage it had.
+- **`stonksmith fidelity` is no longer a subcommand**, and `--help` no longer
+  lists it. A `~/.stonksmith/brokers/fidelity/` of your own is still discovered
+  and still runs; nothing about this removal touches brokers you wrote.
+- **An existing `fidelity.db` is not removed, and is still read.**
+  `read_workspace()` globs `*.db` and does not ask which brokers still ship, so
+  the accounts in it keep appearing on the `Accounts` tab, keep counting toward
+  the total, and keep showing in the `Refreshed: … from …` source list. What
+  changes is that `initialize_db()` no longer recreates it — so unlike a bundled
+  broker's database, once you move it out it stays out. See *Neither remedy
+  touches what is already on disk* in `docs/brokers.md`. Anyone who linked
+  Fidelity through SnapTrade and left the old database in place has been
+  double-counting since they switched; this is the release that makes the fix
+  permanent.
+
 ### Fixed
+
+- **Three broker packages documented a `saver.py` that does not exist.**
+  `brokers/__init__.py`, `brokers/ally/`, `brokers/snaptrade/`, `brokers/tsp/`
+  and `brokers/schwab529plan/` all named it, and three of them gave "the module
+  imports `brokers.<name>.saver` on every run" as the *reason* their class is
+  exported lazily. Nothing imports it and no such file is in the tree. The lazy
+  export is still right — Playwright and the SnapTrade SDK are the real weight —
+  but the justification named a mechanism that was not there. Found while
+  removing the broker, which is the only reason these docstrings were read.
+- **`docs/brokers.md` described `initialize_db()` wrongly**, and it was the
+  sentence explaining why a retired broker's database reappears. It said the
+  function "creates an empty database for every broker that ships a
+  `database.py`". It walks every broker `BrokerLoader` discovers, and no bundled
+  broker ships a `database.py` at all — `database_class()` falls back to
+  `BrokerDatabase` for all of them. The stated filter did not exist.
 
 - **The codename convention is a gate rather than a comment, because 0.5.0
   proved a comment does not run.** `CODENAME` moves with the minor version, and

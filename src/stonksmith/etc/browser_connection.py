@@ -10,9 +10,9 @@ one that needs an actual browser: a login guarded by bot detection, a session
 worth keeping between runs, and a page that only exists after JavaScript has
 run.
 
-Fidelity was the first of those and, for a while, the only one, so all of it
-lived in ``brokers/fidelity/broker.py``. None of the following is about
-Fidelity:
+This started life inside a single broker, because for a while there was only
+one that needed a browser. None of the following is about any particular
+brokerage:
 
 * starting Firefox against a saved ``storage_state``, or a Chromium-family
   browser against a persistent profile directory
@@ -23,12 +23,14 @@ Fidelity:
 * capturing the page when a selector breaks, chmod 0600, because that markup is
   a signed-in brokerage session
 
-Ally needs every one of those and shares none of Fidelity's URLs, markers or
-2FA flow. Copying the file would mean two divergent copies of the CDP-attach
-reasoning, which is subtle enough that the comments explaining it are load
-bearing -- ``attached`` is set before validation specifically so an error path
-cannot close the operator's window, and that is the kind of detail a second
-copy loses.
+A second browser-backed broker needed every one of those and shared none of
+the first one's URLs, markers or 2FA flow, so the lifecycle was lifted out here
+rather than copied. Ally is the only subclass left -- the other was removed at
+1.0 -- and the split stays, because the alternative is putting the CDP-attach
+reasoning back inside a broker. That reasoning is subtle enough that the
+comments explaining it are load bearing: ``attached`` is set before validation
+specifically so an error path cannot close the operator's window, and that is
+the kind of detail the next copy of it loses.
 
 What a subclass owes this class:
 

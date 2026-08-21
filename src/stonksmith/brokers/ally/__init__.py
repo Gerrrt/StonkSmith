@@ -1,14 +1,16 @@
 """Ally Invest broker package.
 
-``broker.py`` holds the login class; ``broker_args.py`` and ``saver.py`` are
-loaded by BrokerLoader by path. There is no ``database.py`` or
-``db_navigator.py``: BrokerLoader falls back to ``etc.broker_db.BrokerDatabase``
-and ``etc.broker_nav.BrokerNavigator``, which is all the deleted ones ever were.
+``broker.py`` holds the login class; ``broker_args.py`` is loaded by
+BrokerLoader by path. There is no ``database.py`` or ``db_navigator.py``:
+BrokerLoader falls back to ``etc.broker_db.BrokerDatabase`` and
+``etc.broker_nav.BrokerNavigator``, which is all the deleted ones ever were.
 
-``Ally`` is exported lazily. ``modules/ally_module.py`` imports
-``brokers.ally.saver`` on every run -- ModuleLoader metadata-scans every file in
-``modules/`` -- so an eager import here would execute the whole login module on
-every invocation, for every broker, including runs that never touch Ally.
+``Ally`` is exported lazily, and since 1.0 it is the only broker for which that
+still buys anything: ``broker.py`` imports Playwright, and Ally is now the sole
+browser-backed broker. ModuleLoader metadata-scans every file in ``modules/`` on
+every run of every broker, so an eager export here would drag the whole browser
+transport into a SnapTrade run that never opens one.
+``tests/test_broker_discovery.py`` pins that, and probes this package to do it.
 """
 
 from typing import TYPE_CHECKING, Any

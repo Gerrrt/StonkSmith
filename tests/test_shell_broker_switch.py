@@ -17,7 +17,7 @@ from stonksmith.etc.stonksmithdb import StonkSmithDBMenu
 class SubShellRequestsASwitchTests(unittest.TestCase):
     def _navigator(self) -> BrokerNavigator:
         return BrokerNavigator(
-            main_menu=MagicMock(), database=MagicMock(), broker_name="fidelity"
+            main_menu=MagicMock(), database=MagicMock(), broker_name="ally"
         )
 
     def test_broker_name_raises_a_switch_carrying_the_name(self) -> None:
@@ -64,7 +64,7 @@ class SubShellRequestsASwitchTests(unittest.TestCase):
 class MenuHandlesTheSwitchTests(unittest.TestCase):
     def _menu(self) -> StonkSmithDBMenu:
         menu = StonkSmithDBMenu.__new__(StonkSmithDBMenu)
-        menu.brokers = {"fidelity": {}, "schwab529plan": {}}
+        menu.brokers = {"ally": {}, "schwab529plan": {}}
         menu.workspace = "default"
         return menu
 
@@ -74,13 +74,13 @@ class MenuHandlesTheSwitchTests(unittest.TestCase):
 
         def enter(broker: str) -> str | None:
             visited.append(broker)
-            # fidelity asks to switch; schwab ends the session.
-            return "schwab529plan" if broker == "fidelity" else None
+            # ally asks to switch; schwab ends the session.
+            return "schwab529plan" if broker == "ally" else None
 
         menu.enter_broker = enter
-        menu.do_broker("fidelity")
+        menu.do_broker("ally")
 
-        self.assertEqual(visited, ["fidelity", "schwab529plan"])
+        self.assertEqual(visited, ["ally", "schwab529plan"])
 
     def test_switching_loops_rather_than_recursing(self) -> None:
         # Hopping between brokers must not grow the stack.
@@ -89,10 +89,10 @@ class MenuHandlesTheSwitchTests(unittest.TestCase):
 
         def enter(broker: str) -> str | None:
             hops["n"] += 1
-            return "fidelity" if hops["n"] < 500 else None
+            return "ally" if hops["n"] < 500 else None
 
         menu.enter_broker = enter
-        menu.do_broker("fidelity")  # would blow the stack if recursive
+        menu.do_broker("ally")  # would blow the stack if recursive
 
         self.assertEqual(hops["n"], 500)
 
@@ -101,7 +101,7 @@ class MenuHandlesTheSwitchTests(unittest.TestCase):
         menu.enter_broker = lambda broker: ""
         menu.list_brokers = MagicMock()
 
-        menu.do_broker("fidelity")
+        menu.do_broker("ally")
 
         menu.list_brokers.assert_called_once()
 

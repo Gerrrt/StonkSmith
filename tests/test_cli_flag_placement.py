@@ -1,6 +1,6 @@
 """--verbose and --debug must work on either side of the broker name.
 
-`stonksmith fidelity -M fidelity --verbose` is the natural thing to type and it
+`stonksmith ally -M ally --verbose` is the natural thing to type and it
 used to be a usage error: --verbose and --debug were top-level only, while -M,
 -u, -p and -id are subcommand flags, so the required ordering was the opposite
 of what most of the flags wanted.
@@ -86,7 +86,7 @@ class VerboseFlagPlacementTests(unittest.TestCase):
     def test_every_broker_accepts_them(self) -> None:
         # std_parser is a parent of every broker subparser, so this holds for
         # any broker added later too.
-        for broker in ("ally", "fidelity", "schwab529plan", "snaptrade", "tsp"):
+        for broker in ("ally", "schwab529plan", "snaptrade", "tsp"):
             with self.subTest(broker=broker):
                 self.assertTrue(_parse(broker, "-M", "x", "--verbose").verbose)
 

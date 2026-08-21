@@ -1,6 +1,9 @@
 # Brokers
 
-What each of the five brokers needs from you, and what a run of it does.
+What each of the four brokers with a login needs from you, and what a run of
+it does. The fifth, `manual`, has none: it values what you state in the config
+against a published price, and is described in
+[the README](../README.md#brokers).
 
 **This is a reference chapter, not a record.** It describes how the brokers work
 today and changes whenever they do. The three files beside it are records — they
@@ -18,85 +21,6 @@ three shapes a broker comes in — scraper, browser-backed, API-backed — and w
 base class each one gets.
 
 ---
-
-## Fidelity
-
-> [!WARNING]
-> **The `fidelity` broker is deprecated and will be removed in StonkSmith 1.0.**
-> Link Fidelity through [SnapTrade](#snaptrade) instead — one API key, no browser,
-> no bot detection, and it runs unattended, which this never has.
->
-> It still works and every run prints a notice saying this. But it was never once
-> run against the real site: all five of its claims in
-> [`live-verification.md`](live-verification.md) were withdrawn on 2026-08-17
-> rather than settled, because a broker nobody should use is not worth the sitting
-> it would take to verify. Everything below is the state of the code, not
-> something anyone has watched work lately.
->
-> Already using it? Link Fidelity through SnapTrade, stop running `fidelity`, and
-> move its database out of the workspace — the accounts are otherwise counted
-> twice. See [*When two brokers can reach the same
-> account*](#when-two-brokers-can-reach-the-same-account).
-
-Fidelity fronts its login with Akamai Bot Manager and ThreatMetrix, which reject
-a scripted sign-in before the form renders. Sign in yourself once; StonkSmith
-reuses the session afterwards:
-
-```bash
-uv run stonksmith fidelity -M fidelity --manual-login
-```
-
-A browser window opens. Sign in as normal, including 2FA. Once the portfolio
-summary loads, StonkSmith takes over, saves the session, and scrapes. Later runs
-reuse the saved session and only prompt again when it expires.
-
-`--manual-login` implies `--headed` and needs no stored credential.
-
-Fidelity's bot protection refuses the login page to any browser that automation
-launched, before credentials are ever entered. The way through is to attach to a
-Chrome you started yourself:
-
-```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.stonksmith/playwright/cdp-profile" \
-  "https://digital.fidelity.com/prgw/digital/signin/retail"
-```
-
-Chrome opens the sign-in page itself; StonkSmith deliberately never drives an
-attached browser before you are signed in. Doing so trips Fidelity's bot sensor
-and flags that Chrome profile, after which even a manual sign-in is refused --
-the fix then is a fresh `--user-data-dir`, since the flag is per profile.
-
-Sign in to Fidelity in that window, then:
-
-```bash
-uv run stonksmith --verbose fidelity -M fidelity --browser cdp
-```
-
-StonkSmith attaches, reuses the tab you signed in on, and never closes your
-browser. The profile persists, so later runs skip the sign-in. Chrome 136 and
-later refuse `--remote-debugging-port` on the default profile, which is why the
-dedicated `--user-data-dir` is required.
-
-`--cdp-url` points at a different endpoint; StonkSmith prints the exact launch
-command if nothing is listening.
-
-## Other browser modes
-
-Fidelity's bot protection may refuse to render the login form to Playwright's
-bundled Firefox at all. If the browser shows *"Sorry, we can't complete this
-action right now"*, try a Chromium-family browser with a persistent profile:
-
-```bash
-uv run playwright install chrome
-uv run stonksmith fidelity -M fidelity --manual-login --browser chrome
-```
-
-`--browser chrome` drives the real Google Chrome binary, which fingerprints
-better than bundled builds; `--browser chromium` uses Playwright's own build.
-Both keep their profile in `~/.stonksmith/playwright/chrome-profile`, so cookies
-and history accumulate between runs. `--profile-dir` points elsewhere.
 
 ## Ally Invest
 
@@ -175,6 +99,59 @@ does not notice new accounts, since it values what is already on record.
 This is the Ally path a schedule can run, and the only one — see *Scheduling*
 above, and [`scheduling.md`](scheduling.md) for what it means to run it nightly.
 
+### Other browser modes
+
+Everything above uses the default `--browser firefox`. Three other modes exist,
+and they are worth knowing about because Ally's sign-in is fronted by Akamai,
+Dynatrace and Transmit, any of which can decide a browser looks automated.
+
+**Attaching to a Chrome you started yourself** is the mode most likely to get
+through, because the page load happens in an ordinary session rather than in
+anything Playwright launched:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/.stonksmith/playwright/cdp-profile" \
+  "https://secure.ally.com/"
+```
+
+Chrome opens the sign-in page itself; StonkSmith deliberately never drives an
+attached browser before you are signed in. Driving an unauthenticated page is
+what flags the profile, and after that even a manual sign-in can be refused --
+the fix then is a fresh `--user-data-dir`, since the flag is per profile.
+
+Sign in there, click through to the investing site, then:
+
+```bash
+uv run stonksmith --verbose ally -M ally --browser cdp
+```
+
+StonkSmith attaches, reuses the tab you signed in on, and **never closes your
+browser** -- it is yours, and it may hold work of your own. Chrome 136 and later
+refuse `--remote-debugging-port` on the default profile, which is why the
+dedicated `--user-data-dir` is required. `--cdp-url` points at a different
+endpoint; StonkSmith prints the exact launch command if nothing is listening.
+
+**A persistent Chromium-family profile** is the other way, and needs no separate
+launch:
+
+```bash
+uv run playwright install chrome
+uv run stonksmith ally -M ally --manual-login --browser chrome
+```
+
+`--browser chrome` drives the real Google Chrome binary, which fingerprints
+better than bundled builds; `--browser chromium` uses Playwright's own build.
+Both keep their profile in `~/.stonksmith/playwright/chrome-profile`, so cookies
+and history accumulate between runs and the browser presents as one that has
+been used before. `--profile-dir` points elsewhere.
+
+Note that none of this changes the finding above: **Ally refuses a restored
+session however it is stored**, and a persistent profile is storage like any
+other. These modes are about getting *through* a sign-in you are performing by
+hand, not about skipping one.
+
 ### What an Ally run writes down
 
 Every Ally run that opens a browser leaves a response log in
@@ -231,24 +208,16 @@ three things that would reopen it. This log is the first of them.
 
 **Ally is the only broker that records.** Saving is generic — it happens in
 `BrowserConnection.teardown()`, so nothing has to remember it — but a connection
-writes a log only if it armed the recorder first, and Ally is the only one that
-does. Fidelity opens a browser and leaves no log. That is a one-line call away
-should Fidelity ever need the same treatment, and it is deliberately not made
-until it does: recording is only worth its clutter where there is a question
-outstanding.
+writes a log only if it armed the recorder first. Ally is the only broker that
+does, and since 1.0 it is also the only one that opens a browser, so the two
+facts have stopped being separate. Arming it is a one-line call for any future
+browser-backed broker, and it is deliberately not made until there is a question
+outstanding: recording is only worth its clutter when somebody is going to read
+it.
 
-Ally runs Akamai, Dynatrace and Transmit on that login page, so the same
-attach-to-your-own-Chrome path Fidelity documents above applies here, pointed at
-the bank:
-
-```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.stonksmith/playwright/cdp-profile" \
-  "https://secure.ally.com/"
-
-uv run stonksmith --verbose ally -M ally --browser cdp
-```
+Ally runs Akamai, Dynatrace and Transmit on that login page, which is what
+[*Other browser modes*](#other-browser-modes) above is for — the recorder is
+often how you find out which of them refused you.
 
 Ally shows one account's positions at a time. StonkSmith reads the sidebar as
 well as the table, so every investment account gets a balance, but only the
@@ -396,7 +365,8 @@ archived or paper accounts, and liabilities such as credit cards. Override with
 
 SnapTrade covers whole brokerages, so it will happily report an account a
 dedicated broker already scrapes — a Schwab-held 529 that `schwab529plan`
-covers, or the Fidelity accounts behind the `fidelity` scraper. Both sources
+covers, or any account reached by a broker of your own under
+`~/.stonksmith/brokers/`. Both sources
 write, into two databases and onto the `Accounts` tab twice. No stored data is
 wrong — but the tab now has a total on it, and that total counts the money twice
 and says nothing.
@@ -406,9 +376,10 @@ tabs, so double-counting took a deliberate act of addition. One `Accounts` tab
 adds them by default, which moves `exclude_accounts` from advisable to
 necessary.
 
-Pick one owner per account. Where SnapTrade is the better source — Fidelity,
-which it takes from attended to unattended — simply stop running the other
-broker. Where the scraper is better, because it captures more than a balance,
+Pick one owner per account. Where SnapTrade is the better source — as it was
+for Fidelity, which it took from attended to unattended, and which is why the
+`fidelity` broker was removed at 1.0 rather than replaced — simply stop running
+the other broker. Where the scraper is better, because it captures more than a balance,
 name the account in the `[SNAPTRADE]` section of `~/.stonksmith/stonksmith.conf`:
 
 ```ini
@@ -461,6 +432,12 @@ mv ~/.stonksmith/workspaces/default/fidelity.db ~/.stonksmith/retired/
 uv run stonksmithdb sheet && uv run stonksmithdb stale
 ```
 
+`fidelity.db` is the worked example because it is the live one: 1.0 removed the
+`fidelity` broker, and every workspace that ever ran it still has that file.
+Nothing about the removal touched it — `read_databases()` globs `*.db` and does
+not ask which brokers still ship — so it keeps being read, keeps appearing in
+the source list, and keeps contributing to the total until it is moved.
+
 Check first what only that database holds. A scraper often reached accounts the
 aggregator does not — closed ones, or ones outside its coverage — and moving the
 file drops those too. `stonksmithdb`, `broker <name>`, `show accounts` is the
@@ -472,12 +449,15 @@ The very next command says so, which is alarming in the moment and worth
 knowing in advance:
 
 ```text
-    [!] Initializing FIDELITY database
-[*] Refreshed: 12 accounts, 10 holdings, 11 movements from ally, fidelity, schwab529plan, snaptrade, tsp.
+    [!] Initializing SCHWAB529PLAN database
+[*] Refreshed: 12 accounts, 10 holdings, 11 movements from ally, schwab529plan, snaptrade, tsp.
 ```
 
-`initialize_db()` creates an empty database for every broker that ships a
-`database.py`, so those files exist again after the next `stonksmithdb` run.
+`initialize_db()` creates an empty database for **every broker it discovers** —
+`BrokerLoader.get_brokers()`, with `database_class()` falling back to
+`etc.broker_db.BrokerDatabase` for the ones that ship no `Database` of their own,
+which today is all of them. There is no opt-out and nothing to configure, so
+those files exist again after the next `stonksmithdb` run.
 **Nothing is restored with them.** The file is empty, the accounts are gone, and
 the totals and the staleness report are gone with them — which is exactly what
 the move was for. Do not run the move again.
@@ -493,11 +473,18 @@ The name stays in that source list for the same reason it appeared in the first
 place: the list names the databases that were *read*, not the ones that had
 anything in them, so an empty database is a database that was read. It is on the
 sheet as well as on the line above. Nothing in the config or on the command line
-takes a bundled broker's name off it — deleting its package from the
-installation would, and that is not a supported operation — and there is no
-reason to want one badly enough to make an empty database read as a failure: an
-empty database that should *not* be empty is a broker whose run wrote nothing,
-and that has to stay loud.
+takes a bundled broker's name off it, and there is no reason to want one badly
+enough to make an empty database read as a failure: an empty database that
+should *not* be empty is a broker whose run wrote nothing, and that has to stay
+loud.
+
+**`fidelity.db` is the opposite case, and 1.0 is what made the two differ.** A
+bundled broker's database comes back because `initialize_db()` walks the brokers
+it discovers, and a broker that no longer ships is not discovered — so once that
+file is moved it stays moved. It still gets *read* while it is there, because
+that is a glob over the directory rather than a walk over the brokers. Two
+different mechanisms, and telling them apart is the whole difference between "the
+move failed" and "the move worked".
 
 **So the file's absence is not the thing to check, because the file will not be
 absent.** The account count and `stonksmithdb stale` are. Against the workspace

@@ -2,9 +2,16 @@
 
 Nothing did, so the glob that found brokers was untested: it could have stopped
 matching and the whole suite would still have passed. The pair-of-entries layout
-(brokers/fidelity.py beside brokers/fidelity/) was invisible for the same reason --
-BrokerLoader resolved the file, `import brokers.fidelity` resolved the package, and
-no test ever made the two meet.
+was invisible for the same reason -- a flat brokers/<name>.py beside a
+brokers/<name>/ package, where BrokerLoader resolved the file, `import
+brokers.<name>` resolved the package, and no test ever made the two meet.
+
+It happened to `fidelity`, which this project no longer ships. The name is left
+in the past tense deliberately rather than swapped for a broker that is still
+here: no other broker ever collided this way, and rewriting the sentence to say
+one did would turn a record of something that went wrong into an illustration of
+something that did not. The broker went at 1.0; the layout rule did not, and the
+rule is what this file pins.
 """
 
 import os
@@ -21,7 +28,7 @@ from stonksmith.etc.broker_nav import BrokerNavigator
 from stonksmith.loaders.brokerloader import BrokerLoader
 
 EXPECTED_KEYS = {"path", "dbpath", "nvpath", "argspath"}
-SHIPPED = ("ally", "fidelity", "manual", "schwab529plan", "snaptrade", "tsp")
+SHIPPED = ("ally", "manual", "schwab529plan", "snaptrade", "tsp")
 
 
 def _fresh_loader(user_root: Path | None = None) -> BrokerLoader:
@@ -190,8 +197,10 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
         self.assertIsNone(broker_class_of(module=module, broker_name="stringly"))
 
     def test_no_flat_module_shadows_a_broker_package(self) -> None:
-        # The bug this layout closed: brokers/fidelity.py beside brokers/fidelity/
-        # made `import brokers.fidelity` and BrokerLoader resolve different objects.
+        # The bug this layout closed: a flat brokers/<name>.py beside a
+        # brokers/<name>/ package made `import brokers.<name>` and BrokerLoader
+        # resolve different objects. It happened to fidelity, which has since
+        # been removed -- the collision is what is pinned here, not the broker.
         #
         # Check the directory holds what it should before asserting a glob over it
         # is empty. glob() on a directory that does not exist yields nothing, so
@@ -224,7 +233,6 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
         # Not assertIs: load_broker never registers in sys.modules, so the
         # path-loaded class is a distinct object from the imported one.
         from stonksmith.brokers.ally import Ally
-        from stonksmith.brokers.fidelity import Fidelity
         from stonksmith.brokers.manual import Manual
         from stonksmith.brokers.schwab529plan import Schwab529plan
         from stonksmith.brokers.snaptrade import SnapTradeBroker
@@ -234,7 +242,6 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
 
         for name, exported in (
             ("ally", Ally),
-            ("fidelity", Fidelity),
             ("manual", Manual),
             ("schwab529plan", Schwab529plan),
             ("snaptrade", SnapTradeBroker),
@@ -247,10 +254,10 @@ class ShippedBrokerDiscoveryTests(unittest.TestCase):
                 self.assertEqual(module.Broker.__qualname__, exported.__qualname__)
 
     def test_an_unknown_package_attribute_still_raises(self) -> None:
-        import stonksmith.brokers.fidelity
+        import stonksmith.brokers.ally
 
         with self.assertRaises(AttributeError):
-            _ = stonksmith.brokers.fidelity.NoSuchThing
+            _ = stonksmith.brokers.ally.NoSuchThing
 
 
 class DiscoveryRulesTests(unittest.TestCase):
@@ -297,17 +304,17 @@ class DiscoveryRulesTests(unittest.TestCase):
     def test_src_wins_over_a_user_broker_of_the_same_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "brokers"
-            (root / "fidelity").mkdir(parents=True)
-            (root / "fidelity" / "broker.py").write_text("Broker = object\n")
+            (root / "ally").mkdir(parents=True)
+            (root / "ally" / "broker.py").write_text("Broker = object\n")
 
-            path = _fresh_loader(Path(tmp)).get_brokers()["fidelity"]["path"]
+            path = _fresh_loader(Path(tmp)).get_brokers()["ally"]["path"]
 
             self.assertTrue(Path(path).is_relative_to(PACKAGE))
 
     def test_a_missing_search_root_is_not_fatal(self) -> None:
         brokers = _fresh_loader(REPO / "definitely-absent").get_brokers()
 
-        self.assertIn("fidelity", brokers)
+        self.assertIn("ally", brokers)
 
     def test_the_second_call_is_cached(self) -> None:
         loader = _fresh_loader()
@@ -322,7 +329,7 @@ class LazyExportTests(unittest.TestCase):
     broker, and each of those now imports etc.portfolio_sheet -- which is what
     the five per-broker savers used to be, an every-run import that must not
     drag a transport in behind it. An eager class export in a broker's
-    __init__.py pulls the whole transport along: playwright for Fidelity, the
+    __init__.py pulls the whole transport along: playwright for Ally, the
     SnapTrade SDK for SnapTrade, on runs that never touch that broker.
     """
 
@@ -365,7 +372,7 @@ class LazyExportTests(unittest.TestCase):
         self.assertIn(
             "False",
             self._import_in_subprocess(
-                "stonksmith.etc.portfolio_sheet", "stonksmith.brokers.fidelity"
+                "stonksmith.etc.portfolio_sheet", "stonksmith.brokers.ally"
             ),
         )
 

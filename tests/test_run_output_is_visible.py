@@ -150,7 +150,7 @@ class QuietFlagPlacement(unittest.TestCase):
         self.assertFalse(_parse("tsp", "-M", "tsp").quiet)
 
     def test_every_broker_accepts_it(self) -> None:
-        for broker in ("ally", "fidelity", "schwab529plan", "snaptrade", "tsp"):
+        for broker in ("ally", "schwab529plan", "snaptrade", "tsp"):
             with self.subTest(broker=broker):
                 self.assertTrue(_parse(broker, "-M", "x", "--quiet").quiet)
 

@@ -4,10 +4,10 @@ Everything cron needs has been in the tree for a while. A failed run exits non-z
 `--quiet` says only what went wrong, and `exclude_accounts` lives in config rather than
 in a flag precisely because a run from cron has nobody to remember one. What was missing
 is the part that cannot be inferred from any of that: **the five brokers do not schedule
-alike, and two of them do not schedule at all.**
+alike, and one of them cannot be scheduled as a scrape at all.**
 
 That gap is the whole reason this file exists. A scheduling section that lists five
-brokers and quietly fails on two is worse than no scheduling section, because the failure
+brokers and quietly fails on one is worse than no scheduling section, because the failure
 is not loud once and then over. It is loud every night, and a cron job that errors every
 night gets muted — after which the portfolio has stopped updating and nothing says so.
 The muting is the bug, and it is caused by the documentation rather than by the code.
@@ -53,13 +53,12 @@ What no amount of that settles is which brokers can run with nobody watching.
 | `snaptrade` | Yes, until the connection expires | An API key, and a browser step every few weeks to renew it |
 | `schwab529plan` | Yes | Posts a form with a stored credential. No browser, no bot detection, no session to keep |
 | `ally` | `--from-prices` only, and it is not a scrape | Ally honours no restored session, so a scrape needs a human every time |
-| `fidelity` | No — deprecated, removed in 1.0. Replace it with SnapTrade | Browser-backed behind bot detection and 2FA |
 | `manual` | Yes | Nothing to log in to. A configured unit count times a published close |
 
 The first three are the uninteresting rows, and they are uninteresting on purpose: put
 them in a crontab and they work. `manual` joins them for TSP's reason rather than its
-own — no credential in the path, so nothing can expire — and the two after it are why
-this file is longer than the table.
+own — no credential in the path, so nothing can expire — and `ally`, the one row that is
+not a plain yes, is why this file is longer than the table.
 
 `manual` is the row for an account no program can reach at all: a plan portal with no API,
 no scrapeable page and no export, whose only way out is a transfer. Leaving one out makes
@@ -137,29 +136,33 @@ tracked; the schedule cannot do it and will not ask.
 
 ---
 
-## Fidelity is not scheduled, it is replaced
+## A scraper behind bot detection is replaced, not scheduled
 
-Fidelity fronts its login with Akamai Bot Manager and ThreatMetrix, which reject a
-scripted sign-in before the form renders, and 2FA sits behind that. `--manual-login` is
-the documented way in, and it is a human at a browser by construction.
+Some sign-ins reject a scripted attempt before the form renders, and put 2FA behind that.
+`--manual-login` is the way in, and it is a human at a browser by construction. No amount
+of scheduling changes that, and the answer is not to try.
 
-The answer is not to schedule the scraper. It is to stop running it: SnapTrade covers
-Fidelity, and it is exactly what takes the account from attended to unattended.
+**`fidelity` was the worked example, and it is the reason this section exists.** It
+fronted its login with Akamai Bot Manager and ThreatMetrix; SnapTrade reached the same
+accounts through an API with no browser in it, which is exactly what takes an account
+from attended to unattended. StonkSmith stopped shipping the broker at 1.0 rather than
+keeping a scraper nobody could schedule.
 [*When two brokers can reach the same account*](brokers.md#when-two-brokers-can-reach-the-same-account)
-is the procedure.
+is the procedure for any repeat of it — a broker of your own under
+`~/.stonksmith/brokers/` reaching accounts SnapTrade also covers is the same situation.
 
 One thing to get right while switching, because it is the failure that looks like success:
-if both the `fidelity` scraper and SnapTrade run, both write, and the `Accounts` tab holds
-the money twice. The tab has a total on it, and that total is wrong in the direction that
-looks good. Pick one owner — for Fidelity that is SnapTrade — and drop the other from the
-schedule.
+if both the scraper and SnapTrade run, both write, and the `Accounts` tab holds the money
+twice. The tab has a total on it, and that total is wrong in the direction that looks
+good. Pick one owner, and drop the other from the schedule.
 
 **Dropping it from the schedule is half the job, and the half that does not fix the
 total.** The sheet reads every database in the workspace rather than every broker that
 ran, so a retired scraper keeps contributing its last values forever — the accounts stay
 on the tab, stay in the total, and stop having an `As Of` anyone can defend. A crontab
 with no `fidelity` line and a `fidelity.db` still in the workspace double-counts exactly
-as much as one that runs it nightly. The database has to leave the workspace;
+as much as one that runs it nightly, and removing the broker did not remove that file.
+The database has to leave the workspace;
 [*Neither remedy touches what is already on
 disk*](brokers.md#neither-remedy-touches-what-is-already-on-disk) is the procedure, and
 `stonksmithdb stale` is where the leftovers announce themselves.
@@ -203,9 +206,10 @@ PATH=/usr/local/bin:/usr/bin:/bin
 55 18 * * 1-5  cd ~/StonkSmith && uv run stonksmithdb stale
 ```
 
-**There is no `fidelity` line, and that is the point of the file.** There is an `ally`
-line and it is `--from-prices`, which is a repriced stale unit count. Neither absence is
-an oversight to be corrected by adding a sixth entry.
+**The `ally` line is `--from-prices`, which is a repriced stale unit count rather than a
+scrape, and that is the point of the file.** Nor is there a `fidelity` line: the broker
+went at 1.0, and a workspace that still has its database wants the move above rather than
+an entry here. Neither is an oversight to be corrected by adding a line.
 
 `PATH` is set because cron's is short and `uv` usually is not on it. `cd` because the
 project is a `uv` workspace and `uv run` resolves it from the working directory.
