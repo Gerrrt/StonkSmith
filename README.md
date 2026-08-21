@@ -51,8 +51,8 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
         Aggregate everything in one dashboard
         Written by: @Gerrrt
 
-Version : 0.5.0
-Codename: Ford Prefect
+Version : 1.0.0
+Codename: Frodo Baggins
 
 Brokers:
   Available Brokers
