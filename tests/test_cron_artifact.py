@@ -127,13 +127,19 @@ class TheArtifactMatchesTheRecord(unittest.TestCase):
         )
 
     def test_neither_grows_a_fidelity_entry(self) -> None:
-        # The absence is the point of the record: Fidelity is browser-backed
-        # behind bot detection and 2FA, and SnapTrade covers the same accounts.
-        # Running both writes the money twice, and the total that results is
-        # wrong in the direction that looks correct.
+        # The absence is the point of the record. StonkSmith stopped shipping a
+        # fidelity broker at 1.0 because SnapTrade reaches the same accounts,
+        # and scheduling both writes the money twice -- a total that is wrong in
+        # the direction that looks correct.
+        #
+        # Removing the broker did not remove the hazard, which is why this
+        # outlives it. docs/brokers.md invites an operator who wants the scraper
+        # to keep it under ~/.stonksmith/brokers/, BrokerLoader discovers what it
+        # finds there, and a scheduled entry for it double-counts exactly as
+        # before. The name is the one an operator would reach for.
         #
         # Only the entries are searched, never the prose around them -- the
-        # record discusses Fidelity at length and has to be free to.
+        # record still explains the replacement and has to be free to.
         for name, text in (
             ("artifact", self.artifact_text),
             ("record", self.cron_block()),

@@ -105,7 +105,7 @@ class StonkSmithModule:
         # Read off the connection rather than typed onto it. Connection is the
         # shared base every broker's class extends and it knows nothing about
         # prices; widening it for one broker would put a quote feed in the
-        # contract that Fidelity and Ally have to satisfy.
+        # contract every other broker has to satisfy.
         priced = getattr(connection, "priced", None)
 
         if not callable(priced):

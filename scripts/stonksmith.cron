@@ -77,10 +77,13 @@
 # ---------------------------------------------------------------------------
 # Two absences that are deliberate
 #
-#   There is no `fidelity` line. Fidelity sits behind bot detection and 2FA, so
-#   its scraper needs a human every time; SnapTrade covers the same accounts
-#   unattended. Run both and the money lands on the Accounts tab twice, and the
-#   total is wrong in the direction that looks good.
+#   There is no `fidelity` line, and since 1.0 there is no such broker either --
+#   it sat behind bot detection and 2FA and needed a human every time, while
+#   SnapTrade reaches the same accounts unattended. The line stays worth naming
+#   because a broker of your own under ~/.stonksmith/brokers/ is discovered and
+#   scheduled just the same: run one alongside SnapTrade and the money lands on
+#   the Accounts tab twice, and the total is wrong in the direction that looks
+#   good.
 #
 #   The `ally` line is not a scrape. Ally honours no restored session, so
 #   --from-prices multiplies the units the last signed-in run recorded by

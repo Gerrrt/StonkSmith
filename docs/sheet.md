@@ -16,8 +16,9 @@ opened by id, and the consent screen read that day named Sheets without mentioni
 Drive, with tab creation — the operation with the best claim on Drive — working
 under the narrowed token. That file also records a gap that is not about the
 sheet and is no longer counted as one: the `fidelity` broker was never run against
-the real thing, and on 2026-08-17 it was deprecated for removal in 1.0 rather than
-verified, so its five claims were withdrawn.
+the real thing, and on 2026-08-17 it was deprecated rather than verified, so its
+five claims were withdrawn. It was removed at 1.0, which is how that gap closed —
+by subtraction rather than by anybody sitting down at a browser.
 
 Every row here is rendered from the databases described in
 [`database.md`](database.md). The sheet holds nothing the databases do not.
@@ -164,8 +165,8 @@ stonksmithdb (default) > sheet
 Rebuilds all five tabs from the current workspace's databases, with no login
 anywhere. This is what to reach for after a refused tab or a "the dashboard was
 not updated" line: the sheet is a view of the databases, so it can be rebuilt
-from them alone, and re-scraping Ally or Fidelity to fix a spreadsheet means
-sitting at a sign-in page for no reason.
+from them alone, and re-scraping Ally to fix a spreadsheet means sitting at a
+sign-in page for no reason.
 
 Words after the command name run as one command and then exit, which is the form
 a schedule calls:

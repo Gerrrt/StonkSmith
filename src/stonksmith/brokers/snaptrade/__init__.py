@@ -1,7 +1,7 @@
 """SnapTrade broker package.
 
-``broker.py`` holds the API client; ``db_navigator.py``, ``broker_args.py`` and
-``saver.py`` are loaded by BrokerLoader by path. There is no ``database.py``:
+``broker.py`` holds the API client; ``db_navigator.py`` and ``broker_args.py``
+are loaded by BrokerLoader by path. There is no ``database.py``:
 BrokerLoader falls back to ``etc.broker_db.BrokerDatabase``, which is all the
 deleted one ever was.
 
@@ -12,11 +12,10 @@ against this broker is not the setup step it looks like; ``db_navigator.py``
 overrides the shell to say so, which is why this is the one broker that still
 has one.
 
-``SnapTradeBroker`` is exported lazily. ``modules/snaptrade_module.py`` imports
-``brokers.snaptrade.saver`` on every run -- ModuleLoader metadata-scans every
-file in ``modules/`` -- and the SnapTrade SDK costs roughly 0.4s and 500 modules
-to import, so an eager import here would tax every invocation of every broker,
-including runs that never touch SnapTrade.
+``SnapTradeBroker`` is exported lazily. ModuleLoader metadata-scans every file
+in ``modules/`` on every run of every broker, and the SnapTrade SDK costs roughly
+0.4s and 500 modules to import, so an eager export here would tax every
+invocation of every broker, including runs that never touch SnapTrade.
 """
 
 from typing import TYPE_CHECKING, Any

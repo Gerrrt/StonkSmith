@@ -81,10 +81,18 @@ a public repository once already.
 
 ## `0 accounts` in a database is not always a failure
 
-A retired broker's database is recreated empty by `initialize_db()` on the next
-run, so a bundled broker that no longer runs shows `0 accounts` forever and still
-appears in the `Refreshed: … from …` source list. `fidelity.db` is the standing
-example — Fidelity reaches the workspace through SnapTrade now.
+A bundled broker's database is recreated empty by `initialize_db()` on the next
+run — it walks every broker `BrokerLoader` discovers, not some subset — so a
+bundled broker nobody runs shows `0 accounts` forever and still appears in the
+`Refreshed: … from …` source list. `schwab529plan.db` is the standing example:
+it ships to everyone and is run only by operators who have a 529.
+
+**`fidelity.db` is the other half, and the two are worth telling apart.** That
+broker was removed at 1.0, so `initialize_db()` no longer walks it and the file
+is never recreated — but `read_workspace()` globs `*.db`, so an existing one
+keeps being read and keeps appearing in the same source list. A database that
+comes back is a broker that still ships; one that stays gone once moved is a
+broker that does not.
 
 An empty database that *should* have rows is a broker whose run wrote nothing,
 which has to stay loud. The two look identical from the outside, so check which

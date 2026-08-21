@@ -116,12 +116,12 @@ class BrokenBrokerArgsTests(_CaptureMixin, unittest.TestCase):
     def test_a_broker_raising_on_import_does_not_kill_another_broker(self) -> None:
         args = self._parse(
             'raise ValueError("half-finished broker")\n',
-            "fidelity",
+            "ally",
             "-M",
-            "fidelity",
+            "ally",
         )
 
-        self.assertEqual(args.broker, "fidelity")
+        self.assertEqual(args.broker, "ally")
         self.assertReported("rotten")
 
     def test_a_broker_args_that_raises_when_called_is_isolated(self) -> None:
@@ -130,18 +130,18 @@ class BrokenBrokerArgsTests(_CaptureMixin, unittest.TestCase):
         args = self._parse(
             "def broker_args(subparsers, std_parser, module_parser):\n"
             '    raise RuntimeError("no subparser for you")\n',
-            "fidelity",
+            "ally",
             "-M",
-            "fidelity",
+            "ally",
         )
 
-        self.assertEqual(args.broker, "fidelity")
+        self.assertEqual(args.broker, "ally")
         self.assertReported("rotten")
 
     def test_a_broker_args_that_is_not_callable_is_isolated(self) -> None:
-        args = self._parse("broker_args = 3\n", "fidelity", "-M", "fidelity")
+        args = self._parse("broker_args = 3\n", "ally", "-M", "ally")
 
-        self.assertEqual(args.broker, "fidelity")
+        self.assertEqual(args.broker, "ally")
         self.assertReported("rotten")
 
     def test_the_healthy_brokers_are_still_registered(self) -> None:

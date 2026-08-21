@@ -3,8 +3,8 @@
 The sheet is a view of the databases, so it can be rebuilt from them alone. That
 matters because the sheet can now decline to write -- a tab missing its banner,
 a tab someone typed in -- and the only other cure would be another scrape. For
-Ally and Fidelity that means a human at a sign-in page, which is a steep price
-for fixing a spreadsheet tab.
+Ally that means a human at a sign-in page, which is a steep price for fixing a
+spreadsheet tab.
 """
 
 import io

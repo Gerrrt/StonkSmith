@@ -1,8 +1,8 @@
 """
 Thrift Savings Plan broker class.
 
-The only broker here that authenticates with nothing at all. Fidelity and Ally
-drive a browser through a login; SnapTrade holds an API key. TSP holds neither,
+The only broker here that authenticates with nothing at all. Ally drives a
+browser through a login; SnapTrade holds an API key. TSP holds neither,
 because it does not need to: TSP computes a balance as units x share price, and
 share prices are published daily as a public file. Units are the account's own
 state, and they only move on a transaction.

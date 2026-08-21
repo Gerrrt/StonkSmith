@@ -325,8 +325,8 @@ class MainExitCodeTests(LoggerLevelMixin, unittest.TestCase):
         loader.prepare.return_value = [MagicMock() for _ in range(prepared)]
 
         args = Namespace(
-            broker="fidelity",
-            module=["fidelity"] if requested is self._DEFAULT else requested,
+            broker="ally",
+            module=["ally"] if requested is self._DEFAULT else requested,
             list_modules=False,
             show_module_options=False,
             log=None,
@@ -344,7 +344,7 @@ class MainExitCodeTests(LoggerLevelMixin, unittest.TestCase):
             patch.object(main_module, "BrokerLoader") as broker_loader,
         ):
             broker_loader.return_value.get_brokers.return_value = {
-                "fidelity": {"path": "b.py", "dbpath": "d.py"}
+                "ally": {"path": "b.py", "dbpath": "d.py"}
             }
             broker_loader.return_value.load_broker.return_value = broker_module
 
@@ -378,7 +378,7 @@ class MainExitCodeTests(LoggerLevelMixin, unittest.TestCase):
         self.assertEqual(self._main(_async_returning(True), prepared=0), 1)
 
     def test_no_module_requested_exits_one(self) -> None:
-        # `stonksmith fidelity` with no -M. Already exited 1, but silently --
+        # `stonksmith ally` with no -M. Already exited 1, but silently --
         # it now says why.
         self.assertEqual(self._main(_async_returning(True), requested=None), 1)
 

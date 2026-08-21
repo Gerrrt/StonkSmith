@@ -188,7 +188,7 @@ _\ \ || (_) | | | |   < _\ \ | | | | | | |_| | | |
 
     # --verbose, --debug and --quiet are declared on the top-level parser too,
     # so they work on either side of the broker name: `stonksmith --verbose
-    # fidelity` and `stonksmith fidelity --verbose` both do the same thing. Only
+    # ally` and `stonksmith ally --verbose` both do the same thing. Only
     # the former used to parse, which reads as arbitrary next to -M/-u/-p/-id,
     # which only work after it.
     #

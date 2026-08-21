@@ -38,7 +38,7 @@
 $ uv run stonksmith --help
 usage: stonksmith [-h] [--verbose] [--debug] [--quiet] [--no-sheet]
                   [--version]
-                  {ally,fidelity,manual,schwab529plan,snaptrade,tsp} ...
+                  {ally,manual,schwab529plan,snaptrade,tsp} ...
 
 ==================================================
 __ _               _     __           _ _   _
@@ -57,9 +57,8 @@ Codename: Ford Prefect
 Brokers:
   Available Brokers
 
-  {ally,fidelity,manual,schwab529plan,snaptrade,tsp}
+  {ally,manual,schwab529plan,snaptrade,tsp}
     ally                Brokerage accounts at https://live.invest.ally.com
-    fidelity            (deprecated) Brokerage and retirement accounts at https://www.fidelity.com
     manual              Accounts you can see but cannot scrape, valued from published prices
     schwab529plan       College Savings Account at https://www.schwab529plan.com
     snaptrade           Every brokerage connected through https://snaptrade.com
@@ -176,7 +175,7 @@ Brokers come in three shapes. A **scraper** posts a form and reads the response,
 and subclasses `Connection`: Schwab 529. A **browser-backed** broker has a login
 guarded by bot detection, a session worth keeping between runs, and a page that
 only exists after JavaScript has run; it subclasses `BrowserConnection`, which
-owns the whole Playwright lifecycle: Fidelity and Ally. An **API-backed** broker
+owns the whole Playwright lifecycle: Ally. An **API-backed** broker
 has no login at all — its key lives in config and the OS keyring — and
 subclasses `ApiConnection`: SnapTrade, and TSP, which holds no key either
 because the data it reads is published.
@@ -188,8 +187,8 @@ template.
 > [!NOTE]
 > **Not every claim here rests on a live run.** Green tests say the code does
 > what it was written to do, which is not the same as saying the site still
-> looks the way it did when the parser was written. Every broker that is not
-> deprecated has been run against the real thing, and the sheet has been read
+> looks the way it did when the parser was written. Every broker has been run
+> against the real thing, and the sheet has been read
 > back off a real spreadsheet; four claims are still open, and **none of them is
 > anybody's to-do** — each waits on the world rather than on effort. Two wait on
 > data: whether the `Transactions` tab holds every movement or only the newest
@@ -206,15 +205,15 @@ template.
 > row a page the loop made one request per movement, and past twenty pages it
 > stopped and said so.
 >
-> **The `fidelity` broker is the exception, and it is deprecated.** It was never
-> run against the real site, and its five claims were withdrawn rather than
-> settled when it was scheduled for removal in 1.0. It still ships and still
-> works as far as anyone knows; nothing live stands behind it. Link Fidelity
-> through SnapTrade instead — those accounts *are* settled, but that is an API
-> answering, not a browser getting past bot detection to scrape a summary page.
-> [`docs/live-verification.md`](docs/live-verification.md) is the record of
-> which is which, claim by claim, and this note summarises it rather than being
-> maintained beside it.
+> **That sentence became true by subtraction as much as by running anything.**
+> The `fidelity` broker was the standing exception — never run against the real
+> site, its five claims withdrawn rather than settled — and it was removed at
+> 1.0 rather than verified. Fidelity accounts reach StonkSmith through SnapTrade
+> and *are* settled, but that is an API answering rather than a browser getting
+> past bot detection, and it always was a different claim.
+> [`docs/live-verification.md`](docs/live-verification.md) is the record,
+> claim by claim, and this note summarises it rather than being maintained
+> beside it.
 
 ### Built With
 
@@ -234,9 +233,9 @@ template.
 
 ### Prerequisites
 
-Python 3.14 and [uv][uv-url]. Fidelity and Ally drive a real browser, so those
-two also need the Playwright runtime; the other three brokers need nothing
-beyond the install below.
+Python 3.14 and [uv][uv-url]. Ally drives a real browser, so it alone needs the
+Playwright runtime; the other four brokers need nothing beyond the install
+below.
 
 ### Installation
 
@@ -258,7 +257,7 @@ Both are supported and both stay current — see
 [Supported versions](SECURITY.md#supported-versions). Every command below is
 written for the clone, so drop the `uv run` if you installed the tool.
 
-Then, if you intend to use Fidelity or Ally:
+Then, if you intend to use Ally:
 
 ```bash
 uv run playwright install firefox
@@ -296,13 +295,15 @@ uv run stonksmith schwab529plan -M schwab529plan -id 1
 
 ### Brokers
 
-Five brokers, and they do not work alike — one needs you to sign in by hand
-every time, one needs no credential at all. What each needs and what a run of it
-does is [`docs/brokers.md`](docs/brokers.md); this table is the index into it.
+Five brokers ship, and they do not work alike — one needs you to sign in by
+hand every time, one needs no credential at all. Four of them have a chapter in
+[`docs/brokers.md`](docs/brokers.md) saying what they need and what a run does,
+and this table is the index into it. The fifth is `manual`, which has no login
+to describe: it values accounts you can see but cannot scrape, from a unit count
+you state in the config and a published price.
 
 | Broker | Shape | What it needs from you |
 | --- | --- | --- |
-| [Fidelity](docs/brokers.md#fidelity) | Browser | **Deprecated, removed in 1.0.** Link it through SnapTrade instead |
 | [Ally Invest](docs/brokers.md#ally-invest) | Browser | A manual sign-in **every** scrape — Ally honours no restored session. `--from-prices` revalues between scrapes with no browser at all |
 | [SnapTrade](docs/brokers.md#snaptrade) | API | A free Personal API key, and one browser step per brokerage every few weeks. Covers Schwab, Fidelity, Vanguard and the rest through one key |
 | [Schwab 529](docs/brokers.md#schwab-529) | Scraper | A stored credential. A form post and two page reads — no browser, nothing to expire |
@@ -446,8 +447,8 @@ movement, and how to install the agent are [`docs/brief.md`](docs/brief.md).
 
 ### Scheduling
 
-**The five brokers do not schedule alike, and two of them do not schedule at
-all.** That is the part a crontab cannot tell you, and getting it wrong is
+**The five brokers do not schedule alike, and one of them does not schedule
+at all.** That is the part a crontab cannot tell you, and getting it wrong is
 expensive in a specific way: a cron job that errors every night gets muted, and
 after that the portfolio has stopped updating with nothing to say so.
 
@@ -457,7 +458,6 @@ after that the portfolio has stopped updating with nothing to say so.
 | `snaptrade` | Yes, until the connection expires — a browser step every few weeks |
 | `schwab529plan` | Yes. A form post with a stored credential |
 | `ally` | `--from-prices` only, which reprices a stale unit count rather than scraping |
-| `fidelity` | No. Deprecated, removed in 1.0 — link it through SnapTrade instead |
 | `manual` | Yes. Nothing to log in to — a configured unit count at a published price |
 
 Weekdays after the close, one process per broker — `broker` is a positional
@@ -475,7 +475,7 @@ PATH=/usr/local/bin:/usr/bin:/bin
 ```
 
 > [!WARNING]
-> **There is no `fidelity` line, and the `ally` line is not a scrape.** Ally
+> **The `ally` line is not a scrape.** Ally
 > honours no restored session, so `--from-prices` values the account from
 > today's published close and *the units the last signed-in run recorded* —
 > exact arithmetic on a number that goes quietly wrong the moment a deposit
@@ -519,9 +519,10 @@ This section summarises it rather than being maintained beside it.
       from what the databases already hold, plus by asset class from a mapping
       you keep in `~/.stonksmith/stonksmith.conf`. Sector and region are still
       absent: nothing states them and nothing here guesses
-- [x] Scheduling (cron), for the brokers that run unattended — three of five,
-      plus Ally in a reduced mode. Fidelity is replaced by SnapTrade, not
-      scheduled — and now deprecated outright, removed in 1.0
+- [x] Scheduling (cron), for the brokers that run unattended — four of five,
+      plus Ally in a reduced mode. The one that could never be scheduled was
+      `fidelity`, behind bot detection and 2FA; it was removed at 1.0 and those
+      accounts reach the workspace through SnapTrade instead
 - [x] A morning brief that turns up on its own — one self-contained page
       rendered from the databases alone, no login, browser or network, opened by
       a LaunchAgent at 06:30 on weekdays. It compares against the last brief you

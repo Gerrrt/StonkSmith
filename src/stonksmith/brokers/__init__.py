@@ -3,8 +3,10 @@ Broker implementations.
 
 Each broker is a subpackage containing ``broker.py`` -- the login class, exported as
 ``Broker`` -- plus whichever of ``database.py``, ``db_navigator.py``,
-``broker_args.py``, ``parser.py`` and ``saver.py`` it needs. Currently ``fidelity``
-and ``schwab529plan``.
+``broker_args.py`` and ``parser.py`` it needs. Every bundled broker ships
+``broker_args.py``; ``schwab529plan`` is the only one with a ``parser.py`` and
+``snaptrade`` the only one with a ``db_navigator.py``, and none ships a
+``database.py``.
 
 This file deliberately imports nothing. ``loaders.brokerloader`` finds brokers by
 scanning for directories containing ``broker.py`` and loads each file by path, so
