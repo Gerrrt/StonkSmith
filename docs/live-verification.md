@@ -9,11 +9,23 @@ This file records which broker claims have been observed against a live account 
 which have not, and gives the procedure for closing the gap. It is meant to be worked
 through, not read.
 
-**This file is the record.** Three places summarise it — the paragraph under
+**This file is the record.** Four places summarise it — the paragraph under
 [*Project structure*](../README.md#project-structure) in the README, the end of
-[*Ally Invest*](brokers.md#ally-invest) and the opening of [`sheet.md`](sheet.md) — and
-all three are derived from the table below rather than maintained alongside it. Change a
+[*Ally Invest*](brokers.md#ally-invest), the opening of [`sheet.md`](sheet.md), and
+[*What a scheduled run has, and has not, been observed
+doing*](scheduling.md#what-a-scheduled-run-has-and-has-not-been-observed-doing) — and
+all four are derived from the table below rather than maintained alongside it. Change a
 row here and change those there in the same pass; do not edit them on their own.
+
+**The fourth was missing from this list until 2026-08-20, and a claim went stale
+in it.** `scheduling.md` went on describing SnapTrade's pagination as unexercised
+for two days after a live run had settled it — not because anybody ignored the
+instruction above, but because the instruction said *three* and that section was
+the fourth. This list is the whole mechanism: no test can read a paragraph and
+say whether it still describes the table, which is why the sentence at the foot
+of this file says that half is yours. A summary this list does not name is one
+nobody is ever told to update. **Add a place here when you write one**, rather
+than when somebody notices it has drifted.
 
 **A failed step here is information, not a defect.** Session persistence and an
 unattended price download are load-bearing for the claim that a broker runs daily
