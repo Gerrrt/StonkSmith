@@ -6,7 +6,7 @@ import argparse
 from argparse import Namespace
 from pathlib import Path
 from threading import BoundedSemaphore
-from typing import Any, cast
+from typing import Any
 
 import requests
 
@@ -426,10 +426,10 @@ class Connection:
         if self.args is None:
             return (
                 u_final,
-                cast(list[bool], []),
+                [],
                 s_final,
-                cast(list[str], []),
-                cast(list[None], []),
+                [],
+                [],
             )
 
         for user in self.args.username:

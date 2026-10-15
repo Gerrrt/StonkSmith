@@ -268,7 +268,7 @@ class BrokerDatabase:
         self.sess: Session = scoped_session(session_factory=session_factory)()
 
     @contextmanager
-    def _write(self) -> Iterator[Connection]:
+    def _write(self) -> Generator[Connection]:
         """
         A connection with real transaction semantics.
 
