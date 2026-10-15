@@ -3,7 +3,7 @@
 
 """Module to login and scrape data from https://www.schwab529plan.com."""
 
-import datetime
+import datetime as dt
 from collections.abc import Callable
 from typing import Any, ClassVar
 
@@ -395,7 +395,7 @@ class Schwab529Module:
         # 4. Save to local database
 
         context.log.highlight(msg="Updating local broker database...")
-        timestamp: str = datetime.datetime.now(tz=datetime.UTC).strftime(
+        timestamp: str = dt.datetime.now(tz=dt.UTC).strftime(
             format="%Y-%m-%d %H:%M:%S",
         )
 
