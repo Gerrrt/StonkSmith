@@ -13,7 +13,7 @@ balance that cannot be read is a NULL value next to the raw text it came from --
 not a traceback that costs the run every other account it had already scraped.
 """
 
-import datetime
+import datetime as dt
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -229,10 +229,10 @@ def to_iso_date(text: Any) -> str | None:
     if text is None:
         return None
 
-    if isinstance(text, datetime.datetime):
+    if isinstance(text, dt.datetime):
         return text.date().isoformat()
 
-    if isinstance(text, datetime.date):
+    if isinstance(text, dt.date):
         return text.isoformat()
 
     raw: str = " ".join(str(object=text).split())
@@ -244,9 +244,7 @@ def to_iso_date(text: Any) -> str | None:
     # regex so a "2026-01-15T09:30:00Z" is read whole rather than by its date
     # half, and before the plain formats because both would match the prefix.
     try:
-        parsed: datetime.datetime = datetime.datetime.fromisoformat(
-            raw.replace("Z", "+00:00")
-        )
+        parsed: dt.datetime = dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
     except ValueError:
         pass
@@ -259,7 +257,7 @@ def to_iso_date(text: Any) -> str | None:
 
     for fmt in _DATE_FORMATS:
         try:
-            return datetime.datetime.strptime(candidate, fmt).date().isoformat()
+            return dt.datetime.strptime(candidate, fmt).date().isoformat()
 
         except ValueError:
             continue

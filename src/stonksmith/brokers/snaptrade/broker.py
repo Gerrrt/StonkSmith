@@ -12,7 +12,7 @@ alias at the bottom, so imports here must be absolute: the module is executed
 under the synthetic name "broker" with no package.
 """
 
-import datetime
+import datetime as dt
 from typing import Any
 
 from stonksmith.etc.api_connection import ApiConnection
@@ -371,8 +371,8 @@ class SnapTradeBroker(ApiConnection):
     def fetch_activities(
         self,
         account_id: str,
-        start_date: datetime.date,
-        end_date: datetime.date,
+        start_date: dt.date,
+        end_date: dt.date,
         page_limit: int = 20,
         page_size: int | None = None,
     ) -> list[dict[str, Any]]:

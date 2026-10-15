@@ -4,7 +4,7 @@
 """Module to scrape balances and positions from the Ally Invest holdings page."""
 
 import contextlib
-import datetime
+import datetime as dt
 from dataclasses import replace
 from typing import Any, ClassVar
 
@@ -150,7 +150,7 @@ class AllyModule:
 
     def fetch_closes(
         self, context: Context, connection: Connection, symbol: str
-    ) -> dict[datetime.date, float] | None:
+    ) -> dict[dt.date, float] | None:
         """
         Published closes for one symbol.
         :param context: Used for logging
@@ -237,10 +237,10 @@ class AllyModule:
         for row in db.get_snapshots(limit=SNAPSHOT_SCAN_LIMIT):
             last_seen.setdefault(str(object=row[1]), str(object=row[3]))
 
-        today: datetime.date = datetime.datetime.now(tz=datetime.UTC).date()
+        today: dt.date = dt.datetime.now(tz=dt.UTC).date()
         priced: dict[str, list[Holding]] = {}
-        dates: dict[str, datetime.date] = {}
-        closes: dict[str, dict[datetime.date, float]] = {}
+        dates: dict[str, dt.date] = {}
+        closes: dict[str, dict[dt.date, float]] = {}
 
         for row in rows:
             account, symbol, name, units = (
@@ -314,7 +314,7 @@ class AllyModule:
         if not priced:
             return False
 
-        timestamp: str = datetime.datetime.now(tz=datetime.UTC).strftime(
+        timestamp: str = dt.datetime.now(tz=dt.UTC).strftime(
             format="%Y-%m-%d %H:%M:%S",
         )
 
@@ -425,7 +425,7 @@ class AllyModule:
         :rtype: bool
         """
 
-        timestamp: str = datetime.datetime.now(tz=datetime.UTC).strftime(
+        timestamp: str = dt.datetime.now(tz=dt.UTC).strftime(
             format="%Y-%m-%d %H:%M:%S",
         )
 

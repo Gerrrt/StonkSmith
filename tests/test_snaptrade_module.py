@@ -10,7 +10,7 @@ every case below is a literal dictionary. Nothing here touches the SDK, the
 network, the keyring or Google Sheets.
 """
 
-import datetime
+import datetime as dt
 import unittest
 from argparse import Namespace
 from typing import Any, ClassVar
@@ -29,7 +29,7 @@ from stonksmith.modules.snaptrade_module import (
     silent_connections,
 )
 
-NOW = datetime.datetime(2026, 8, 4, 12, 0, tzinfo=datetime.UTC)
+NOW = dt.datetime(2026, 8, 4, 12, 0, tzinfo=dt.UTC)
 
 LIVE_CONNECTION = "conn-live"
 DEAD_CONNECTION = "conn-dead"
@@ -76,7 +76,7 @@ def account(**overrides: Any) -> dict[str, Any]:
     """
 
     synced_an_hour_ago: str = (
-        datetime.datetime.now(tz=datetime.UTC) - datetime.timedelta(hours=1)
+        dt.datetime.now(tz=dt.UTC) - dt.timedelta(hours=1)
     ).isoformat()
 
     base: dict[str, Any] = {
@@ -1047,9 +1047,9 @@ class OnLoginTests(unittest.TestCase):
         with patch("stonksmith.modules.snaptrade_module.sync"):
             self.module.on_login(context, _StubBroker([account()]))  # type: ignore[arg-type]
 
-        datetime.datetime.strptime(
+        dt.datetime.strptime(
             self.db.saved[0]["timestamp"], "%Y-%m-%d %H:%M:%S"
-        ).replace(tzinfo=datetime.UTC)
+        ).replace(tzinfo=dt.UTC)
 
     def test_the_database_is_written_before_sheets(self) -> None:
         # Sheets is best-effort; a failure there must not cost the run its

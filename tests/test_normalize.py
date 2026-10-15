@@ -16,7 +16,7 @@ they go wrong:
   cleanly into a USD total and be wrong.
 """
 
-import datetime
+import datetime as dt
 import unittest
 from decimal import Decimal
 
@@ -131,10 +131,8 @@ class ToIsoDateTests(unittest.TestCase):
         self.assertEqual(to_iso_date("Balance as of 12/31/2025"), "2025-12-31")
 
     def test_date_objects_pass_through(self) -> None:
-        self.assertEqual(to_iso_date(datetime.date(2025, 12, 31)), "2025-12-31")
-        self.assertEqual(
-            to_iso_date(datetime.datetime(2025, 12, 31, 9, 30)), "2025-12-31"
-        )
+        self.assertEqual(to_iso_date(dt.date(2025, 12, 31)), "2025-12-31")
+        self.assertEqual(to_iso_date(dt.datetime(2025, 12, 31, 9, 30)), "2025-12-31")
 
     def test_no_date_is_none_not_a_guess(self) -> None:
         for text in (None, "", "--", "sometime last week"):

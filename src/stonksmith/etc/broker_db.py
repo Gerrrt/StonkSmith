@@ -24,8 +24,8 @@ of per-run rows with a text balance. They are migrated on open, and the original
 table is renamed aside rather than dropped -- see migrate_legacy_accounts.
 """
 
-import datetime
-from collections.abc import Iterator, Mapping, Sequence
+import datetime as dt
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -268,7 +268,7 @@ class BrokerDatabase:
         self.sess: Session = scoped_session(session_factory=session_factory)()
 
     @contextmanager
-    def _write(self) -> Iterator[Connection]:
+    def _write(self) -> Generator[Connection]:
         """
         A connection with real transaction semantics.
 
@@ -1514,7 +1514,7 @@ def _utc_now() -> str:
     :rtype: str
     """
 
-    return datetime.datetime.now(tz=datetime.UTC).strftime(format="%Y-%m-%d %H:%M:%S")
+    return dt.datetime.now(tz=dt.UTC).strftime(format="%Y-%m-%d %H:%M:%S")
 
 
 def _bounded(

@@ -28,7 +28,7 @@ Every exclusion is reported. Silently dropping an account is the one outcome
 worse than any of the above.
 """
 
-import datetime
+import datetime as dt
 from typing import Any, ClassVar
 
 from stonksmith.etc.connection import Connection
@@ -293,9 +293,7 @@ def activity_transaction(activity: dict[str, Any]) -> Transaction:
     )
 
 
-def staleness(
-    account: dict[str, Any], *, now: datetime.datetime, max_age_days: int
-) -> str:
+def staleness(account: dict[str, Any], *, now: dt.datetime, max_age_days: int) -> str:
     """
     Why an account's holdings should not be trusted, if they should not.
 
@@ -322,13 +320,13 @@ def staleness(
         return "SnapTrade has never recorded a successful holdings sync for it"
 
     try:
-        synced = datetime.datetime.fromisoformat(str(object=raw))
+        synced = dt.datetime.fromisoformat(str(object=raw))
 
     except ValueError:
         return f"its last sync time ({raw}) could not be read"
 
     if synced.tzinfo is None:
-        synced = synced.replace(tzinfo=datetime.UTC)
+        synced = synced.replace(tzinfo=dt.UTC)
 
     age: int = (now - synced).days
 
@@ -407,7 +405,7 @@ def select_accounts(
     accounts: list[dict[str, Any]],
     connections: dict[str, dict[str, Any]],
     *,
-    now: datetime.datetime,
+    now: dt.datetime,
     max_age_days: int,
     include_liabilities: bool,
     allow_stale: bool,
@@ -824,7 +822,7 @@ class SnapTradeModule:
         if not callable(fetch) or not row["Id"]:
             return []
 
-        end: datetime.date = datetime.datetime.now(tz=datetime.UTC).date()
+        end: dt.date = dt.datetime.now(tz=dt.UTC).date()
 
         # None rather than a number of our own: the server's default is the one
         # every ordinary run wants, and this flag exists to be lowered by hand.
@@ -833,7 +831,7 @@ class SnapTradeModule:
         try:
             activities: list[dict[str, Any]] = fetch(
                 account_id=row["Id"],
-                start_date=end - datetime.timedelta(days=days),
+                start_date=end - dt.timedelta(days=days),
                 end_date=end,
                 page_size=page_size,
             )
@@ -886,7 +884,7 @@ class SnapTradeModule:
         rows, skipped = select_accounts(
             accounts,
             connections,
-            now=datetime.datetime.now(tz=datetime.UTC),
+            now=dt.datetime.now(tz=dt.UTC),
             max_age_days=getattr(context.args, "max_age_days", 3),
             include_liabilities=getattr(context.args, "include_liabilities", False),
             allow_stale=getattr(context.args, "allow_stale", False),
@@ -909,7 +907,7 @@ class SnapTradeModule:
 
         # The database comes first: Sheets is best-effort, and a failure there
         # must not cost the run its balances.
-        timestamp: str = datetime.datetime.now(tz=datetime.UTC).strftime(
+        timestamp: str = dt.datetime.now(tz=dt.UTC).strftime(
             format="%Y-%m-%d %H:%M:%S",
         )
 

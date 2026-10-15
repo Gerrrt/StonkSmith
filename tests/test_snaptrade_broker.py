@@ -11,7 +11,7 @@ user from the key, so there is no userId or userSecret anywhere in this broker.
 Nothing here touches the network, the real keyring, or the real config file.
 """
 
-import datetime
+import datetime as dt
 import importlib.util
 import logging
 import unittest
@@ -524,8 +524,8 @@ class FetchActivitiesTests(unittest.TestCase):
     def _fetch(self, **kwargs: Any) -> list[dict[str, Any]]:
         return self.broker.fetch_activities(
             account_id="acct-1",
-            start_date=datetime.date(2025, 10, 1),
-            end_date=datetime.date(2025, 12, 31),
+            start_date=dt.date(2025, 10, 1),
+            end_date=dt.date(2025, 12, 31),
             **kwargs,
         )
 
@@ -562,8 +562,8 @@ class FetchActivitiesTests(unittest.TestCase):
         self._fetch()
 
         call = self.client.activity_calls[0]
-        self.assertEqual(call["start_date"], datetime.date(2025, 10, 1))
-        self.assertEqual(call["end_date"], datetime.date(2025, 12, 31))
+        self.assertEqual(call["start_date"], dt.date(2025, 10, 1))
+        self.assertEqual(call["end_date"], dt.date(2025, 12, 31))
 
     def test_a_pagination_block_that_never_ends_is_capped(self) -> None:
         # An infinite loop against a paid API is worse than a short read.
@@ -576,8 +576,8 @@ class FetchActivitiesTests(unittest.TestCase):
 
         rows = self.broker.fetch_activities(
             account_id="acct-1",
-            start_date=datetime.date(2025, 10, 1),
-            end_date=datetime.date(2025, 12, 31),
+            start_date=dt.date(2025, 10, 1),
+            end_date=dt.date(2025, 12, 31),
             page_limit=3,
         )
 
@@ -635,8 +635,8 @@ class ActivityPageSizeTests(unittest.TestCase):
     def _fetch(self, **kwargs: Any) -> list[dict[str, Any]]:
         return self.broker.fetch_activities(
             account_id="acct-1",
-            start_date=datetime.date(2025, 10, 1),
-            end_date=datetime.date(2025, 12, 31),
+            start_date=dt.date(2025, 10, 1),
+            end_date=dt.date(2025, 12, 31),
             **kwargs,
         )
 
