@@ -57,6 +57,13 @@ class VacuumCommandTests(unittest.TestCase):
         path: Path = self.workspace / name
         con = sqlite3.connect(path)
         try:
+            # Off explicitly: Debian and Ubuntu build SQLite with
+            # SQLITE_SECURE_DELETE, which zeroes a freed cell and so would clear
+            # the plaintext this fixture exists to leave behind. CI met that
+            # when ubuntu-latest became 26.04 and uv took its system Python
+            # (and so its libsqlite3) over a managed one. The databases the
+            # command meets in the field were written under no such guarantee.
+            con.execute("PRAGMA secure_delete = OFF")
             con.executescript(PRE_KEYRING)
             con.executemany(
                 "INSERT INTO credentials (username, password, type, pillaged_from)"
